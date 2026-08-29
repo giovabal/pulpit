@@ -174,6 +174,8 @@ class ChannelViewSet(
             qs = qs.filter(is_private=True)
         elif status_filter == "to_inspect":
             qs = qs.filter(to_inspect=True)
+        elif status_filter == "environment":
+            qs = qs.filter(environment_depth__isnull=False)
 
         return qs
 

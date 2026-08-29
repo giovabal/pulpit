@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.db.models import Max
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
@@ -18,7 +19,7 @@ from network import (
 )
 from network.tokens import split_tokens
 from runner import tasks
-from webapp.models import ChannelSource, ChannelVacancy, LabelGroup, SearchTerm
+from webapp.models import Channel, ChannelSource, ChannelVacancy, LabelGroup, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
@@ -68,6 +69,9 @@ class OperationsView(View):
             task_info.append({**defn, "name": name, **status})
         channel_sources = list(ChannelSource.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
+        # Environment dropdown of the Structural Analysis form: None plus every depth up to the
+        # deepest channel the crawler's environment pass has registered (empty when it never ran).
+        deepest_environment = Channel.objects.aggregate(deepest=Max("environment_depth"))["deepest"] or 0
         # Partition label groups: each is selectable in the "Label groups" fieldset and participates
         # like a detected community (its LABELGROUP<id> token is merged into --community-strategies).
         partition_groups = list(LabelGroup.objects.filter(is_partition=True).order_by("name"))
@@ -107,6 +111,13 @@ class OperationsView(View):
             "CRAWL_DOWNLOAD_TIMEOUT": settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT,
             "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
             "CRAWL_OUT_DEGREES": settings.CRAWL_OUT_DEGREES,
+            "CRAWL_ENVIRONMENT": settings.CRAWL_ENVIRONMENT,
+            "CRAWL_ENVIRONMENT_DEPTH": settings.CRAWL_ENVIRONMENT_DEPTH,
+            "CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES": settings.CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES,
+            "CRAWL_ENVIRONMENT_DOWNLOAD_VIDEO": settings.CRAWL_ENVIRONMENT_DOWNLOAD_VIDEO,
+            "CRAWL_ENVIRONMENT_DOWNLOAD_AUDIO": settings.CRAWL_ENVIRONMENT_DOWNLOAD_AUDIO,
+            "CRAWL_ENVIRONMENT_DOWNLOAD_STICKERS": settings.CRAWL_ENVIRONMENT_DOWNLOAD_STICKERS,
+            "CRAWL_ENVIRONMENT_DOWNLOAD_OTHER_MEDIA": settings.CRAWL_ENVIRONMENT_DOWNLOAD_OTHER_MEDIA,
             # SA outputs
             "SA_OUTPUT_GRAPH": settings.SA_OUTPUT_GRAPH,
             "SA_OUTPUT_3DGRAPH": settings.SA_OUTPUT_3DGRAPH,
@@ -130,6 +141,7 @@ class OperationsView(View):
             "SA_INCLUDE_SELF_REFERENCES": settings.SA_INCLUDE_SELF_REFERENCES,
             "SA_INCLUDE_LOST": settings.SA_INCLUDE_LOST,
             "SA_INCLUDE_PRIVATE": settings.SA_INCLUDE_PRIVATE,
+            "SA_ENVIRONMENT_DEPTH": settings.SA_ENVIRONMENT_DEPTH,
             # SA numeric params
             "SA_FA2_ITERATIONS": settings.SA_FA2_ITERATIONS,
             "SA_DIFFUSION_WINDOW": settings.SA_DIFFUSION_WINDOW,
@@ -181,6 +193,7 @@ class OperationsView(View):
                 "channel_sources": channel_sources,
                 "container_groups": container_groups,
                 "has_vacancies": has_vacancies,
+                "environment_depth_choices": list(range(1, deepest_environment + 1)),
                 # MODULEROLE basis choices: every algorithmic strategy plus each manual LABELGROUP<id>
                 # partition (so a within-module role can be computed against a label group too).
                 "all_basis_choices": sorted(
@@ -571,6 +584,39 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Degrees
         ("bool_explicit", "in_degrees", "--in-degrees", "--no-in-degrees"),
         ("bool_explicit", "out_degrees", "--out-degrees", "--no-out-degrees"),
+        # Environment
+        ("bool_explicit", "environment", "--environment", "--no-environment"),
+        ("value", "environment_depth", "--environment-depth"),
+        (
+            "bool_explicit",
+            "environment_download_images",
+            "--environment-download-images",
+            "--no-environment-download-images",
+        ),
+        (
+            "bool_explicit",
+            "environment_download_video",
+            "--environment-download-video",
+            "--no-environment-download-video",
+        ),
+        (
+            "bool_explicit",
+            "environment_download_audio",
+            "--environment-download-audio",
+            "--no-environment-download-audio",
+        ),
+        (
+            "bool_explicit",
+            "environment_download_stickers",
+            "--environment-download-stickers",
+            "--no-environment-download-stickers",
+        ),
+        (
+            "bool_explicit",
+            "environment_download_other_media",
+            "--environment-download-other-media",
+            "--no-environment-download-other-media",
+        ),
         # Scope
         ("value", "ids", "--ids"),
         ("channel_types", "--channel-types"),
@@ -639,6 +685,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("channel_types", "--channel-types"),
         ("csv", "channel_sources", "--channel-sources"),
         ("csv", "filter_labels", "--filter-labels"),
+        ("value", "environment_depth", "--environment-depth"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
         ("bool_explicit", "include_private", "--include-private", "--no-include-private"),
         ("const", "timeline_step", "--timeline-step", "year"),
@@ -710,6 +757,13 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("download_audio", "downloads.audio", "bool"),
         ("download_stickers", "downloads.stickers", "bool"),
         ("download_other_media", "downloads.other_media", "bool"),
+        ("environment", "environment.enabled", "bool"),
+        ("environment_depth", "environment.depth", "int"),
+        ("environment_download_images", "environment.images", "bool"),
+        ("environment_download_video", "environment.video", "bool"),
+        ("environment_download_audio", "environment.audio", "bool"),
+        ("environment_download_stickers", "environment.stickers", "bool"),
+        ("environment_download_other_media", "environment.other_media", "bool"),
         (
             ("channel_type_channel", "channel_type_group", "channel_type_user"),
             "scope.channel_types",
@@ -739,6 +793,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("include_self_references", "edges.include_self_references", "bool"),
         ("include_lost", "scope.include_lost", "bool"),
         ("include_private", "scope.include_private", "bool"),
+        ("environment_depth", "scope.environment_depth", "int"),
         ("fa2_iterations", "computation.fa2_iterations", "fa2_iterations"),
         ("community_distribution_threshold", "computation.community_distribution_threshold", "int"),
         ("diffusion_window", "computation.diffusion_window", "int"),
@@ -815,7 +870,8 @@ def _validate_post_constraints(task: str, post: Any) -> None:
       or counterintuitive (negative-index) slice.
 
     * ``crawl_channels``: ``download_timeout``, when set, must be zero
-      (no limit) or a positive integer number of seconds.
+      (no limit) or a positive integer number of seconds;
+      ``environment_depth``, when set, must be a positive integer.
     """
     if not hasattr(post, "getlist"):
         return
@@ -870,6 +926,15 @@ def _validate_post_constraints(task: str, post: Any) -> None:
         # Leiden temporal couples the per-year timeline slices — meaningless without the timeline.
         if any(inst.name == "LEIDEN_TEMPORAL" for inst in parsed_strategies) and not post.get("timeline_step"):
             raise ValueError("Leiden temporal requires the Timeline option (per-year exports) to be enabled")
+
+        raw_depth = (post.get("environment_depth") or "").strip()
+        if raw_depth:
+            try:
+                depth = int(raw_depth)
+            except ValueError as exc:
+                raise ValueError(f"Environment depth must be an integer number of hops, got {raw_depth!r}") from exc
+            if depth < 0:
+                raise ValueError(f"Environment depth must be zero (none) or positive, got {depth}")
         return
 
     if task == "compare_analysis":
@@ -899,6 +964,14 @@ def _validate_post_constraints(task: str, post: Any) -> None:
                 raise ValueError(f"Download timeout must be an integer number of seconds, got {raw_timeout!r}") from exc
             if timeout < 0:
                 raise ValueError(f"Download timeout must be zero (no limit) or positive, got {timeout}")
+        raw_depth = (post.get("environment_depth") or "").strip()
+        if raw_depth:
+            try:
+                depth = int(raw_depth)
+            except ValueError as exc:
+                raise ValueError(f"Environment depth must be an integer number of hops, got {raw_depth!r}") from exc
+            if depth < 1:
+                raise ValueError(f"Environment depth must be a positive integer, got {depth}")
         return
 
 

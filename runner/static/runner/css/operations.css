@@ -277,6 +277,28 @@
   transition: background .1s, border-color .1s, color .1s;
 }
 
+/* Environment: the master switch that unlocks the fieldset's depth + media inputs */
+.ops-switch {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 0;
+  margin: 0 0 .25rem;
+  padding-left: 0;
+  font-size: .8rem;
+}
+
+.ops-switch .form-check-input {
+  float: none;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ops-switch .form-check-label {
+  cursor: pointer;
+  user-select: none;
+}
+
 /* Scope filter: the container-group name prefixing its labels' checkboxes */
 .ops-scope-group {
   align-self: center;

@@ -21,13 +21,16 @@ def apply_amplification_factor(
     channel_dict: dict[str, Any],
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    environment_depth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Add amplification factor (forwards received / own message count) to each node."""
     key = "amplification_factor"
 
     channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
-    message_counts = per_channel_message_counts(channel_pks, start_date, end_date)
-    forwards_received = per_channel_forwards_received(channel_pks, start_date, end_date)
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, environment_depth=environment_depth)
+    forwards_received = per_channel_forwards_received(
+        channel_pks, start_date, end_date, environment_depth=environment_depth
+    )
 
     for node in graph_data["nodes"]:
         channel_entry = channel_dict.get(node["id"])
@@ -47,14 +50,19 @@ def apply_content_originality(
     channel_dict: dict[str, Any],
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    environment_depth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Add content originality (1 − forwarded_messages / total_messages) to each node. None if no messages."""
     key = "content_originality"
 
     channel_pks = channel_pks_from_graph_data(graph_data, channel_dict)
-    message_counts = per_channel_message_counts(channel_pks, start_date, end_date)
+    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, environment_depth=environment_depth)
     forwarded_counts = per_channel_message_counts(
-        channel_pks, start_date, end_date, extra_q=Q(forwarded_from__isnull=False)
+        channel_pks,
+        start_date,
+        end_date,
+        extra_q=Q(forwarded_from__isnull=False),
+        environment_depth=environment_depth,
     )
 
     for node in graph_data["nodes"]:
@@ -75,6 +83,7 @@ def apply_diffusion_lag(
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
     window_days: int = 30,
+    environment_depth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Median hours from original post date to forward date per channel. None if no data.
 
@@ -92,7 +101,7 @@ def apply_diffusion_lag(
         & Q(fwd_from_date__isnull=False)
         & Q(date__isnull=False)
         & make_date_q(start_date, end_date)
-        & channel_cutoff_q()
+        & channel_cutoff_q(environment_depth=environment_depth)
     )
     window_h = window_days * 24 if window_days > 0 else None
     accum: dict[int, list[float]] = {}

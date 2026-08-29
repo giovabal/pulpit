@@ -2,11 +2,13 @@
 
 A message survives the purge iff its channel is either:
 
-* explicitly marked for crawling (holds an in-target ``Label`` or
-  ``to_inspect=True``) — **regardless** of whether the channel is currently
+* explicitly marked for crawling (holds an in-target ``Label``,
+  ``to_inspect=True``, or an ``environment_depth`` stamped by the crawler's
+  environment pass) — **regardless** of whether the channel is currently
   flagged ``is_lost`` / ``is_private`` or has a type excluded by the current
   ``DEFAULT_CHANNEL_TYPES`` filter. The marker is the analyst's declaration
-  of scope; transient flags shouldn't erase history.
+  of scope (or, for the environment, the crawler's deliberate reach);
+  transient flags shouldn't erase history.
 * a forward source for at least one in-target channel (``Message.forwarded_from``
   joins back to an in-target channel). Channels referenced only via ``t.me/``
   mentions are *not* preserved — only forward sources are. The mention-target
@@ -71,15 +73,17 @@ class PurgeReport:
 def marked_in_target_channels() -> QuerySet[Channel]:
     """Channels the analyst has declared in scope for crawling, regardless of transient flags.
 
-    Includes channels holding an in-target label and those flagged
-    ``to_inspect=True`` (crawled for discovery even when not in target).
+    Includes channels holding an in-target label, those flagged
+    ``to_inspect=True`` (crawled for discovery even when not in target), and
+    those reached by ``crawl_channels --environment`` (``environment_depth``
+    set — crawled deliberately as the scope's citation neighbourhood).
     Distinct from ``Channel.objects.in_target()``, which *also* filters by
     ``DEFAULT_CHANNEL_TYPES`` and drops ``is_lost`` / ``is_private`` — using
     that for keep-set computation silently nukes history of channels that
     just happen to be lost or of a type outside the current view.
     """
     has_in_target_period = Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True))
-    return Channel.objects.filter(Q(has_in_target_period) | Q(to_inspect=True))
+    return Channel.objects.filter(Q(has_in_target_period) | Q(to_inspect=True) | Q(environment_depth__isnull=False))
 
 
 def find_purgeable_messages() -> QuerySet[Message]:
@@ -89,11 +93,12 @@ def find_purgeable_messages() -> QuerySet[Message]:
 
     * every message of a channel that is not in the keep-set (no in-target
       label period, not ``to_inspect``, and not a forward source);
-    * the *out-of-period* messages of a kept in-target channel that is not
-      ``to_inspect`` — messages dated outside all its in-target periods, e.g.
-      left behind after an analyst narrows a period. ``to_inspect`` channels
-      keep every message; pure forward-source (out-of-target) channels keep
-      every message too.
+    * the *out-of-period* messages of a kept in-target channel that is neither
+      ``to_inspect`` nor an environment channel — messages dated outside all its
+      in-target periods, e.g. left behind after an analyst narrows a period.
+      ``to_inspect`` and environment channels keep every message (the
+      environment pass stores by its own window, not by label periods); pure
+      forward-source (out-of-target) channels keep every message too.
     """
     marked = marked_in_target_channels()
     marked_ids = set(marked.values_list("id", flat=True))
@@ -106,8 +111,10 @@ def find_purgeable_messages() -> QuerySet[Message]:
     )
 
     keep_channel_ids = marked_ids | forward_source_ids
-    to_inspect_ids = set(Channel.objects.filter(to_inspect=True).values_list("id", flat=True))
-    prune_channel_ids = marked_ids - to_inspect_ids
+    keep_all_ids = set(
+        Channel.objects.filter(Q(to_inspect=True) | Q(environment_depth__isnull=False)).values_list("id", flat=True)
+    )
+    prune_channel_ids = marked_ids - keep_all_ids
     # A dateless message can't be placed inside or outside a period; ~channel_cutoff_q()
     # is vacuously true for it, so guard with date__isnull=False to keep such messages
     # of in-target channels (matching the per-channel detail view, which keeps them).

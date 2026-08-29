@@ -5660,3 +5660,192 @@ class MeasureComputeHelpersTests(TestCase):
         # Auto (blank) module role prefers leiden_directed.
         (auto_mod,) = parse_measures(["MODULEROLE"])
         self.assertEqual(_resolve_community_basis(auto_mod, ["leiden_directed", "leiden"]), "leiden_directed")
+
+
+# ---------------------------------------------------------------------------
+# Environment depth — build_graph(environment_depth=…), the widened chokepoint, the colouring entry
+# ---------------------------------------------------------------------------
+
+
+def _at(year: int, month: int, day: int) -> datetime.datetime:
+    return datetime.datetime(year, month, day, 12, 0, tzinfo=datetime.timezone.utc)
+
+
+class EnvironmentDepthGraphTests(TestCase):
+    """With a depth, the crawler's environment channels join the graph as full participants."""
+
+    def setUp(self) -> None:
+        self.label = make_label("Org1", color="#FF0000")
+        self.a = make_channel(
+            telegram_id=1,
+            label=self.label,
+            title="A",
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+        )
+        self.b = make_channel(telegram_id=2, label=self.label, title="B")
+        # Environment: E1 one hop out (cited by A), E2 two hops out (cited by E1 only).
+        self.e1 = Channel.objects.create(telegram_id=10, title="E1", environment_depth=1)
+        self.e2 = Channel.objects.create(telegram_id=20, title="E2", environment_depth=2)
+        Message.objects.create(telegram_id=100, channel=self.a, date=_at(2023, 3, 1), forwarded_from=self.b)
+        Message.objects.create(telegram_id=101, channel=self.a, date=_at(2023, 3, 2), forwarded_from=self.e1)
+        # E1's own stored messages: it cites B (environment → in-target) and E2 (environment → environment).
+        Message.objects.create(telegram_id=200, channel=self.e1, date=_at(2023, 4, 1), forwarded_from=self.b)
+        Message.objects.create(telegram_id=201, channel=self.e1, date=_at(2023, 4, 2), forwarded_from=self.e2)
+        Message.objects.create(telegram_id=300, channel=self.e2, date=_at(2023, 5, 1), forwarded_from=self.a)
+        for ch in (self.a, self.b, self.e1, self.e2):
+            ch.refresh_degrees()
+
+    def _ids(self, channel_dict: dict) -> set[str]:
+        return set(channel_dict)
+
+    def test_off_by_default_keeps_the_in_target_graph(self) -> None:
+        graph, channel_dict, _, _ = build_graph()
+        self.assertEqual(self._ids(channel_dict), {str(self.a.pk), str(self.b.pk)})
+        self.assertEqual(channel_dict[str(self.a.pk)]["data"]["environment_depth"], 0)
+
+    def test_depth_one_admits_the_first_hop_with_its_own_edges(self) -> None:
+        graph, channel_dict, _, _ = build_graph(environment_depth=1)
+        self.assertEqual(self._ids(channel_dict), {str(self.a.pk), str(self.b.pk), str(self.e1.pk)})
+        # in-target → environment, and environment → in-target from E1's own messages.
+        self.assertIn((str(self.a.pk), str(self.e1.pk)), graph.edges())
+        self.assertIn((str(self.e1.pk), str(self.b.pk)), graph.edges())
+        self.assertEqual(channel_dict[str(self.e1.pk)]["data"]["environment_depth"], 1)
+        self.assertEqual(channel_dict[str(self.b.pk)]["data"]["environment_depth"], 0)
+        # Environment nodes hold no label: no organization, dead-leaves colour.
+        self.assertEqual(channel_dict[str(self.e1.pk)]["data"]["organization"], "")
+        self.assertIsNone(channel_dict[str(self.e1.pk)]["data"]["resolved_org_id"])
+
+    def test_depth_two_reaches_the_second_hop(self) -> None:
+        graph, channel_dict, _, _ = build_graph(environment_depth=2)
+        self.assertIn(str(self.e2.pk), channel_dict)
+        self.assertIn((str(self.e1.pk), str(self.e2.pk)), graph.edges())
+        self.assertIn((str(self.e2.pk), str(self.a.pk)), graph.edges())
+        self.assertEqual(channel_dict[str(self.e2.pk)]["data"]["environment_depth"], 2)
+
+    def test_in_target_always_wins_over_the_stamp(self) -> None:
+        # A monitored channel that was once stamped as environment stays a depth-0 node under its
+        # period rules — its out-of-period messages must not build edges through the environment gate.
+        self.b.environment_depth = 1
+        self.b.save(update_fields=["environment_depth"])
+        attribute_period_start = datetime.date(2023, 1, 1)
+        for cl in self.b.channel_labels.all():
+            cl.start, cl.end = attribute_period_start, datetime.date(2023, 12, 31)
+            cl.save()
+        Message.objects.create(telegram_id=110, channel=self.b, date=_at(2021, 1, 1), forwarded_from=self.e1)
+        graph, channel_dict, _, _ = build_graph(environment_depth=1)
+        self.assertEqual(channel_dict[str(self.b.pk)]["data"]["environment_depth"], 0)
+        self.assertNotIn((str(self.b.pk), str(self.e1.pk)), graph.edges())
+
+    def test_date_window_applies_to_environment_messages(self) -> None:
+        graph, channel_dict, _, _ = build_graph(
+            environment_depth=1, start_date=datetime.date(2023, 3, 1), end_date=datetime.date(2023, 3, 31)
+        )
+        # E1's April message to B is outside the window; A's March forward of E1 is inside.
+        self.assertIn((str(self.a.pk), str(self.e1.pk)), graph.edges())
+        self.assertNotIn((str(self.e1.pk), str(self.b.pk)), graph.edges())
+
+    def test_isolated_environment_node_is_dropped(self) -> None:
+        lonely = Channel.objects.create(telegram_id=30, title="Lonely", environment_depth=1)
+        Message.objects.create(telegram_id=400, channel=lonely, date=_at(2023, 6, 1))
+        _, channel_dict, _, _ = build_graph(environment_depth=1)
+        self.assertNotIn(str(lonely.pk), channel_dict)
+
+    def test_dead_leaf_reports_depth_one(self) -> None:
+        leaf = make_channel(telegram_id=40, label=None, title="Leaf")
+        Message.objects.create(telegram_id=500, channel=self.a, date=_at(2023, 7, 1), forwarded_from=leaf)
+        leaf.refresh_degrees()
+        _, channel_dict, _, _ = build_graph(draw_dead_leaves=True)
+        self.assertEqual(channel_dict[str(leaf.pk)]["data"]["environment_depth"], 1)
+        # Without a depth the environment channels are dead leaves too (E1 is cited by A)…
+        self.assertEqual(channel_dict[str(self.e1.pk)]["data"]["environment_depth"], 1)
+        # …and E2, cited only by E1, is not there at all.
+        self.assertNotIn(str(self.e2.pk), channel_dict)
+
+
+class EnvironmentCutoffQTests(TestCase):
+    def test_environment_messages_pass_only_with_a_depth(self) -> None:
+        env = Channel.objects.create(telegram_id=1, title="Env", environment_depth=1)
+        deeper = Channel.objects.create(telegram_id=2, title="Deeper", environment_depth=2)
+        monitored = make_channel(telegram_id=3, label=make_label("Org"), title="Monitored", environment_depth=1)
+        m_env = Message.objects.create(telegram_id=10, channel=env, date=_at(2023, 1, 1))
+        m_deep = Message.objects.create(telegram_id=11, channel=deeper, date=_at(2023, 1, 1))
+        m_mon = Message.objects.create(telegram_id=12, channel=monitored, date=_at(2023, 1, 1))
+
+        def kept(depth):
+            return set(Message.objects.filter(channel_cutoff_q(environment_depth=depth)).values_list("pk", flat=True))
+
+        self.assertEqual(kept(None), {m_mon.pk})
+        self.assertEqual(kept(1), {m_mon.pk, m_env.pk})
+        self.assertEqual(kept(2), {m_mon.pk, m_env.pk, m_deep.pk})
+
+    def test_environment_channels_exclude_the_monitored(self) -> None:
+        from network.utils import environment_channels
+
+        env = Channel.objects.create(telegram_id=1, title="Env", environment_depth=1)
+        make_channel(telegram_id=3, label=make_label("Org"), title="Monitored", environment_depth=1)
+        self.assertEqual(list(environment_channels(1)), [env])
+
+
+class EnvironmentDepthColoringTests(TestCase):
+    def test_entry_only_when_depths_are_mixed(self) -> None:
+        from network.exporter import environment_depth_coloring
+
+        self.assertIsNone(environment_depth_coloring([{"environment_depth": 0}, {"environment_depth": 0}]))
+        self.assertIsNone(environment_depth_coloring([{"id": "x"}]))
+        entry = environment_depth_coloring(
+            [{"environment_depth": 0}, {"environment_depth": 2}, {"environment_depth": 0}, {"environment_depth": 1}]
+        )
+        self.assertEqual(entry, {"groups": [[0, 2, "In target", ""], [1, 1, "Depth 1", ""], [2, 1, "Depth 2", ""]]})
+
+    def test_communities_json_carries_the_colouring_next_to_the_strategies(self) -> None:
+        from network.exporter import write_graph_files
+
+        graph_data = {
+            "nodes": [
+                {"id": "1", "label": "A", "environment_depth": 0, "communities": {}},
+                {"id": "2", "label": "E", "environment_depth": 1, "communities": {}},
+            ],
+            "edges": [],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            write_graph_files(graph_data, {}, [], Channel.objects.none(), tmp, include_positions=False)
+            with open(os.path.join(tmp, "data", "communities.json")) as fh:
+                payload = json.load(fh)
+            with open(os.path.join(tmp, "data", "channels.json")) as fh:
+                channels = json.load(fh)
+        self.assertEqual(payload["strategies"], {})
+        self.assertEqual(payload["colorings"]["environment_depth"]["groups"][1][2], "Depth 1")
+        self.assertEqual([n["environment_depth"] for n in channels["nodes"]], [0, 1])
+
+
+class ResolveEnvironmentDepthTests(TestCase):
+    """--environment-depth normalisation: off for 0/None, clamped to the deepest registered channel."""
+
+    def _resolve(self, raw):
+        from network.management.commands.structural_analysis import Command
+
+        cmd = Command()
+        cmd.stdout = io.StringIO()
+        return cmd._resolve_environment_depth(raw), cmd.stdout.getvalue()
+
+    def test_zero_or_none_is_off(self) -> None:
+        self.assertEqual(self._resolve(None)[0], None)
+        self.assertEqual(self._resolve(0)[0], None)
+
+    def test_negative_is_rejected(self) -> None:
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            self._resolve(-1)
+
+    def test_no_registered_environment_disables_with_a_warning(self) -> None:
+        depth, out = self._resolve(2)
+        self.assertIsNone(depth)
+        self.assertIn("no channel carries an environment depth", out)
+
+    def test_deeper_than_registered_is_clamped(self) -> None:
+        Channel.objects.create(telegram_id=1, title="E", environment_depth=2)
+        self.assertEqual(self._resolve(5), (2, self._resolve(5)[1]))
+        self.assertIn("using 2", self._resolve(5)[1])
+        self.assertEqual(self._resolve(1)[0], 1)

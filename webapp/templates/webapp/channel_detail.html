@@ -31,6 +31,7 @@
           {% if selected_channel.is_lost %}<span class="ch-badge ch-badge--danger"><i class="bi bi-question-circle-fill" aria-hidden="true"></i> Lost</span>{% endif %}
           {% if selected_channel.is_private %}<span class="ch-badge ch-badge--warn"><i class="bi bi-lock-fill" aria-hidden="true"></i> Private</span>{% endif %}
           {% if not is_in_target %}<span class="ch-badge ch-badge--muted">Not monitored</span>{% endif %}
+          {% if selected_channel.environment_depth %}<span class="ch-badge ch-badge--muted" data-bs-toggle="tooltip" title="Crawled by the environment pass: {{ selected_channel.environment_depth }} citation hop{{ selected_channel.environment_depth|pluralize }} from the monitored channels"><i class="bi bi-diagram-3" aria-hidden="true"></i> Environment · {{ selected_channel.environment_depth }}</span>{% endif %}
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
           <a href="{{ selected_channel.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link" title="Open on Telegram" aria-label="Open {{ selected_channel.title }} on Telegram">

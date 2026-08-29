@@ -1523,6 +1523,29 @@ class PurgeOutOfTargetTests(TestCase):
         self._run_purge()
         self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
 
+    def test_environment_channel_messages_kept(self) -> None:
+        """A channel reached by ``crawl_channels --environment`` keeps every message, like to_inspect."""
+        env = Channel.objects.create(telegram_id=8, title="env-chan", environment_depth=2)
+        env_msg = Message.objects.create(telegram_id=300, channel=env)
+        # Environment-marked *and* in target with a narrow period: out-of-period messages survive too.
+        env_in_target = make_channel(
+            telegram_id=9,
+            title="env-in-target",
+            label=self.in_target_org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+            environment_depth=1,
+        )
+        old_msg = Message.objects.create(
+            telegram_id=301,
+            channel=env_in_target,
+            date=datetime.datetime(2020, 6, 1, tzinfo=datetime.timezone.utc),
+        )
+        report = self._run_purge()
+        self.assertTrue(Message.objects.filter(pk=env_msg.pk).exists())
+        self.assertTrue(Message.objects.filter(pk=old_msg.pk).exists())
+        self.assertEqual(report.deleted_messages, 2)  # purge_msg + mention_msg, unchanged
+
     def test_shared_media_file_kept_when_referenced_by_surviving_message(self) -> None:
         """A file shared (same Telegram file id ⇒ same path) by a purged out-of-target
         message and a kept in-target message must survive — only its purged row goes."""

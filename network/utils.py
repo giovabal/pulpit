@@ -6,6 +6,8 @@ from django.db.models import Exists, OuterRef, Q
 import networkx as nx
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from webapp.models import Channel
 
 type GraphData = dict[str, list[dict[str, Any]]]
@@ -26,7 +28,24 @@ type CommunityTableData = dict[str, Any]
 # }
 
 
-def channel_cutoff_q(channel_field: str = "channel", date_field: str = "date") -> Q:
+def environment_channels(depth: int) -> "QuerySet[Channel]":
+    """Channels reached by ``crawl_channels --environment`` within ``depth`` citation hops, minus the monitored ones.
+
+    ``Channel.environment_depth`` is the distance the crawler stamped; a channel that also
+    holds an in-target label over *any* period is a monitored channel and never counts as
+    environment, whatever its stamp — in target always wins.
+    """
+    from webapp.models import Channel, ChannelLabel
+
+    in_target = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)
+    return Channel.objects.filter(environment_depth__lte=depth).filter(~Exists(in_target))
+
+
+def channel_cutoff_q(
+    channel_field: str = "channel",
+    date_field: str = "date",
+    environment_depth: int | None = None,
+) -> Q:
     """Q matching messages whose date falls inside one of their channel's in-target periods.
 
     A message is in-target iff its channel holds an in-target ``Label`` whose
@@ -34,6 +53,11 @@ def channel_cutoff_q(channel_field: str = "channel", date_field: str = "date") -
     the message date. Pass ``channel_field`` / ``date_field`` to adjust the ORM
     path when the Message is reached through a related model (e.g.
     ``message__channel`` / ``message__date`` for the references through-table).
+
+    ``environment_depth`` widens the gate to the environment channels within that
+    many citation hops (:func:`environment_channels`): they hold no in-target
+    period, and every message they store — bounded at crawl time to the scope's
+    in-target window — counts. ``None`` / ``0`` keeps the in-target-only gate.
     """
     from webapp.models import ChannelLabel
 
@@ -45,7 +69,10 @@ def channel_cutoff_q(channel_field: str = "channel", date_field: str = "date") -
         .filter(Q(start__isnull=True) | Q(start__lte=OuterRef(f"{date_field}__date")))
         .filter(Q(end__isnull=True) | Q(end__gte=OuterRef(f"{date_field}__date")))
     )
-    return Q(Exists(subquery))
+    q = Q(Exists(subquery))
+    if environment_depth:
+        q |= Q(**{f"{channel_field}__in": environment_channels(environment_depth)})
+    return q
 
 
 def channel_period_date_q(channel: "Channel", date_field: str = "date") -> Q:

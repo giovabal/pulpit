@@ -32,7 +32,7 @@ from network.robustness.disparity_filter import disparity_filter
 from network.tokens import split_tokens
 from network.utils import GraphData
 from webapp import scoring
-from webapp.models import Label, Message, Project
+from webapp.models import Channel, Label, Message, Project
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
 from webapp.utils.colors import is_known_palette
 from webapp_engine.command_logging import styled_warning_logs
@@ -342,6 +342,9 @@ class ResolvedOptions:
     # Container-label ids limiting the whole analysis to the channels holding a
     # label assigned under at least one of them (empty = no filter).
     filter_labels: list[int]
+    # Environment depth: admit the out-of-target channels the crawler reached within this
+    # many citation hops as full participants (None = in-target channels only).
+    environment_depth: int | None
     edge_weight_strategy: str
 
     # Communities and measures
@@ -428,6 +431,7 @@ class ResolvedOptions:
             "include_self_references": self.include_self_references,
             "include_lost": self.include_lost,
             "include_private": self.include_private,
+            "environment_depth": self.environment_depth,
             "timeline_step": self.timeline_step,
             "diffusion_window": self.diffusion_window,
             "leiden_cpm_resolution": self.leiden_cpm_resolution,
@@ -875,6 +879,21 @@ class Command(BaseCommand):
             help="Include channels marked as private in the graph (excluded by default).",
         )
         parser.add_argument(
+            "--environment-depth",
+            dest="environment_depth",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Also include the environment: the out-of-target channels that crawl_channels --environment "
+                "reached within N citation hops of the monitored ones. They take part in full — their stored "
+                "messages build edges and feed every message-based measure, community detection and the "
+                "coordination maps — and every exported node carries an 'environment_depth' (0 in target, "
+                "k for an environment channel k hops out, 1 for a dead leaf) that the map can colour by. "
+                "0 or unset = in-target channels only (the default)."
+            ),
+        )
+        parser.add_argument(
             "--timeline-step",
             dest="timeline_step",
             default=None,
@@ -1136,6 +1155,31 @@ class Command(BaseCommand):
                 "Name is slug-sanitized (alphanumeric, hyphens, underscores)."
             ),
         )
+
+    def _resolve_environment_depth(self, raw: "int | None") -> "int | None":
+        """Normalise --environment-depth: ``None``/``0`` = off; deeper than anything registered is clamped with a warning."""
+        if not raw:
+            return None
+        if raw < 0:
+            raise CommandError("--environment-depth must be zero (off) or a positive number of citation hops.")
+        deepest = Channel.objects.aggregate(deepest=Max("environment_depth"))["deepest"] or 0
+        if deepest == 0:
+            self.stdout.write(
+                self.style.WARNING(
+                    "--environment-depth: no channel carries an environment depth yet "
+                    "(run crawl_channels --environment first); the option has no effect."
+                )
+            )
+            return None
+        if raw > deepest:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"--environment-depth {raw}: the deepest registered environment channel is {deepest} "
+                    f"hop(s) out; using {deepest}."
+                )
+            )
+            return deepest
+        return raw
 
     def _validate_settings(
         self,
@@ -1453,6 +1497,7 @@ class Command(BaseCommand):
         do_graph: bool,
         do_3dgraph: bool,
         strategy_instances: "list[community.StrategyInstance] | None" = None,
+        environment_depth: int | None = None,
     ) -> list[tuple[str, str]]:
         """Compute every requested measure instance in order, returning suffixed (key, label) pairs.
 
@@ -1524,11 +1569,21 @@ class Command(BaseCommand):
                 labels = getattr(measures, step_fn[m])(graph_data, graph)
             elif m == "AMPLIFICATION":
                 labels = measures.apply_amplification_factor(
-                    graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+                    graph_data,
+                    graph,
+                    channel_dict,
+                    start_date=start_date,
+                    end_date=end_date,
+                    environment_depth=environment_depth,
                 )
             elif m == "CONTENTORIGINALITY":
                 labels = measures.apply_content_originality(
-                    graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+                    graph_data,
+                    graph,
+                    channel_dict,
+                    start_date=start_date,
+                    end_date=end_date,
+                    environment_depth=environment_depth,
                 )
             elif m == "DIFFUSIONLAG":
                 labels = measures.apply_diffusion_lag(
@@ -1538,6 +1593,7 @@ class Command(BaseCommand):
                     start_date=start_date,
                     end_date=end_date,
                     window_days=resolved.params_dict["window"],
+                    environment_depth=environment_depth,
                 )
             elif m in ("HITSHUB", "HITSAUTH"):
                 if not hits_computed:
@@ -1600,6 +1656,7 @@ class Command(BaseCommand):
                     include_self_references=opts.include_self_references,
                     include_lost=opts.include_lost,
                     include_private=opts.include_private,
+                    environment_depth=opts.environment_depth,
                 )
             except ValueError:
                 continue  # year without relationships — no slice, matching the year loop's skip
@@ -1662,6 +1719,7 @@ class Command(BaseCommand):
                     include_self_references=opts.include_self_references,
                     include_lost=opts.include_lost,
                     include_private=opts.include_private,
+                    environment_depth=opts.environment_depth,
                 )
             except ValueError:
                 continue
@@ -1751,6 +1809,7 @@ class Command(BaseCommand):
                 include_self_references=options["include_self_references"],
                 include_lost=options["include_lost"],
                 include_private=options["include_private"],
+                environment_depth=options.get("environment_depth"),
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -1799,6 +1858,7 @@ class Command(BaseCommand):
             do_graph,
             do_3dgraph,
             strategy_instances=communities_strategy,
+            environment_depth=options.get("environment_depth"),
         )
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
@@ -1840,6 +1900,7 @@ class Command(BaseCommand):
                 end_date=end_date,
                 selected_network_groups=selected_network_groups,
                 detection_graph=detection_graph,
+                environment_depth=options.get("environment_depth"),
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
@@ -1906,6 +1967,7 @@ class Command(BaseCommand):
                 end_date=end_date,
                 window_seconds=coordination_window,
                 min_events=coordination_min_events,
+                environment_depth=options.get("environment_depth"),
             )
             if coord_result.edges:
                 co_graph = coordination.build_nx_graph(coord_result, graph)
@@ -2037,6 +2099,7 @@ class Command(BaseCommand):
             filter_labels = Label.parse_filter_labels(options["filter_labels"])
         except ValueError as e:
             raise CommandError(str(e)) from e
+        environment_depth = self._resolve_environment_depth(options.get("environment_depth"))
         # Fall back to the config-derived strategy (settings.SA_EDGE_WEIGHT_STRATEGY) when
         # no --edge-weight-strategy is passed, then to the documented default. An empty
         # value would otherwise reach build_graph and silently zero every edge weight
@@ -2213,6 +2276,7 @@ class Command(BaseCommand):
             channel_types=channel_types,
             channel_sources=channel_sources,
             filter_labels=filter_labels,
+            environment_depth=environment_depth,
             edge_weight_strategy=edge_weight_strategy,
             communities_strategy=communities_strategy,
             strategies_lower=[inst.key for inst in communities_strategy],
@@ -2305,6 +2369,7 @@ class Command(BaseCommand):
                 include_self_references=opts.include_self_references,
                 include_lost=opts.include_lost,
                 include_private=opts.include_private,
+                environment_depth=opts.environment_depth,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
@@ -2365,6 +2430,7 @@ class Command(BaseCommand):
             opts.do_graph,
             opts.do_3dgraph,
             strategy_instances=opts.communities_strategy,
+            environment_depth=opts.environment_depth,
         )
 
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
@@ -2482,6 +2548,7 @@ class Command(BaseCommand):
                 end_date=opts.end_date,
                 selected_network_groups=opts.selected_network_groups,
                 detection_graph=detection_graph,
+                environment_depth=opts.environment_depth,
             )
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
@@ -2703,6 +2770,7 @@ class Command(BaseCommand):
                 end_date=opts.end_date,
                 window_seconds=opts.coordination_window,
                 min_events=opts.coordination_min_events,
+                environment_depth=opts.environment_depth,
             )
             self.stdout.write(f"{len(coord_result.edges)} ties among {len(coord_result.node_ids)} channels")
             if coord_result.edges:

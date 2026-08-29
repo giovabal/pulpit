@@ -123,7 +123,7 @@ def write_table_xlsx(
     # SBM(refine=MCMC) assignment-confidence companions, one per refined SBM instance.
     conf_cols = sbm_confidence_columns(graph_data, strategies)
 
-    headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Label", "Environment depth", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
@@ -142,6 +142,7 @@ def write_table_xlsx(
                 node.get("label") or node["id"],
                 node.get("url") or "",
                 node.get("organization") or "",
+                node.get("environment_depth"),
                 node.get("fans"),
                 node.get("messages_count"),
                 node.get("in_deg"),

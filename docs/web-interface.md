@@ -123,6 +123,7 @@ For each task:
 
 The exported `graph.html` and `graph3d.html` files are self-contained interactive maps you open from the Data page. Beyond search, pan/zoom, community filtering, and the Options panel, the viewer surfaces the active configuration through a small ambient widget:
 
+- **Colour by environment depth** — when the export mixes depths (an *Environment* selection on Structural Analysis, or dead leaves drawn), the *Community coloring* menu of both viewers gains an **Environment depth** entry: *In target* / *Depth 1* / *Depth 2* …, with colours generated on the fly from the active theme's canvas so every depth stays apart from the others and from the background (they are re-derived when the theme changes). The legend and the *Filter by community* list follow, and the node panel lists the depth next to the community memberships.
 - **Info bar** — a collapsible pill at the bottom-centre of both the 2D and 3D viewers. By default it appears as a small half-transparent sliders icon. Clicking it expands horizontally into compact chips for Layout, Community strategy, Size metric, Theme, Labels mode, Coloured/Plain edges, and (when filtering) the active community group. Chips update live whenever an option is changed in the Options panel; click the icon again to collapse it back.
 
 ---

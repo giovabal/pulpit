@@ -337,10 +337,12 @@ def _network_content_metrics(
     channel_qs: QuerySet,
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    environment_depth: int | None = None,
 ) -> dict[str, float | None]:
     """Compute network-wide content originality and amplification ratio from the DB."""
     channel_pks = list(channel_qs.values_list("pk", flat=True))
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
+    cutoff_q = channel_cutoff_q(environment_depth=environment_depth)
+    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & cutoff_q
     # ``.alive()`` (exclude lost messages) to match the per-channel CONTENTORIGINALITY /
     # AMPLIFICATION measures, which run on ``Message.objects.alive()``; otherwise the
     # whole-network aggregate would not reconcile with the per-channel column.
@@ -362,7 +364,7 @@ def _network_content_metrics(
         Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
         & ~Q(channel_id=F("forwarded_from_id"))
         & make_date_q(start_date, end_date)
-        & channel_cutoff_q()
+        & cutoff_q
     )
     forwards_received = Message.objects.alive().filter(fwd_in_q).count()
     return {
@@ -769,6 +771,7 @@ def compute_community_metrics(
     end_date: datetime.date | None = None,
     selected_network_groups: "frozenset[str] | None" = None,
     detection_graph: "nx.DiGraph | None" = None,
+    environment_depth: int | None = None,
 ) -> CommunityTableData:
     """Pre-compute all structural metrics needed for community table outputs.
 
@@ -816,7 +819,7 @@ def compute_community_metrics(
     pk_to_org: dict[str, str] = {}
     if channel_qs is not None:
         if _grp("CONTENT"):
-            network_summary.update(_network_content_metrics(channel_qs, start_date, end_date))
+            network_summary.update(_network_content_metrics(channel_qs, start_date, end_date, environment_depth))
         type_counts = _count_channel_types(channel_qs)
         types_present = {k: v for k, v in type_counts.items() if v > 0}
         if len(types_present) > 1:

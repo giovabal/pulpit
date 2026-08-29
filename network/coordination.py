@@ -113,13 +113,15 @@ def compute_coordination(
     end_date: datetime.date | None = None,
     window_seconds: int = DEFAULT_WINDOW_SECONDS,
     min_events: int = DEFAULT_MIN_EVENTS,
+    environment_depth: int | None = None,
 ) -> CoordinationResult:
     """Build the co-forwarding coordination network over ``channel_ids``.
 
     Queries the same message universe as the citation graph: alive messages,
     inside the export window, period-aware via ``channel_cutoff_q()`` (a
-    message counts only while its channel is in an in-target period), and
-    never self-forwards. The origin channel does not need to be in
+    message counts only while its channel is in an in-target period — or, with
+    ``environment_depth``, belongs to an environment channel within that many
+    hops), and never self-forwards. The origin channel does not need to be in
     ``channel_ids`` — two in-target channels co-forwarding an out-of-target
     origin is still coordination *between them*.
 
@@ -137,7 +139,7 @@ def compute_coordination(
         & ~Q(channel_id=F("forwarded_from_id"))
         & Q(date__isnull=False)
         & make_date_q(start_date, end_date)
-        & channel_cutoff_q()
+        & channel_cutoff_q(environment_depth=environment_depth)
     )
     rows = (
         Message.objects.alive()

@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet
 from django.utils import timezone
 
-from network.utils import channel_cutoff_q, make_date_q
+from network.utils import channel_cutoff_q, environment_channels, make_date_q
 from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
@@ -20,6 +20,7 @@ def channel_network_data(
     dead_leaves_color: str | None = None,
     resolved_label: "tuple[int, str, str] | None" = None,
     group_partitions: "dict[int, tuple[int, str]] | None" = None,
+    environment_depth: int | None = None,
 ) -> dict:
     """Build the graph-node dict for a channel.
 
@@ -33,7 +34,9 @@ def channel_network_data(
     group's pk → ``(label_id, label_color)`` resolved for the window, feeding the
     ``LABELGROUP<id>`` community strategies. The node keys ``organization`` /
     ``resolved_org_*`` keep their names for export back-compat but now hold the
-    primary group's label.
+    primary group's label. ``environment_depth`` is the node's citation distance
+    from the monitored set — ``0`` in target, ``k`` for an environment node the
+    crawler reached ``k`` hops out, ``1`` for a dead leaf.
     """
     default = default or {}
     leaf_color = dead_leaves_color or settings.DEAD_LEAVES_COLOR
@@ -59,6 +62,7 @@ def channel_network_data(
         "is_private": channel.is_private,
         "messages_count": 0 if "messages_count" in skip else channel.message_set.count(),
         "out_deg": channel.out_degree,
+        "environment_depth": environment_depth,
     }
     data.update(default)
     return data
@@ -252,11 +256,22 @@ def build_graph(
     include_lost: bool = False,
     include_private: bool = False,
     dead_leaves_color: str | None = None,
+    environment_depth: int | None = None,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
     Returns (graph, channel_dict, edge_list, channel_qs).
     Raises ValueError if no edges are found between channels.
+
+    ``environment_depth`` (``None`` / ``0`` = off) admits the *environment*: the
+    out-of-target channels ``crawl_channels --environment`` reached within that
+    many citation hops (``Channel.environment_depth``, see
+    ``network.utils.environment_channels``). They are full participants — their
+    own stored messages build edges in every direction and count in every
+    message-based quantity, through the widened ``channel_cutoff_q`` — but hold
+    no label, so they take the dead-leaves colour and are dropped when isolated.
+    Every node carries ``environment_depth``: 0 in target, k for an environment
+    node, 1 for a dead leaf (cited directly by a monitored channel).
 
     ``filter_labels`` (container-label ids, e.g. a continent) limits the whole
     analysis to the channels holding a label assigned under at least one of
@@ -295,7 +310,14 @@ def build_graph(
             # a full node, defeating the filter.
             dead_leaf_q &= ~in_target_q
         qs_filter |= dead_leaf_q
-    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types))
+    if environment_depth:
+        # Environment nodes: the crawler's stamp says how many citation hops out the
+        # channel sits. A channel ever in target is a monitored channel and enters only
+        # through in_target_q (window permitting), never as environment.
+        qs_filter |= Q(pk__in=environment_channels(environment_depth))
+    channel_qs: QuerySet[Channel] = Channel.objects.filter(qs_filter, channel_type_filter(channel_types)).annotate(
+        in_target_window=Exists(in_target_sub)
+    )
     if not include_private:
         channel_qs = channel_qs.exclude(is_private=True)
     if not include_lost:
@@ -375,19 +397,26 @@ def build_graph(
                     group_partitions[group_id] = (resolved[0], resolved[2])  # (label_id, label_color)
                 if is_primary:
                     resolved_label = resolved
+        if channel.in_target_window:
+            node_depth = 0
+        elif environment_depth and channel.environment_depth and channel.environment_depth <= environment_depth:
+            node_depth = channel.environment_depth
+        else:
+            node_depth = 1  # dead leaf: cited directly by a monitored channel
         node_data = channel_network_data(
             channel,
             skip=_skip,
             dead_leaves_color=dead_leaves_color,
             resolved_label=resolved_label,
             group_partitions=group_partitions,
+            environment_depth=node_depth,
         )
         channel_dict[str(channel.pk)] = {"channel": channel, "data": node_data}
         graph.add_node(str(channel.pk), data=node_data)
 
     channel_ids = [int(channel_id) for channel_id in channel_dict]
     date_q = make_date_q(start_date, end_date)
-    cutoff_q = channel_cutoff_q()
+    cutoff_q = channel_cutoff_q(environment_depth=environment_depth)
     references_through = Message.references.through
 
     messages_per_channel = {
@@ -413,7 +442,7 @@ def build_graph(
         {
             (item["message__channel_id"], item["channel_id"]): item["total"]
             for item in references_through.objects.filter(
-                channel_cutoff_q("message__channel", "message__date"),
+                channel_cutoff_q("message__channel", "message__date", environment_depth=environment_depth),
                 make_date_q(start_date, end_date, field="message__date"),
                 message__is_lost=False,
                 channel_id__in=channel_ids,

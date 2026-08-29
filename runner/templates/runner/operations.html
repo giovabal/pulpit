@@ -305,6 +305,53 @@
               </fieldset>
 
               <fieldset class="ops-fieldset">
+                <legend>Environment
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Also crawl the out-of-scope channels your in-scope channels cite (forwards and t.me/ links), up to N citation hops away: channel details plus every message dated inside the in-scope channels' in-target window (holes filled when Fix message holes is on). Reached channels are tagged with their distance and keep their messages across purges. Media types are chosen here, independently of the Media types fieldset."></i>
+                </legend>
+                <div class="ops-switch form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch" name="environment" id="environment" {% if ad.CRAWL_ENVIRONMENT %}checked{% endif %}>
+                  <label class="form-check-label" for="environment">Crawl the environment</label>
+                </div>
+                <div class="ops-params mt-2">
+                  <div class="ops-param">
+                    <label for="environment_depth">How deep
+                      <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                         title="Citation hops from the in-scope channels: 1 = the channels they cite; 2 = also the channels those cite; and so on. Each level is discovered from the messages of the previous one."></i>
+                    </label>
+                    <input type="number" name="environment_depth" id="environment_depth" placeholder="{{ ad.CRAWL_ENVIRONMENT_DEPTH }}" value="{{ ad.CRAWL_ENVIRONMENT_DEPTH }}" min="1" step="1" data-width="sm" data-requires-flag="environment">
+                  </div>
+                </div>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="environment_download_images" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES %}checked{% endif %} data-requires-flag="environment">Image download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download photo files attached to environment channels' messages."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="environment_download_video" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_VIDEO %}checked{% endif %} data-requires-flag="environment">Video download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download video files attached to environment channels' messages (includes GIFs/animations and round videos)."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="environment_download_audio" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_AUDIO %}checked{% endif %} data-requires-flag="environment">Audio download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download audio attached to environment channels' messages — both voice notes and uploaded audio documents."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="environment_download_stickers" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_STICKERS %}checked{% endif %} data-requires-flag="environment">Sticker download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download stickers attached to environment channels' messages — static webp, animated TGS, and video webm stickers."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="environment_download_other_media" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_OTHER_MEDIA %}checked{% endif %} data-requires-flag="environment">Other media download
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.) attached to environment channels' messages."></i>
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset class="ops-fieldset">
                 <legend>Channel types
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Which Telegram entity types to include."></i>
@@ -533,6 +580,20 @@
                   <i class="bi bi-info-circle ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Include dead leaves in the graph: out-of-target channels that an in-target channel has forwarded from or mentioned via a t.me/ link. Adds context but can significantly increase graph size. The colour picker below controls the node colour."></i>
                 </label>
+              </div>
+              <div class="ops-params mt-2">
+                <div class="ops-param">
+                  <label for="environment_depth">Environment
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Also include the environment: the out-of-target channels Crawl Channels' Environment pass reached within this many citation hops of the monitored ones. They take part in full (edges, measures, communities, coordination) and every node gets an Environment depth (0 in target) the map can colour by. None = in-target channels only. The list stops at the deepest channel registered so far."></i>
+                  </label>
+                  <select name="environment_depth" id="environment_depth" data-width="sm">
+                    <option value="0"{% if not ad.SA_ENVIRONMENT_DEPTH %} selected{% endif %}>None</option>
+                    {% for depth in environment_depth_choices %}
+                    <option value="{{ depth }}"{% if depth == ad.SA_ENVIRONMENT_DEPTH %} selected{% endif %}>{{ depth }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
               </div>
               <div class="ops-params" style="margin-top:.5rem">
                 {# data-requires-flag on the wrapper (not the <input>) so the input stays #}

@@ -5,6 +5,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings } from './utils.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
@@ -61,7 +62,8 @@ var adj_in = {}; // id → Set of source ids
 
 var active_strategy = null;
 var community_color_maps = {};
-var community_strategy_data = {};
+var community_strategy_data = {}; // strategies + runtime-coloured colourings (environment depth)
+var community_payload = null; // raw communities.json of the current data dir, re-coloured on theme change
 var accessory_data = null;
 
 var selected_node_id = null;
@@ -604,6 +606,12 @@ function _rebuild_edge_positions() {
 // Themes, layout switching
 // =============================================================================
 
+// Hex CSS string of the active theme's canvas — what the environment-depth palette contrasts against.
+function _current_bg_hex() {
+    var t = THEMES_3D[active_theme_3d] || THEMES_3D.dark;
+    return '#' + t.bg.toString(16).padStart(6, '0');
+}
+
 function apply_theme_3d(theme) {
     var t = THEMES_3D[theme] || THEMES_3D.dark;
     var prev_curve_edges = (THEMES_3D[active_theme_3d] || THEMES_3D.dark).curve_edges;
@@ -621,6 +629,16 @@ function apply_theme_3d(theme) {
     document.body.setAttribute('data-theme3d', theme);
     var bgHex = '#' + t.bg.toString(16).padStart(6, '0');
     document.documentElement.style.backgroundColor = bgHex;
+    // The environment-depth colours are derived from the canvas colour: re-derive them for the new
+    // theme and repaint + re-legend when that colouring is the active one.
+    if (community_payload) {
+        community_strategy_data = mergeColorings(community_payload, bgHex);
+        community_color_maps = buildCommunityColorMaps(community_strategy_data);
+        if (active_strategy === ENV_DEPTH_KEY) {
+            build_legend(community_strategy_data[active_strategy]);
+            if (Object.keys(nodes_index).length) apply_strategy_colors(active_strategy);
+        }
+    }
     // The 3D viewer's theme is a per-session display choice, deliberately not
     // persisted: it always boots dark and never reads or writes the shared
     // ``pulpit_theme`` key that the live webapp and table exports use.
@@ -773,7 +791,7 @@ function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
     Object.keys(nodes_index).forEach(function(id) {
         var node = nodes_index[id];
-        var label = node.communities && node.communities[strategy];
+        var label = groupLabelOf(node, strategy);
         var color = (label && colorMap[label]) ?
             new THREE.Color(colorMap[label]) :
             new THREE.Color(0.8, 0.8, 0.8);
@@ -913,21 +931,29 @@ function node_anchor(id) {
     var node = nodes_index[id];
     if (!node) return '';
     var color = '#' + node.orig_color.getHexString();
-    var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
+    var label = active_strategy ? groupLabelOf(node, active_strategy) : '';
     return '<i class="bi bi-circle-fill" style="color:' + color + '" title="' + escHtml(label) + '"></i>' +
         ' <a href="#" class="node-link" data-node-id="' + escHtml(id) + '">' + escHtml(node.label || id) + '</a>';
 }
 
 function get_group_html(id) {
     var node = nodes_index[id];
-    if (!node || !node.communities) return '';
+    if (!node) return '';
     var parts = [];
-    for (var strategy in node.communities) {
+    for (var strategy in (node.communities || {})) {
         var lbl = node.communities[strategy] || '';
         var colorMap = community_color_maps[strategy] || {};
         var color = (lbl && colorMap[lbl]) ? colorMap[lbl] : '#ccc';
         var name = strategy.charAt(0).toUpperCase() + strategy.slice(1);
         parts.push('<i class="bi bi-circle-fill" style="color:' + color + '"></i> <b>' + escHtml(name) + ':</b> ' + escHtml(lbl));
+    }
+    // Environment depth rides along when the export offers that colouring (0 = in target).
+    if (community_strategy_data && community_strategy_data[ENV_DEPTH_KEY] &&
+        node.environment_depth !== null && node.environment_depth !== undefined) {
+        var dLabel = envDepthLabel(node.environment_depth);
+        var dMap = community_color_maps[ENV_DEPTH_KEY] || {};
+        parts.push('<i class="bi bi-circle-fill" style="color:' + (dMap[dLabel] || '#ccc') + '"></i> <b>' +
+            escHtml(strategy_label(ENV_DEPTH_KEY)) + ':</b> ' + escHtml(dLabel));
     }
     return parts.join('<br>');
 }
@@ -1072,7 +1098,7 @@ function apply_group_filter(group) {
     }
     Object.keys(nodes_index).forEach(function(id) {
         var node = nodes_index[id];
-        var label = (node.communities && active_strategy) ? node.communities[active_strategy] : '';
+        var label = active_strategy ? groupLabelOf(node, active_strategy) : '';
         var match = (label === group);
         node.mesh.material.color.copy(match ? node.orig_color : fade_color);
     });
@@ -1094,14 +1120,15 @@ function get_data() {
         var comm_data = results[2];
 
         accessory_data = ch_data;
-        community_strategy_data = comm_data.strategies;
-        community_color_maps = buildCommunityColorMaps(comm_data.strategies);
+        community_payload = comm_data;
+        community_strategy_data = mergeColorings(comm_data, _current_bg_hex());
+        community_color_maps = buildCommunityColorMaps(community_strategy_data);
 
-        var strategies = Object.keys(comm_data.strategies);
+        var strategies = Object.keys(community_strategy_data);
         active_strategy = strategies[0] || null;
 
-        build_strategy_selector(comm_data.strategies);
-        if (active_strategy) build_legend(comm_data.strategies[active_strategy]);
+        build_strategy_selector(community_strategy_data);
+        if (active_strategy) build_legend(community_strategy_data[active_strategy]);
 
         el('size-select').innerHTML = ch_data.measures.map(function(m) {
             return '<option value="' + m[0] + '">' + m[1] + '</option>';
@@ -1147,17 +1174,19 @@ function _apply_accessory_3d(ch_data, comm_data) {
 
     accessory_data = ch_data;
     community_strategy_data = comm_data.strategies;
-    community_color_maps = buildCommunityColorMaps(comm_data.strategies);
+    community_payload = comm_data;
+    community_strategy_data = mergeColorings(comm_data, _current_bg_hex());
+    community_color_maps = buildCommunityColorMaps(community_strategy_data);
 
-    var strategies = Object.keys(comm_data.strategies);
+    var strategies = Object.keys(community_strategy_data);
     active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1) ?
         prev_strategy : (strategies[0] || null);
 
-    build_strategy_selector(comm_data.strategies);
+    build_strategy_selector(community_strategy_data);
     if (active_strategy) {
         var sel = el('community-strategy-select');
         if (sel) sel.value = active_strategy;
-        build_legend(comm_data.strategies[active_strategy]);
+        build_legend(community_strategy_data[active_strategy]);
     }
 
     el('size-select').innerHTML = ch_data.measures.map(function(m) {

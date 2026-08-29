@@ -28,6 +28,7 @@ var COL_TOOLTIPS = {
     "amplification_factor": "Amplification factor: forwards received from tracked channels per own message",
     "diffusion_lag": "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
     "sbm_confidence": "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
+    "environment_depth": "Environment depth: citation hops from the monitored channels — 0 in target, k for an environment channel the crawler reached k hops out, 1 for a dead leaf",
 };
 
 // Parameterised measures may be requested more than once, each producing a parameter-suffixed
@@ -273,6 +274,10 @@ function _render(d) {
 
     var has_spark = _all_years.length > 0;
 
+    // Environment depth (0 = in target) is shown only when the export mixes depths — an
+    // in-target-only export would carry a column of zeros.
+    var has_env_depth = nodes.some(function(n) { return n.environment_depth !== null && n.environment_depth !== undefined && n.environment_depth !== 0; });
+
     // thead
     var htr = document.createElement("tr");
 
@@ -288,6 +293,7 @@ function _render(d) {
     }
     addTh("#", "number", false, "Initial rank by inbound links");
     addTh("Channel", "", false);
+    if (has_env_depth) addTh("Environment depth", "number", false, COL_TOOLTIPS.environment_depth);
     cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[canonicalKey(col.key)] || ""); });
     roleCols.forEach(function(rc, i) { addTh(rc.label, "", i === 0, rc.tip); });
     var stratGroupStart = true;
@@ -362,6 +368,12 @@ function _render(d) {
         }
         tr.appendChild(nameTd);
 
+        if (has_env_depth) {
+            var depth = node.environment_depth;
+            var depthStr = (depth === null || depth === undefined) ? "" : String(depth);
+            addTd(depthStr || "—", "number", depthStr, "", "", false);
+        }
+
         cols.forEach(function(col) {
             var val = node[col.key];
             var displayStr = col.isBase ? fmtInt(val) : sigFig(val, 3);
@@ -409,6 +421,7 @@ function _render(d) {
     }
     addFtd("", "number", false);
     addFtd("Mean ± SD", "", false);
+    if (has_env_depth) addFtd("", "number", false);
     cols.forEach(function(col) { addFtd(colMeanSd(col.key), "number", col.groupStart || false); });
     roleCols.forEach(function(rc, i) { addFtd("", "", i === 0); });
     var firstStratFoot = true;

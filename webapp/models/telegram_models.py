@@ -57,6 +57,12 @@ class Channel(TelegramBaseModel):
     is_lost = models.BooleanField(default=False)
     is_private = models.BooleanField(default=False)
     to_inspect = models.BooleanField(default=False)
+    # Citation distance at which the crawler's "Environment" pass reached this out-of-scope
+    # channel (1 = cited directly by an in-scope channel); None = never reached. Set by
+    # crawl_channels --environment, kept at the smallest distance ever observed, never cleared
+    # automatically. Marks the channel's messages as deliberately stored (see
+    # purge_out_of_target_messages), like to_inspect does for analyst-picked channels.
+    environment_depth = models.PositiveSmallIntegerField(null=True, blank=True)
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)

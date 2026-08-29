@@ -447,6 +447,15 @@ CRAWL_RETRY_REFERENCES = _crawl.messages.retry_references
 CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES = _crawl.messages.force_retry_unresolved_references
 CRAWL_IN_DEGREES = _crawl.degrees.in_degrees
 CRAWL_OUT_DEGREES = _crawl.degrees.out_degrees
+# Environment pass: out-of-scope channels within N citation hops of the in-scope ones.
+# `depth` is tuning (the --environment-depth fallback); the rest pre-populate the form.
+CRAWL_ENVIRONMENT = _crawl.environment.enabled
+CRAWL_ENVIRONMENT_DEPTH = int(_crawl.environment.depth)
+CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES = _crawl.environment.images
+CRAWL_ENVIRONMENT_DOWNLOAD_VIDEO = _crawl.environment.video
+CRAWL_ENVIRONMENT_DOWNLOAD_AUDIO = _crawl.environment.audio
+CRAWL_ENVIRONMENT_DOWNLOAD_STICKERS = _crawl.environment.stickers
+CRAWL_ENVIRONMENT_DOWNLOAD_OTHER_MEDIA = _crawl.environment.other_media
 
 # ── Structural Analysis defaults (configuration/.operations-structural) ──────
 
@@ -479,6 +488,7 @@ SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
 SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold
 SA_INCLUDE_LOST = _structural.scope.include_lost
 SA_INCLUDE_PRIVATE = _structural.scope.include_private
+SA_ENVIRONMENT_DEPTH = int(getattr(_structural.scope, "environment_depth", 0) or 0)
 SA_TIMELINE_STEP = _structural.outputs.timeline_step
 SA_VACANCY_MEASURES = ",".join(_structural.vacancy.measures)
 SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before

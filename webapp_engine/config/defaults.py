@@ -48,6 +48,19 @@ CRAWL_DEFAULTS: dict = {
         "in_degrees": False,
         "out_degrees": False,
     },
+    "environment": {
+        # Crawl the out-of-scope channels the in-scope ones cite (forwards + t.me/
+        # references), up to `depth` citation hops away, bounded to the in-scope
+        # channels' in-target date window. Their media types are chosen separately
+        # from [downloads], which only governs in-scope channels.
+        "enabled": False,
+        "depth": 1,
+        "images": False,
+        "video": False,
+        "audio": False,
+        "stickers": False,
+        "other_media": False,
+    },
 }
 
 
@@ -89,6 +102,9 @@ STRUCTURAL_DEFAULTS: dict = {
     "scope": {
         "include_lost": False,
         "include_private": False,
+        # Environment depth pre-selected in the panel's Environment dropdown: 0 = None (in-target
+        # channels only), N = also the environment channels within N citation hops.
+        "environment_depth": 0,
     },
     "computation": {
         "fa2_iterations": "",

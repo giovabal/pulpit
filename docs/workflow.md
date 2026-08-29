@@ -159,6 +159,8 @@ The options panel is organized into three independent groups — each is its own
 - **Sticker download** — static webp stickers, animated TGS, and video webm stickers.
 - **Other media download** — everything else (PDFs, archives, arbitrary documents).
 
+**Environment:** the **Environment** fieldset (CLI: `--environment`) extends the crawl beyond your monitored channels to the channels they cite. Flip the switch and Pulpit also fetches, after the normal passes, every out-of-scope channel that an in-scope channel forwards from or links via `t.me/` — their full details and profile picture, plus every message dated inside your monitored channels' in-target window (from the earliest in-target period start to the latest end; open-ended periods leave that side unbounded). **How deep** sets the citation distance: `1` stops at the channels your corpus cites, `2` also crawls the channels *those* cite, and so on — each level is discovered from the messages of the previous one, so a deeper level costs another round of Telegram traffic. Message holes are filled for these channels too when *Fix message holes* is on. The five media checkboxes in the fieldset choose what to download for environment channels, independently of the **Media types** fieldset (all off by default — text only). Reached channels are tagged with their distance (an *Environment · N* badge on the channel page, an `env N` tag and an *Environment* status filter in Manage → Channels), they keep their messages across `purge_out_of_target_messages`, and they stay out of the network map — only in-target channels form nodes and edges, so the environment enriches what you can browse without changing the analysis. The tag records the smallest distance ever observed and is never cleared automatically; labelling an environment channel in-target simply makes it a monitored channel from then on.
+
 > **The first connection to Telegram:** if this is your first run, Telegram will send a verification code to your phone. Enter it in the terminal when prompted.
 
 ---
@@ -199,6 +201,7 @@ The map can group and colour channels two complementary ways. Pick from either o
 | **Channel sources** | Restrict the graph to channels belonging to at least one selected source. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
 | **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned via a `t.me/` link. Useful for seeing what outside content your corpus amplifies. |
+| **Environment** | Include the *environment* crawled by Crawl Channels' Environment pass (CLI: `--environment-depth N`): pick how many citation hops out to go — the list stops at the deepest channel registered so far; *None* keeps the analysis to in-target channels. Unlike dead leaves, environment channels take part in full: their own stored messages build edges in every direction and feed every message-based measure, community detection and the coordination maps. Every exported node carries an **Environment depth** (0 in target, *k* for an environment channel *k* hops out, 1 for a dead leaf) — a channel-table column, a CSV/XLSX/GEXF/GraphML attribute, and, whenever the export mixes depths, an extra entry in the map's colour-by menu whose colours are generated on the fly to stay apart from each other and from the current theme's background. Environment channels hold no label, so they stay grey under label colourings and are dropped when isolated. |
 
 When the export finishes, click **Data** in the navigation bar to browse your exports and open the map.
 
@@ -297,6 +300,11 @@ python manage.py crawl_channels --get-new-messages --download-audio --download-s
 python manage.py crawl_channels --fix-missing-media --download-images --no-download-video         # repair photos only
 python manage.py crawl_channels --get-new-messages --download-video --download-timeout 600        # allow up to 10 minutes per file (default 240s; 0 waits forever)
 
+# Environment: also crawl the out-of-scope channels the in-scope ones cite (details + messages inside the in-target window)
+python manage.py crawl_channels --get-new-messages --environment                                  # one citation hop, text only
+python manage.py crawl_channels --environment --environment-depth 2 --environment-download-images  # two hops, with photos
+python manage.py crawl_channels --environment --fix-holes --filter-labels 36                      # environment of one container label's channels, holes filled
+
 # Generate the map
 python manage.py structural_analysis --graph-2d --html
 python manage.py structural_analysis --graph-2d --html --xlsx
@@ -325,6 +333,7 @@ python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --graph-2d --timeline-step year
 python manage.py structural_analysis --graph-2d --html --channel-sources media,activists
 python manage.py structural_analysis --graph-2d --html --filter-labels 36,38   # limit the whole analysis to channels under these container labels (e.g. continents; ids from Manage → Labels)
+python manage.py structural_analysis --graph-2d --html --environment-depth 1   # also include the environment channels one citation hop out (needs crawl_channels --environment); 0 = off
 
 # Robustness analysis (resistance to node removal)
 python manage.py structural_analysis --robustness --html --xlsx               # default: α=0.05, N_runs=100, K_null=20, static strategies only

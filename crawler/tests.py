@@ -3089,3 +3089,311 @@ class MediaHandlerFriendlyLogIntegrationTests(TestCase):
         self.assertIn("Couldn't download the picture in message 1", logged)
         self.assertIn("Telegram no longer provides this file", logged)
         self.assertNotIn("GetFileRequest", logged)
+
+
+# ---------------------------------------------------------------------------
+# crawl_channels --environment: window, candidate discovery, windowed get_channel
+# ---------------------------------------------------------------------------
+
+
+class EnvironmentWindowTests(TestCase):
+    """The environment window spans the in-scope channels' in-target periods."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+
+    def test_window_spans_earliest_start_to_latest_end(self) -> None:
+        make_channel(
+            telegram_id=1,
+            label=self.org,
+            attribution_start=datetime.date(2022, 3, 1),
+            attribution_end=datetime.date(2022, 12, 31),
+        )
+        make_channel(
+            telegram_id=2,
+            label=self.org,
+            attribution_start=datetime.date(2021, 1, 1),
+            attribution_end=datetime.date(2021, 6, 30),
+        )
+        window = Command._environment_window(Channel.objects.all())
+        self.assertEqual(window, (datetime.date(2021, 1, 1), datetime.date(2022, 12, 31)))
+
+    def test_open_period_side_leaves_that_side_unbounded(self) -> None:
+        make_channel(telegram_id=1, label=self.org, attribution_start=datetime.date(2022, 3, 1))
+        make_channel(
+            telegram_id=2,
+            label=self.org,
+            attribution_start=datetime.date(2021, 1, 1),
+            attribution_end=datetime.date(2021, 6, 30),
+        )
+        self.assertEqual(Command._environment_window(Channel.objects.all()), (datetime.date(2021, 1, 1), None))
+
+    def test_scope_without_in_target_periods_is_unbounded(self) -> None:
+        Channel.objects.create(telegram_id=3, title="Inspect", to_inspect=True)
+        self.assertEqual(Command._environment_window(Channel.objects.all()), (None, None))
+
+    def test_only_scope_channels_count(self) -> None:
+        inside = make_channel(
+            telegram_id=1,
+            label=self.org,
+            attribution_start=datetime.date(2022, 1, 1),
+            attribution_end=datetime.date(2022, 12, 31),
+        )
+        make_channel(telegram_id=2, label=self.org)  # open both sides, but out of the scope queryset
+        window = Command._environment_window(Channel.objects.filter(pk=inside.pk))
+        self.assertEqual(window, (datetime.date(2022, 1, 1), datetime.date(2022, 12, 31)))
+
+
+def _dated(year: int, month: int, day: int) -> datetime.datetime:
+    return datetime.datetime(year, month, day, 12, 0, tzinfo=datetime.timezone.utc)
+
+
+class EnvironmentCandidatesTests(TestCase):
+    """Level-1 candidates come from in-period citations of the scope; deeper levels from stored messages."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.scope = make_channel(
+            telegram_id=1,
+            title="Scope",
+            label=self.org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+        )
+        self.forwarded = Channel.objects.create(telegram_id=10, title="Forwarded")
+        self.referenced = Channel.objects.create(telegram_id=11, title="Referenced")
+        self.out_of_period = Channel.objects.create(telegram_id=12, title="OutOfPeriod")
+        self.in_target_cited = make_channel(telegram_id=13, title="InTargetCited", label=self.org)
+        self.inspect_cited = Channel.objects.create(telegram_id=14, title="InspectCited", to_inspect=True)
+        self.user_cited = Channel.objects.create(telegram_id=15, title="UserCited", is_user_account=True)
+        self.lost_cited = Channel.objects.create(telegram_id=16, title="LostCited", is_lost=True)
+        self.group_cited = Channel.objects.create(telegram_id=17, title="GroupCited", megagroup=True)
+        self.lost_msg_cited = Channel.objects.create(telegram_id=18, title="LostMessageCited")
+
+        Message.objects.create(
+            telegram_id=100, channel=self.scope, date=_dated(2023, 6, 1), forwarded_from=self.forwarded
+        )
+        ref_msg = Message.objects.create(telegram_id=101, channel=self.scope, date=_dated(2023, 6, 2))
+        ref_msg.references.add(self.referenced)
+        # Dated outside the in-target period: not a citation the graph would count.
+        Message.objects.create(
+            telegram_id=102, channel=self.scope, date=_dated(2022, 6, 1), forwarded_from=self.out_of_period
+        )
+        for tid, cited in ((103, self.in_target_cited), (104, self.inspect_cited), (105, self.user_cited)):
+            Message.objects.create(telegram_id=tid, channel=self.scope, date=_dated(2023, 6, 3), forwarded_from=cited)
+        for tid, cited in ((106, self.lost_cited), (107, self.group_cited)):
+            Message.objects.create(telegram_id=tid, channel=self.scope, date=_dated(2023, 6, 4), forwarded_from=cited)
+        Message.objects.create(
+            telegram_id=108,
+            channel=self.scope,
+            date=_dated(2023, 6, 5),
+            forwarded_from=self.lost_msg_cited,
+            is_lost=True,
+        )
+        self.opts = _crawl_opts(channel_types=["CHANNEL"])
+        self.scope_qs = Channel.objects.filter(pk=self.scope.pk)
+
+    def _level1(self, opts=None) -> list[Channel]:
+        return Command._environment_candidates(self.scope_qs, {self.scope.pk}, opts or self.opts)
+
+    def test_level_one_is_the_in_period_citations_of_the_scope(self) -> None:
+        self.assertEqual(self._level1(), [self.forwarded, self.referenced])
+
+    def test_retry_lost_and_private_admits_lost_channels(self) -> None:
+        found = self._level1(_crawl_opts(channel_types=["CHANNEL"], retry_lost_and_private=True))
+        self.assertEqual(found, [self.forwarded, self.referenced, self.lost_cited])
+
+    def test_channel_types_apply(self) -> None:
+        found = self._level1(_crawl_opts(channel_types=["CHANNEL", "GROUP"]))
+        self.assertIn(self.group_cited, found)
+
+    def test_visited_channels_are_skipped(self) -> None:
+        found = Command._environment_candidates(self.scope_qs, {self.scope.pk, self.forwarded.pk}, self.opts)
+        self.assertEqual(found, [self.referenced])
+
+    def test_deeper_level_reads_the_seeds_stored_messages_without_period_cutoff(self) -> None:
+        deeper = Channel.objects.create(telegram_id=20, title="Deeper")
+        deeper_ref = Channel.objects.create(telegram_id=21, title="DeeperRef")
+        # Environment channels hold no in-target label, so their messages are used as stored.
+        Message.objects.create(telegram_id=200, channel=self.forwarded, date=_dated(2023, 7, 1), forwarded_from=deeper)
+        msg = Message.objects.create(telegram_id=201, channel=self.forwarded, date=_dated(2023, 7, 2))
+        msg.references.add(deeper_ref)
+        # A back-citation of the scope must not re-enter the environment.
+        Message.objects.create(
+            telegram_id=202, channel=self.forwarded, date=_dated(2023, 7, 3), forwarded_from=self.scope
+        )
+        visited = {self.scope.pk, self.forwarded.pk, self.referenced.pk}
+        found = Command._environment_candidates([self.forwarded.pk, self.referenced.pk], visited, self.opts)
+        self.assertEqual(found, [deeper, deeper_ref])
+
+
+class GetChannelMessageWindowTests(TestCase):
+    """``get_channel(message_window=…)`` stores only in-window messages and clips the Telegram walk."""
+
+    def setUp(self) -> None:
+        self.channel = Channel.objects.create(telegram_id=500, title="Env")
+        self.api_client = _make_api_client()
+        self.api_client.wait_time = 0
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.crawler.resolve_channel_or_classify = MagicMock(return_value=(self.channel, MagicMock(), "ok"))
+        self.crawler.set_more_channel_details = MagicMock()
+        self.crawler._resolve_pending_forwards = MagicMock()
+        self.seen: list[int] = []
+
+        def fake_get_message(channel, telegram_message):
+            self.seen.append(telegram_message.id)
+            return True, 0
+
+        self.crawler.get_message = fake_get_message
+        self.window = (datetime.date(2023, 1, 1), datetime.date(2023, 12, 31))
+
+    @staticmethod
+    def _msg(msg_id: int, when: datetime.datetime) -> MagicMock:
+        message = MagicMock()
+        message.id = msg_id
+        message.date = when
+        return message
+
+    def test_first_crawl_starts_at_window_start_and_stops_past_window_end(self) -> None:
+        self.api_client.client.iter_messages.return_value = iter(
+            [
+                self._msg(1, _dated(2023, 1, 5)),
+                self._msg(2, _dated(2023, 6, 1)),
+                self._msg(3, _dated(2023, 12, 31)),
+                self._msg(4, _dated(2024, 1, 2)),
+                self._msg(5, _dated(2024, 3, 1)),
+            ]
+        )
+        self.crawler.get_channel(500, message_window=self.window)
+        self.assertEqual(self.seen, [1, 2, 3])
+        kwargs = self.api_client.client.iter_messages.call_args.kwargs
+        self.assertTrue(kwargs["reverse"])
+        self.assertEqual(kwargs["min_id"], 0)
+        self.assertEqual(
+            kwargs["offset_date"],
+            timezone.make_aware(datetime.datetime(2023, 1, 1)) - datetime.timedelta(seconds=1),
+        )
+
+    def test_history_walk_stops_before_window_start(self) -> None:
+        Message.objects.create(telegram_id=10, channel=self.channel, date=_dated(2023, 6, 1))
+        self.api_client.client.iter_messages.side_effect = [
+            iter([]),  # recent messages above id 10
+            iter(
+                [self._msg(9, _dated(2023, 3, 1)), self._msg(8, _dated(2022, 12, 31)), self._msg(7, _dated(2022, 1, 1))]
+            ),
+        ]
+        self.crawler.get_channel(500, message_window=self.window)
+        self.assertEqual(self.seen, [9])
+        recent_kwargs = self.api_client.client.iter_messages.call_args_list[0].kwargs
+        self.assertNotIn("offset_date", recent_kwargs)  # not a first crawl
+        self.assertEqual(self.api_client.client.iter_messages.call_args_list[1].kwargs["max_id"], 10)
+
+    def test_window_drives_out_of_target_skip_for_unlabelled_channel(self) -> None:
+        self.api_client.client.iter_messages.return_value = iter([])
+        self.crawler.get_channel(500, message_window=self.window)
+        inside = self._msg(1, _dated(2023, 6, 1))
+        outside = self._msg(2, _dated(2022, 6, 1))
+        self.assertFalse(self.crawler._skip_out_of_target(self.channel, inside))
+        self.assertTrue(self.crawler._skip_out_of_target(self.channel, outside))
+
+    def test_no_window_walks_from_the_start_and_keeps_everything(self) -> None:
+        self.api_client.client.iter_messages.return_value = iter(
+            [self._msg(1, _dated(2019, 1, 1)), self._msg(2, _dated(2025, 1, 1))]
+        )
+        self.crawler.get_channel(500)
+        self.assertEqual(self.seen, [1, 2])
+        self.assertNotIn("offset_date", self.api_client.client.iter_messages.call_args.kwargs)
+
+
+class EnvironmentCommandTests(TestCase):
+    """``crawl_channels --environment`` crawls the cited channels level by level and stamps their distance."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.scope = make_channel(
+            telegram_id=1,
+            title="Scope",
+            label=self.org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+        )
+        self.level1 = Channel.objects.create(telegram_id=10, title="Level1")
+        self.level2 = Channel.objects.create(telegram_id=20, title="Level2")
+        Message.objects.create(telegram_id=100, channel=self.scope, date=_dated(2023, 6, 1), forwarded_from=self.level1)
+        # Stored by an earlier environment run: what level 2 is discovered from.
+        Message.objects.create(
+            telegram_id=200, channel=self.level1, date=_dated(2023, 7, 1), forwarded_from=self.level2
+        )
+
+    def _run(self, **options) -> MagicMock:
+        from django.core.management import call_command
+
+        with (
+            patch(f"{_GET_CMD}.TelegramClient") as mock_tc,
+            patch(f"{_GET_CMD}.TelegramAPIClient"),
+            patch(f"{_GET_CMD}.ChannelCrawler") as mock_crawler_cls,
+            patch(f"{_GET_CMD}.MediaHandler") as mock_media_cls,
+            patch(f"{_GET_CMD}.ReferenceResolver"),
+        ):
+            mock_crawler = MagicMock()
+            mock_crawler_cls.return_value = mock_crawler
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+            call_command(
+                "crawl_channels", channel_types="CHANNEL", stdout=io.StringIO(), stderr=io.StringIO(), **options
+            )
+            self.media_calls = mock_media_cls.call_args_list
+        return mock_crawler
+
+    def test_depth_one_crawls_the_cited_channels_inside_the_window(self) -> None:
+        crawler = self._run(environment=True)
+        calls = {c.args[0]: c.kwargs for c in crawler.get_channel.call_args_list}
+        self.assertEqual(set(calls), {self.level1.telegram_id})
+        self.assertEqual(
+            calls[self.level1.telegram_id]["message_window"], (datetime.date(2023, 1, 1), datetime.date(2023, 12, 31))
+        )
+        self.assertTrue(calls[self.level1.telegram_id]["update_info"])
+        self.assertFalse(calls[self.level1.telegram_id]["fix_holes"])
+        self.level1.refresh_from_db()
+        self.level2.refresh_from_db()
+        self.assertEqual(self.level1.environment_depth, 1)
+        self.assertIsNone(self.level2.environment_depth)
+
+    def test_depth_two_reaches_the_channels_cited_by_level_one(self) -> None:
+        crawler = self._run(environment=True, environment_depth=2, fix_holes=True)
+        crawled = [c.args[0] for c in crawler.get_channel.call_args_list]
+        self.assertEqual(crawled, [self.level1.telegram_id, self.level2.telegram_id])
+        self.assertTrue(all(c.kwargs["fix_holes"] for c in crawler.get_channel.call_args_list))
+        self.level2.refresh_from_db()
+        self.assertEqual(self.level2.environment_depth, 2)
+
+    def test_smallest_distance_is_kept(self) -> None:
+        self.level1.environment_depth = 3
+        self.level1.save(update_fields=["environment_depth"])
+        self._run(environment=True)
+        self.level1.refresh_from_db()
+        self.assertEqual(self.level1.environment_depth, 1)
+
+    def test_environment_media_handler_uses_its_own_toggles(self) -> None:
+        self._run(environment=True, download_video=True, environment_download_images=True)
+        # Two handlers: the scope one (video on, images off) and the environment one (images on, video off).
+        env_kwargs = self.media_calls[-1].kwargs
+        self.assertTrue(env_kwargs["download_images"])
+        self.assertFalse(env_kwargs["download_video"])
+        scope_kwargs = self.media_calls[0].kwargs
+        self.assertTrue(scope_kwargs["download_video"])
+        self.assertFalse(scope_kwargs["download_images"])
+
+    def test_disabled_by_default(self) -> None:
+        crawler = self._run(get_new_messages=True)
+        crawled = {c.args[0] for c in crawler.get_channel.call_args_list}
+        self.assertEqual(crawled, {self.scope.telegram_id})
+        self.level1.refresh_from_db()
+        self.assertIsNone(self.level1.environment_depth)
+
+    def test_depth_below_one_is_rejected(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("crawl_channels", environment=True, environment_depth=0, stdout=io.StringIO())
