@@ -17,7 +17,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import OperationalError, connection
-from django.db.models import Exists, F, OuterRef, Q
+from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q
 
 from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
@@ -101,6 +101,16 @@ class CrawlOptions:
     in_degrees: bool
     out_degrees: bool
 
+    # Environment: out-of-scope channels within `environment_depth` citation hops of the
+    # scope, crawled with their own media types (the download_* toggles above are scope-only)
+    environment: bool
+    environment_depth: int
+    environment_download_images: bool
+    environment_download_video: bool
+    environment_download_audio: bool
+    environment_download_stickers: bool
+    environment_download_other_media: bool
+
     # Scope
     ids_str: str | None
     channel_types: list[str]
@@ -122,6 +132,7 @@ class CrawlOptions:
             or self.retry_lost_messages
             or self.retry_references
             or self.fetch_replies
+            or self.environment
         )
 
 
@@ -195,6 +206,9 @@ def per_channel_step(
 
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Chunk size for ``pk__in`` clauses over arbitrarily large id sets, kept under SQLite's
+# SQLITE_MAX_VARIABLE_NUMBER (999 on older builds).
+_PK_BATCH = 900
 # \w only — Telegram usernames are [A-Za-z0-9_]; "." / "-" would swallow trailing
 # sentence punctuation and produce permanently-unresolvable references (see
 # Message.get_telegram_references, which uses the same character class).
@@ -557,6 +571,68 @@ class Command(BaseCommand):
             action=BooleanOptionalAction,
             default=None,
             help="Recompute citation degree for out-of-target channels cited by in-target ones.",
+        )
+        # ── Environment ───────────────────────────────────────────────────────
+        parser.add_argument(
+            "--environment",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Also crawl the out-of-scope channels the in-scope ones cite (forwards and t.me/ "
+                "references), up to --environment-depth citation hops away: full channel details "
+                "plus every message dated inside the in-scope channels' in-target window, with "
+                "message holes filled when --fix-holes is on. Reached channels are stamped with "
+                "their citation distance (Manage → Channels shows it) and keep their messages "
+                "across purge_out_of_target_messages. Media follows the --environment-download-* "
+                "toggles, not --download-*. Off by default."
+            ),
+        )
+        parser.add_argument(
+            "--environment-depth",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "How many citation hops away from the in-scope channels the environment pass reaches: "
+                "1 = the channels they cite, 2 = also the channels those cite, and so on. Defaults to "
+                "[environment].depth in configuration/.operations-crawl (1)."
+            ),
+        )
+        parser.add_argument(
+            "--environment-download-images",
+            action=BooleanOptionalAction,
+            default=None,
+            help="Download photo files attached to environment channels' messages. Off by default.",
+        )
+        parser.add_argument(
+            "--environment-download-video",
+            action=BooleanOptionalAction,
+            default=None,
+            help="Download video files attached to environment channels' messages. Off by default.",
+        )
+        parser.add_argument(
+            "--environment-download-audio",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download audio (voice notes and audio documents) attached to environment channels' "
+                "messages. Off by default."
+            ),
+        )
+        parser.add_argument(
+            "--environment-download-stickers",
+            action=BooleanOptionalAction,
+            default=None,
+            help="Download stickers attached to environment channels' messages. Off by default.",
+        )
+        parser.add_argument(
+            "--environment-download-other-media",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "Download non-photo, non-video, non-audio, non-sticker documents attached to "
+                "environment channels' messages. Off by default."
+            ),
         )
         # ── Scope ─────────────────────────────────────────────────────────────
         parser.add_argument(
@@ -1020,7 +1096,6 @@ class Command(BaseCommand):
         # a single ``pk__in`` over the full set would otherwise blow past.
         channel_to_msgs: dict[int, list[tuple[int, int, str]]] = {}
         all_msg_pks_list = list(all_msg_pks)
-        _PK_BATCH = 900
         for start in range(0, len(all_msg_pks_list), _PK_BATCH):
             chunk = all_msg_pks_list[start : start + _PK_BATCH]
             for msg_pk, channel_pk, telegram_id, current_media_type in Message.objects.filter(pk__in=chunk).values_list(
@@ -1290,6 +1365,13 @@ class Command(BaseCommand):
         if download_timeout < 0:
             raise CommandError("--download-timeout must be zero (no limit) or a positive number of seconds.")
 
+        # Tuning too: a bare --environment reaches [environment].depth hops (1 by default).
+        environment_depth = options.get("environment_depth")
+        if environment_depth is None:
+            environment_depth = settings.CRAWL_ENVIRONMENT_DEPTH
+        if environment_depth < 1:
+            raise CommandError("--environment-depth must be a positive number of citation hops.")
+
         return CrawlOptions(
             get_channels_info=_resolve_optional_bool(options["get_channels_info"]),
             update_type_excluded_info=_resolve_optional_bool(options["update_type_excluded_info"]),
@@ -1315,11 +1397,172 @@ class Command(BaseCommand):
             download_timeout=download_timeout,
             in_degrees=_resolve_optional_bool(options["in_degrees"]),
             out_degrees=_resolve_optional_bool(options["out_degrees"]),
+            environment=_resolve_optional_bool(options.get("environment")),
+            environment_depth=environment_depth,
+            environment_download_images=_resolve_optional_bool(options.get("environment_download_images")),
+            environment_download_video=_resolve_optional_bool(options.get("environment_download_video")),
+            environment_download_audio=_resolve_optional_bool(options.get("environment_download_audio")),
+            environment_download_stickers=_resolve_optional_bool(options.get("environment_download_stickers")),
+            environment_download_other_media=_resolve_optional_bool(options.get("environment_download_other_media")),
             ids_str=options["ids"],
             channel_types=channel_types,
             channel_sources=channel_sources,
             filter_labels=filter_labels,
         )
+
+    @staticmethod
+    def _environment_window(scope_qs: Any) -> tuple[datetime.date | None, datetime.date | None]:
+        """The date window the environment pass stores messages for: the span of the scope's in-target periods.
+
+        Earliest period start to latest period end over the in-scope channels; a period
+        open on either side leaves that side of the window open. ``(None, None)`` — no
+        bound at all — when the scope holds no in-target period (a to_inspect-only scope).
+        """
+        agg = ChannelLabel.objects.filter(channel__in=scope_qs, label__is_in_target=True).aggregate(
+            earliest_start=Min("start"),
+            latest_end=Max("end"),
+            open_start=Count("pk", filter=Q(start__isnull=True)),
+            open_end=Count("pk", filter=Q(end__isnull=True)),
+        )
+        start = None if agg["open_start"] else agg["earliest_start"]
+        end = None if agg["open_end"] else agg["latest_end"]
+        return start, end
+
+    @staticmethod
+    def _environment_candidates(seeds: Any, visited: set[int], opts: CrawlOptions) -> list[Channel]:
+        """Channels cited by ``seeds`` that the crawl has not reached yet, ordered by pk.
+
+        ``seeds`` is either the in-scope channel queryset (level 1 — only citations dated
+        inside in-target periods count, the graph's own edge chokepoint) or a list of
+        environment channel pks (deeper levels — their stored messages are window-bounded
+        by construction). A citation is a forward (``forwarded_from``) or a ``t.me/``
+        reference in a non-lost message. Leaves out everything in ``visited`` (the scope
+        plus earlier levels), channels ever in target or marked to_inspect (they belong to
+        the scope whatever this run's filters), user accounts, and — unless
+        --retry-lost-and-private — lost/private ones; --channel-types applies as it does to
+        the scope.
+        """
+        forwards = Message.objects.alive().filter(forwarded_from__isnull=False)
+        references = Message.references.through.objects.filter(message__is_lost=False)
+        cited: set[int] = set()
+        if isinstance(seeds, list):
+            for i in range(0, len(seeds), _PK_BATCH):
+                chunk = seeds[i : i + _PK_BATCH]
+                cited.update(
+                    forwards.filter(channel_id__in=chunk).values_list("forwarded_from_id", flat=True).distinct()
+                )
+                cited.update(
+                    references.filter(message__channel_id__in=chunk).values_list("channel_id", flat=True).distinct()
+                )
+        else:
+            cited.update(
+                forwards.filter(channel_cutoff_q(), channel__in=seeds)
+                .values_list("forwarded_from_id", flat=True)
+                .distinct()
+            )
+            cited.update(
+                references.filter(channel_cutoff_q("message__channel", "message__date"), message__channel__in=seeds)
+                .values_list("channel_id", flat=True)
+                .distinct()
+            )
+        new_pks = sorted(cited - visited)
+        found: list[Channel] = []
+        for i in range(0, len(new_pks), _PK_BATCH):
+            qs = (
+                Channel.objects.filter(pk__in=new_pks[i : i + _PK_BATCH])
+                .filter(channel_type_filter(opts.channel_types))
+                .exclude(_ever_in_target())
+                .exclude(to_inspect=True)
+                .exclude(is_user_account=True)
+            )
+            if not opts.retry_lost_and_private:
+                qs = qs.exclude(is_lost=True).exclude(is_private=True)
+            found.extend(qs.order_by("pk"))
+        return found
+
+    def _crawl_environment(
+        self,
+        scope_qs: Any,
+        api_client: TelegramAPIClient,
+        reference_resolver: ReferenceResolver,
+        download_temp_dir: str,
+        opts: CrawlOptions,
+        *,
+        fix_holes: bool,
+    ) -> None:
+        """Crawl the out-of-scope channels within ``opts.environment_depth`` citation hops of the scope.
+
+        Level 1 is every channel the in-scope channels cite; level k+1 is every channel the
+        level-k channels cite in the messages just stored — so a deeper level can only be
+        discovered once the previous one has been crawled. Each channel gets its details and
+        profile picture, the messages dated inside the scope's in-target window (see
+        ``_environment_window``) with the environment media types, and — when --fix-holes is
+        on — its message holes filled. Reached channels are stamped with the smallest
+        citation distance seen so far (``Channel.environment_depth``), which also keeps their
+        messages across ``purge_out_of_target_messages``.
+        """
+        from webapp.scoring import recompute_channel
+
+        env_media_handler = MediaHandler(
+            api_client,
+            download_temp_dir=download_temp_dir,
+            download_images=opts.environment_download_images,
+            download_video=opts.environment_download_video,
+            download_audio=opts.environment_download_audio,
+            download_stickers=opts.environment_download_stickers,
+            download_other_media=opts.environment_download_other_media,
+            download_timeout=opts.download_timeout,
+        )
+        crawler = ChannelCrawler(api_client, env_media_handler, reference_resolver)
+
+        window = self._environment_window(scope_qs)
+        window_label = f"{window[0].isoformat() if window[0] else '…'} → {window[1].isoformat() if window[1] else '…'}"
+        depth = opts.environment_depth
+        self.stdout.write(
+            f"\nEnvironment: up to {depth} citation hop(s) from {scope_qs.count()} in-scope channel(s), "
+            f"messages dated {window_label}"
+        )
+        self.stdout.flush()
+
+        visited: set[int] = set(scope_qs.values_list("pk", flat=True))
+        seeds: Any = scope_qs
+        crawled = 0
+        levels_reached = 0
+        for level in range(1, depth + 1):
+            candidates = self._environment_candidates(seeds, visited, opts)
+            if not candidates:
+                self.stdout.write(f"Environment level {level}/{depth}: no new channels.")
+                break
+            levels_reached = level
+            visited.update(channel.pk for channel in candidates)
+            total = len(candidates)
+            printer = ProgressPrinter(self.stdout, total)
+            printer.announce(f"\nEnvironment level {level}/{depth}: {total} channel(s)")
+            for index, channel in enumerate(candidates, start=1):
+                with per_channel_step(
+                    self.stdout, self.style, printer, action="crawling environment channel", channel=channel
+                ):
+                    crawler.get_channel(
+                        channel.telegram_id,
+                        fix_holes=fix_holes,
+                        update_info=True,
+                        message_window=window,
+                        status_callback=lambda message, idx=index, pr=printer: pr.status(message, idx),
+                    )
+                # Forward lookups deferred by get_message; get_channel resolves them itself on
+                # success, this catches the ones an interrupted channel left pending.
+                crawler._resolve_pending_forwards(lambda message, idx=index, pr=printer: pr.status(message, idx))
+                Channel.objects.filter(pk=channel.pk).filter(
+                    Q(environment_depth__isnull=True) | Q(environment_depth__gt=level)
+                ).update(environment_depth=level)
+                try:
+                    recompute_channel(channel.pk)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
+                crawled += 1
+            printer.newline()
+            seeds = [channel.pk for channel in candidates]
+        self.stdout.write(f"Environment: {crawled} channel(s) crawled across {levels_reached} level(s).")
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
         """Channels included in this crawl: channels ever in-target, plus to_inspect candidates."""
@@ -1809,6 +2052,13 @@ class Command(BaseCommand):
 
                         if fix_missing_media:
                             self._fix_missing_media(channels, api_client, download_temp_dir, printer, opts)
+
+                    # ── ENVIRONMENT ────────────────────────────────────────────
+                    # After the messages loop, so the citations this run just resolved seed it.
+                    if opts.environment:
+                        self._crawl_environment(
+                            channels, api_client, reference_resolver, download_temp_dir, opts, fix_holes=fix_holes
+                        )
 
                     media_handler.clean_leftovers()
                 # The TelegramClient context manager has now exited and the connection is closed.

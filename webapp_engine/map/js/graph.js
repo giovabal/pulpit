@@ -4,6 +4,7 @@ import EdgeCurveProgram, { EdgeCurvedArrowProgram } from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel, EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings } from './utils.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
@@ -23,7 +24,8 @@ var loading_modal_bs = null;
 var accessory_data = null;
 var active_strategy = null;
 var community_color_maps = {}; // { strategyKey: { communityLabel: hexColor } }
-var community_strategy_data = {}; // { strategyKey: { groups: [...] } }
+var community_strategy_data = {}; // { strategyKey: { groups: [...] } } — strategies + runtime-coloured colourings
+var community_payload = null; // the raw communities.json of the current data dir (re-coloured on theme change)
 var graph_loaded = false;
 var accessory_loaded = false;
 var is_graph_completely_rendered = false;
@@ -284,6 +286,17 @@ function apply_theme(themeKey) {
     var op_slider = el('edge-opacity-slider');
     if (op_slider) op_slider.value = edge_opacity;
 
+    // The environment-depth colours are derived from the canvas colour, so a theme change
+    // re-derives them (and repaints + re-legends when that colouring is the active one).
+    if (community_payload) {
+        community_strategy_data = mergeColorings(community_payload, theme.canvas);
+        community_color_maps = buildCommunityColorMaps(community_strategy_data);
+        if (active_strategy === ENV_DEPTH_KEY) {
+            build_legend(community_strategy_data[active_strategy]);
+            if (graph_loaded) apply_strategy_colors(active_strategy);
+        }
+    }
+
     // Live graph updates (only when data is loaded)
     if (graph_loaded) {
         graph.nodes().forEach(function(id) {
@@ -358,21 +371,29 @@ function node_sort(x, y) {
 
 function get_anchor(node) {
     var color = node.originalColor || '#ccc';
-    var label = (active_strategy && node.communities) ? (node.communities[active_strategy] || '') : '';
+    var label = active_strategy ? groupLabelOf(node, active_strategy) : '';
     return '<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '" title="' + escHtml(label) + '"></i>' +
         ' <a href="#" class="node-link" data-node-id="' + escHtml(node.id) + '">' + escHtml(node.label || node.id) + '</a>';
 }
 
 function get_group(node) {
-    if (!node.communities || !community_color_maps) return '';
+    if (!community_color_maps) return '';
     var parts = [];
-    for (var strategy in node.communities) {
+    for (var strategy in (node.communities || {})) {
         var label = node.communities[strategy] || '';
         var colorMap = community_color_maps[strategy] || {};
         var color = (label && colorMap[label]) ? colorMap[label] : '#ccc';
         var displayName = strategy_label(strategy);
         parts.push('<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + color + '"></i>' +
             ' <b>' + escHtml(displayName) + ':</b> ' + escHtml(label));
+    }
+    // Environment depth rides along when the export offers that colouring (0 = in target).
+    if (community_strategy_data && community_strategy_data[ENV_DEPTH_KEY] &&
+        node.environment_depth !== null && node.environment_depth !== undefined) {
+        var dLabel = envDepthLabel(node.environment_depth);
+        var dMap = community_color_maps[ENV_DEPTH_KEY] || {};
+        parts.push('<i class="bi bi-circle-fill" aria-hidden="true" style="color: ' + (dMap[dLabel] || '#ccc') + '"></i>' +
+            ' <b>' + escHtml(strategy_label(ENV_DEPTH_KEY)) + ':</b> ' + escHtml(dLabel));
     }
     return parts.join('<br>');
 }
@@ -432,7 +453,7 @@ function apply_strategy_colors(strategy) {
     var colorMap = community_color_maps[strategy] || {};
     graph.nodes().forEach(function(id) {
         var n = graph.getNodeAttributes(id);
-        var label = n.communities && n.communities[strategy];
+        var label = groupLabelOf(n, strategy);
         var rgb = (label && colorMap[label]) ? hex_to_rgb_parts(colorMap[label]) : [204, 204, 204];
         var color = 'rgb(' + rgb.join(',') + ')';
         graph.setNodeAttribute(id, 'color', color);
@@ -778,18 +799,20 @@ function get_data(data_dir) {
 
 function _apply_accessory(ch_data, comm_data, prev_strategy, prev_size) {
     accessory_data = ch_data;
-    community_strategy_data = comm_data.strategies;
-    community_color_maps = buildCommunityColorMaps(comm_data.strategies);
+    community_payload = comm_data;
+    // Strategies plus the environment-depth colouring, coloured against the current canvas.
+    community_strategy_data = mergeColorings(comm_data, (THEMES[active_theme] || THEMES.dark).canvas);
+    community_color_maps = buildCommunityColorMaps(community_strategy_data);
 
-    var strategies = Object.keys(comm_data.strategies);
+    var strategies = Object.keys(community_strategy_data);
     active_strategy = (prev_strategy && strategies.indexOf(prev_strategy) !== -1) ?
         prev_strategy : (strategies[0] || null);
 
-    build_strategy_selector(comm_data.strategies);
+    build_strategy_selector(community_strategy_data);
     if (active_strategy) {
         var sel = el('community-strategy-select');
         if (sel) sel.value = active_strategy;
-        build_legend(comm_data.strategies[active_strategy]);
+        build_legend(community_strategy_data[active_strategy]);
     }
 
     var size_items = ch_data.measures.map(function(m) {
@@ -1392,8 +1415,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         var toKeep = new Set();
         graph.nodes().forEach(function(id) {
-            var communities = graph.getNodeAttribute(id, 'communities');
-            var label = (communities && active_strategy) ? communities[active_strategy] : '';
+            var label = active_strategy ? groupLabelOf(graph.getNodeAttributes(id), active_strategy) : '';
             if (label === v) toKeep.add(id);
         });
         graph.nodes().forEach(function(id) {

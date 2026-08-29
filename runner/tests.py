@@ -328,6 +328,18 @@ class OperationsViewTests(TestCase):
         self.assertLess(names.index("crawl_channels"), names.index("structural_analysis"))
         self.assertLess(names.index("structural_analysis"), names.index("compare_analysis"))
 
+    def test_context_lists_environment_depths_up_to_the_deepest_registered(self):
+        from webapp.models import Channel
+
+        resp = self.client.get(reverse("operations"))
+        self.assertEqual(resp.context["environment_depth_choices"], [])
+        Channel.objects.create(telegram_id=1, title="E1", environment_depth=1)
+        Channel.objects.create(telegram_id=2, title="E3", environment_depth=3)
+        resp = self.client.get(reverse("operations"))
+        self.assertEqual(resp.context["environment_depth_choices"], [1, 2, 3])
+        self.assertContains(resp, '<option value="0" selected>None</option>')
+        self.assertContains(resp, '<option value="3">3</option>')
+
     def test_context_contains_channel_sources(self):
         ChannelSource.objects.create(name="Alpha")
         resp = self.client.get(reverse("operations"))
@@ -471,6 +483,33 @@ class RunTaskViewTests(TestCase):
             )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Download timeout", resp.json()["error"])
+
+    def test_run_rejects_negative_structural_environment_depth(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["structural_analysis"]),
+                {"graph": "on", "environment_depth": "-1"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Environment depth", resp.json()["error"])
+
+    def test_run_rejects_non_numeric_environment_depth(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["crawl_channels"]),
+                {"environment": "on", "environment_depth": "deep"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Environment depth", resp.json()["error"])
+
+    def test_run_rejects_zero_environment_depth(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["crawl_channels"]),
+                {"environment": "on", "environment_depth": "0"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Environment depth", resp.json()["error"])
 
 
 # ---------------------------------------------------------------------------
@@ -788,6 +827,12 @@ class BuildArgsGetChannelsTests(TestCase):
                 "--no-download-other-media",
                 "--no-in-degrees",
                 "--no-out-degrees",
+                "--no-environment",
+                "--no-environment-download-images",
+                "--no-environment-download-video",
+                "--no-environment-download-audio",
+                "--no-environment-download-stickers",
+                "--no-environment-download-other-media",
             ],
         )
 
@@ -808,6 +853,15 @@ class BuildArgsGetChannelsTests(TestCase):
             with self.subTest(field=field):
                 args = _build_args("crawl_channels", FakePost({field: "1"}))
                 self.assertIn(expected_flag, args)
+
+    def test_environment_flags_and_depth(self):
+        args = _build_args(
+            "crawl_channels",
+            FakePost({"environment": "1", "environment_depth": "2", "environment_download_audio": "1"}),
+        )
+        non_no = [a for a in args if not a.startswith("--no-")]
+        self.assertEqual(non_no, ["--environment", "--environment-depth", "2", "--environment-download-audio"])
+        self.assertIn("--no-environment-download-images", args)
 
     def test_refresh_messages_stats_without_value(self):
         args = _build_args("crawl_channels", FakePost({"refresh_messages_stats": "1", "refresh_value": ""}))
@@ -952,6 +1006,12 @@ class BuildArgsExportNetworkTests(TestCase):
             "--no-robustness",
         ):
             self.assertIn(negation, args)
+
+    def test_environment_depth_value_flag(self):
+        self.assertNotIn("--environment-depth", _build_args("structural_analysis", FakePost()))
+        args = _build_args("structural_analysis", FakePost({"environment_depth": "2"}))
+        idx = args.index("--environment-depth")
+        self.assertEqual(args[idx + 1], "2")
 
     def test_include_mentions_bool_explicit(self):
         # include_mentions must always transmit its state explicitly so a loaded
@@ -1247,6 +1307,47 @@ class DefaultsViewTests(TestCase):
             self.assertIn("video = true", content)
             self.assertIn("get_channels_info = true", content)
             self.assertIn('channel_types = ["CHANNEL", "GROUP"]', content)
+
+    def test_crawl_environment_round_trip(self) -> None:
+        # Saved under [environment] and projected back onto the form by the load endpoint.
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-defaults", args=["crawl_channels"]),
+                data={
+                    "title": "With environment",
+                    "environment": "on",
+                    "environment_depth": "3",
+                    "environment_download_stickers": "on",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = _saved_file_content(tmp, ".operations-crawl")
+            env_section = content.split("[environment]", 1)[-1].split("\n[", 1)[0]
+            self.assertIn("enabled = true", env_section)
+            self.assertIn("depth = 3", env_section)
+            self.assertIn("stickers = true", env_section)
+            self.assertIn("images = false", env_section)
+            item_id = resp.json()["item"]["id"]
+            loaded = self.client.get(reverse("operations-defaults-item", args=["crawl_channels", item_id]))
+            self.assertEqual(loaded.status_code, 200)
+            form = loaded.json()["values"]
+            self.assertTrue(form["environment"])
+            self.assertEqual(form["environment_depth"], 3)
+            self.assertTrue(form["environment_download_stickers"])
+            self.assertFalse(form["environment_download_images"])
+
+    def test_structural_environment_depth_round_trip(self) -> None:
+        with _RedirectConfigPathsForRunner() as tmp:
+            resp = self.client.post(
+                reverse("operations-defaults", args=["structural_analysis"]),
+                data={"title": "env", "graph": "on", "environment_depth": "2"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            content = _saved_file_content(tmp, ".operations-structural")
+            self.assertIn("environment_depth = 2", content.split("[scope]", 1)[-1].split("\n[", 1)[0])
+            item_id = resp.json()["item"]["id"]
+            loaded = self.client.get(reverse("operations-defaults-item", args=["structural_analysis", item_id]))
+            self.assertEqual(loaded.json()["values"]["environment_depth"], 2)
 
     def test_structural_save_round_trip(self) -> None:
         with _RedirectConfigPathsForRunner() as tmp:

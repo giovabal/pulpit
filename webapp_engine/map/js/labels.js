@@ -13,6 +13,9 @@ export var STRATEGY_LABELS = {
     sbm: 'Stochastic block model',
     sbm_assortative: 'Assortative SBM',
     consensus: 'Consensus',
+    // Not a community strategy: the environment-depth colouring merged into the colour-by selector
+    // (communities.json `colorings`, see utils.js ENV_DEPTH_KEY).
+    environment_depth: 'Environment depth',
     // Removed in v0.27 — kept so pre-0.27 exports rebuilt with fresh map assets still label it.
     labelpropagation: 'Label propagation',
 };

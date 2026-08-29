@@ -38,3 +38,12 @@ force_retry_unresolved_references = false
 [degrees]
 in_degrees = true
 out_degrees = true
+
+[environment]
+enabled = false
+depth = 1
+images = false
+video = false
+audio = false
+stickers = false
+other_media = false

@@ -83,7 +83,13 @@ class ChannelAdmin(admin.ModelAdmin):
         "telegram_url",
         "current_org",
     )
-    list_filter = ("channel_labels__label__is_in_target", "broadcast", "channel_labels__label", "sources")
+    list_filter = (
+        "channel_labels__label__is_in_target",
+        "broadcast",
+        "channel_labels__label",
+        "sources",
+        "environment_depth",
+    )
     search_fields = ["username", "title", "about"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:

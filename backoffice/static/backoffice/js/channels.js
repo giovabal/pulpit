@@ -327,6 +327,15 @@
             });
         });
         td.appendChild(chk);
+        if (ch.environment_depth) {
+            /* stamped by crawl_channels --environment: citation hops from the monitored channels */
+            var env = document.createElement("span");
+            env.className = "bo-type-badge bo-env-badge";
+            env.textContent = "env " + ch.environment_depth;
+            env.title = "Crawled by the environment pass: " + ch.environment_depth +
+                " citation hop(s) from the monitored channels";
+            td.appendChild(env);
+        }
     }
 
     function renderSourceChips(td, ch) {

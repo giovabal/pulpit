@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+from collections import Counter
 from math import sqrt
 from typing import TYPE_CHECKING, Any
 
@@ -370,7 +371,7 @@ def write_csv(
     role_groups = _role_companion_groups(measures_labels)
     conf_cols = sbm_confidence_columns(graph_data, strategies)
 
-    headers = ["Channel", "URL", "Label", "Users", "Messages", "Inbound", "Outbound"]
+    headers = ["Channel", "URL", "Label", "Environment depth", "Users", "Messages", "Inbound", "Outbound"]
     if pagerank_col:
         headers.append(pagerank_col[1])
     headers += [lbl for _, lbl in other_extra]
@@ -390,6 +391,7 @@ def write_csv(
                 node.get("label") or node["id"],
                 node.get("url") or "",
                 node.get("organization") or "",
+                node.get("environment_depth"),
                 node.get("fans"),
                 node.get("messages_count"),
                 node.get("in_deg"),
@@ -431,6 +433,39 @@ def write_robots_txt(root_target: str, seo: bool) -> None:
         content = "User-agent: *\nDisallow: /\n"
     with open(os.path.join(root_target, "robots.txt"), "w") as f:
         f.write(content)
+
+
+# Key of the environment-depth colouring in communities.json ("colorings", not "strategies" — it
+# is not a community partition and never enters the community tables or the comparison matrices);
+# the viewers merge it into their colour-by selector. Mirrors ENV_DEPTH_KEY in map/js/utils.js.
+ENVIRONMENT_DEPTH_KEY = "environment_depth"
+
+
+def environment_depth_label(depth: int) -> str:
+    """Legend label of one environment-depth value; mirrors envDepthLabel in map/js/utils.js."""
+    return "In target" if depth == 0 else f"Depth {depth}"
+
+
+def environment_depth_coloring(nodes: list[dict[str, Any]]) -> "dict[str, Any] | None":
+    """The environment-depth colouring entry for communities.json, or ``None`` when it would be trivial.
+
+    Groups are ``[depth, count, label, ""]`` rows in the same shape as a strategy's — the colour is
+    left empty on purpose: the viewers derive it at runtime from the active theme's canvas so the
+    depths stay apart from each other *and* from the background. Offered only when the nodes span
+    more than one depth value (an in-target-only export has nothing to colour by).
+    """
+    counts = Counter(n.get("environment_depth") for n in nodes if n.get("environment_depth") is not None)
+    if len(counts) < 2:
+        return None
+    return {"groups": [[depth, counts[depth], environment_depth_label(depth), ""] for depth in sorted(counts)]}
+
+
+def _communities_json_payload(communities_data: "dict[str, Any] | None", nodes: list[dict[str, Any]]) -> dict:
+    payload: dict[str, Any] = {"strategies": communities_data or {}}
+    coloring = environment_depth_coloring(nodes)
+    if coloring is not None:
+        payload["colorings"] = {ENVIRONMENT_DEPTH_KEY: coloring}
+    return payload
 
 
 def write_graph_files(
@@ -529,6 +564,7 @@ def write_graph_files(
         "out_deg",
         "activity_start",
         "activity_end",
+        "environment_depth",
     } | {k for k, _ in measures_labels}
     for measure_key, _label in measures_labels:
         comp = role_companions(measure_key)
@@ -548,9 +584,10 @@ def write_graph_files(
     with open(os.path.join(data_dir, "channels.json"), "w") as f:
         f.write(json.dumps(channels_payload))
 
-    # communities.json — strategy group definitions (metrics rows added later by write_community_metrics_json)
+    # communities.json — strategy group definitions (metrics rows added later by
+    # write_community_metrics_json) plus the runtime-coloured environment-depth colouring.
     with open(os.path.join(data_dir, "communities.json"), "w") as f:
-        f.write(json.dumps({"strategies": communities_data}))
+        f.write(json.dumps(_communities_json_payload(communities_data, graph_data["nodes"])))
 
 
 def write_meta_json(
@@ -621,6 +658,7 @@ def write_summary_json(
         "structural_similarity",
         "behavioural_equivalence",
         "draw_dead_leaves",
+        "environment_depth",
         "timeline_step",
         "startdate",
         "enddate",
@@ -841,7 +879,7 @@ def write_coordination_files(
         f.write(json.dumps(channels_payload))
 
     with open(os.path.join(data_dir, "communities.json"), "w") as f:
-        f.write(json.dumps({"strategies": communities_data or {}}))
+        f.write(json.dumps(_communities_json_payload(communities_data, coord_graph_data["nodes"])))
 
 
 def write_coordination_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:

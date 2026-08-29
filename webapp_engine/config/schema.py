@@ -13,6 +13,7 @@ CRAWL_SECTIONS: tuple[str, ...] = (
     "channels",
     "messages",
     "degrees",
+    "environment",
 )
 
 STRUCTURAL_SECTIONS: tuple[str, ...] = (

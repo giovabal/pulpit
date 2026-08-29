@@ -92,6 +92,7 @@ def per_channel_message_counts(
     *,
     alive: bool = True,
     extra_q: Q | None = None,
+    environment_depth: int | None = None,
 ) -> dict[int, int]:
     """Return ``{channel_id: count}`` of messages in ``channel_pks`` honouring the
     date window and each channel's in-target attribution periods.
@@ -100,8 +101,14 @@ def per_channel_message_counts(
     measures pass ``alive=False`` to keep parity with historical totals.
     ``extra_q``: optional Q filter merged with the base query (e.g. for
     forwarded-only sub-counts).
+    ``environment_depth``: the export's environment depth — widens the period
+    gate to the environment channels' messages (see ``channel_cutoff_q``).
     """
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
+    msg_q = (
+        Q(channel_id__in=channel_pks)
+        & make_date_q(start_date, end_date)
+        & channel_cutoff_q(environment_depth=environment_depth)
+    )
     if extra_q is not None:
         msg_q &= extra_q
     qs = Message.objects.alive() if alive else Message.objects
@@ -114,6 +121,8 @@ def per_channel_forwards_received(
     channel_pks: list[int],
     start_date: datetime.date | None,
     end_date: datetime.date | None,
+    *,
+    environment_depth: int | None = None,
 ) -> dict[int, int]:
     """Return ``{channel_id: count_of_messages_in_other_in_target_channels_forwarding_from_it}``."""
     # ~Q(channel=forwarded_from): re-forwarding one's own posts is not amplification
@@ -122,7 +131,7 @@ def per_channel_forwards_received(
         Q(forwarded_from_id__in=channel_pks, channel_id__in=channel_pks)
         & ~Q(channel_id=F("forwarded_from_id"))
         & make_date_q(start_date, end_date)
-        & channel_cutoff_q()
+        & channel_cutoff_q(environment_depth=environment_depth)
     )
     return {
         item["forwarded_from_id"]: item["total"]

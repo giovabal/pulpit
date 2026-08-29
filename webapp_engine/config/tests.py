@@ -63,6 +63,10 @@ class HermeticLoadTests(TestCase):
         self.assertNotIn("telegram", CRAWL_DEFAULTS)
         self.assertEqual(ns.downloads.images, CRAWL_DEFAULTS["downloads"]["images"])
         self.assertEqual(ns.scope.channel_types, CRAWL_DEFAULTS["scope"]["channel_types"])
+        # The environment pass is off, one hop deep, text-only out of the box.
+        self.assertFalse(ns.environment.enabled)
+        self.assertEqual(ns.environment.depth, 1)
+        self.assertFalse(ns.environment.images)
 
     def test_structural_hermetic_returns_defaults(self) -> None:
         ns = load_structural_settings(hermetic=True)

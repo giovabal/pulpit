@@ -147,6 +147,18 @@ def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> d
     return update_kwargs
 
 
+def _dated_after(telegram_message: Any, day: datetime.date) -> bool:
+    """True when the message carries a date and falls on a calendar day after ``day``."""
+    date = getattr(telegram_message, "date", None)
+    return date is not None and timezone.localdate(date) > day
+
+
+def _dated_before(telegram_message: Any, day: datetime.date) -> bool:
+    """True when the message carries a date and falls on a calendar day before ``day``."""
+    date = getattr(telegram_message, "date", None)
+    return date is not None and timezone.localdate(date) < day
+
+
 class ChannelCrawler:
     def __init__(
         self,
@@ -507,11 +519,20 @@ class ChannelCrawler:
         status_callback: Callable[[str], None] | None = None,
         fix_holes: bool = False,
         update_info: bool = True,
+        message_window: "tuple[datetime.date | None, datetime.date | None] | None" = None,
     ) -> int:
         """Crawl a channel and return the pre-crawl max telegram_id (0 if none existed).
 
         When ``update_info=False`` the channel metadata (profile picture, full details,
         and lost/private flags) is never written — only messages are fetched.
+
+        ``message_window`` — an inclusive ``(start, end)`` pair of dates, either side
+        ``None`` for open — replaces the channel's in-target periods as the range of
+        messages worth storing. Used by the environment pass of ``crawl_channels`` for
+        channels that hold no in-target label: only messages dated inside the window
+        are stored, and the Telegram iteration itself is clipped to it (started at the
+        window's first day on the first crawl, stopped past its last day) instead of
+        walking the whole history and discarding most of it.
         """
 
         def update_status(message: str) -> None:
@@ -551,17 +572,35 @@ class ChannelCrawler:
             self.set_more_channel_details(channel, telegram_channel)
         image_count = 0
 
+        window_start = window_end = None
+        if message_window is not None:
+            window_start, window_end = message_window
+            # _skip_out_of_target reads the cached intervals, so seeding the cache with the
+            # window makes get_message (and the hole fixer's calls to it) store exactly the
+            # messages dated inside it — the same day-bucketing as an in-target period.
+            channel._in_target_intervals_cache = [(window_start, window_end)]
+
         id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
         last_known_id = id_agg["max_id"] or 0
         message_count = 0
         update_status(f"{channel_label} | downloading recent messages")
         batch_count = 0
+        recent_kwargs: dict[str, Any] = {}
+        if last_known_id == 0 and window_start is not None:
+            # First crawl of a windowed channel: start the ascending walk just before the
+            # window's first day (offset_date is exclusive) instead of at the channel's birth.
+            recent_kwargs["offset_date"] = timezone.make_aware(
+                datetime.datetime.combine(window_start, datetime.time.min)
+            ) - datetime.timedelta(seconds=1)
         for telegram_message in self.api_client.client.iter_messages(
             telegram_channel,
             min_id=last_known_id,
             wait_time=self.api_client.wait_time,
             reverse=True,
+            **recent_kwargs,
         ):
+            if window_end is not None and _dated_after(telegram_message, window_end):
+                break  # ascending order: everything from here on is past the window
             stored, imgs = self.get_message(channel, telegram_message)
             image_count += imgs
             if stored:
@@ -578,6 +617,8 @@ class ChannelCrawler:
             for telegram_message in self.api_client.client.iter_messages(
                 telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time
             ):
+                if window_start is not None and _dated_before(telegram_message, window_start):
+                    break  # descending order: everything from here on predates the window
                 stored, imgs = self.get_message(channel, telegram_message)
                 image_count += imgs
                 if stored:
@@ -596,6 +637,7 @@ class ChannelCrawler:
                 update_status,
                 channel_label,
                 message_count,
+                intervals=[(window_start, window_end)] if message_window is not None else None,
             )
             message_count += hole_message_count
             image_count += hole_image_count

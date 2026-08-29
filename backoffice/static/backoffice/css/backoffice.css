@@ -386,6 +386,11 @@ tr:hover .bo-detail-btn {
   object-fit: contain;
 }
 
+/* "env N" tag next to the Inspect checkbox: channel reached by the crawler's environment pass */
+.bo-env-badge {
+  margin-left: .35rem;
+}
+
 .bo-type-badge {
   display: inline-block;
   padding: .125rem .5rem;

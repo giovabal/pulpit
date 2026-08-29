@@ -146,6 +146,20 @@ Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI fla
 | `degrees.in_degrees` | Recompute in-degree and out-degree for all in-target channels (pure DB; no Telegram connection) | `false` |
 | `degrees.out_degrees` | Recompute citation degree for out-of-target channels referenced by in-target ones | `false` |
 
+## `[environment]` — citation-neighbourhood crawl
+
+Pre-populates the **Environment** fieldset of the Crawl Channels form (CLI: `--environment`, `--environment-depth N`, `--environment-download-{images,video,audio,stickers,other-media}` and their `--no-` counterparts). When enabled, the crawler also fetches the out-of-scope channels the in-scope ones cite — forwards and `t.me/` references — up to `depth` citation hops away: full channel details plus every message dated inside the in-scope channels' in-target window. Reached channels are stamped with their distance (`Channel.environment_depth`) and their messages survive `purge_out_of_target_messages`. `depth` is the only key with reach beyond the form: it is the `--environment-depth` fallback. Media downloads for these channels follow the five toggles here, **not** `[downloads]`.
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `environment.enabled` | Run the environment pass | `false` |
+| `environment.depth` | Citation hops from the in-scope channels (1 = the channels they cite, 2 = also the channels those cite, …) | `1` |
+| `environment.images` | Download images attached to environment channels' messages | `false` |
+| `environment.video` | Download videos attached to environment channels' messages | `false` |
+| `environment.audio` | Download audio attached to environment channels' messages | `false` |
+| `environment.stickers` | Download stickers attached to environment channels' messages | `false` |
+| `environment.other_media` | Download other documents attached to environment channels' messages | `false` |
+
 ---
 
 # `configuration/.operations-structural` — structural-analysis form defaults
@@ -252,6 +266,7 @@ For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` b
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `scope.include_lost` | Include channels currently flagged `is_lost=True` | `false` |
+| `scope.environment_depth` | Environment depth pre-selected in the **Environment** dropdown of the Filters fieldset (`--environment-depth`): `0` = None (in-target channels only), `N` = also the environment channels within `N` citation hops of the monitored ones, as full participants | `0` |
 | `scope.include_private` | Include channels currently flagged `is_private=True` | `false` |
 
 ## `[vacancy]`

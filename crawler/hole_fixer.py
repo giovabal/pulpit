@@ -79,18 +79,29 @@ def fix_message_holes(
     update_status: Callable[[str], None],
     channel_label: str,
     current_message_count: int,
+    intervals: "list[tuple[Any, Any]] | None" = None,
 ) -> tuple[int, int]:
     """Fetch and store messages that fill detected gaps in the channel's message sequence.
 
     Returns ``(messages_processed, images_downloaded)``.
     Progress checkpoints are saved after each batch so an interrupted run can resume.
+
+    ``intervals`` overrides the ``(start, end)`` date ranges a gap must touch to be worth
+    fetching; by default they are the channel's in-target label periods. The environment
+    pass of ``crawl_channels`` passes its own window here, since environment channels hold
+    no in-target label and would otherwise have every dated gap skipped.
     """
     baseline_min_id = channel.last_hole_check_max_telegram_id
 
     # Non-to_inspect channels only store in-target-period messages, so a gap whose bounding dates
     # fall entirely outside those periods is intentional — skip it instead of re-fetching it forever.
     to_inspect = channel.to_inspect
-    intervals = [] if to_inspect else list(channel.in_target_periods.values_list("start", "end"))
+    if to_inspect:
+        intervals = []
+    elif intervals is None:
+        intervals = list(channel.in_target_periods.values_list("start", "end"))
+    else:
+        intervals = list(intervals)
 
     # Build a lazy stream of every missing ID — never materialised in full.
     id_stream = (

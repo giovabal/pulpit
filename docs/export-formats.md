@@ -343,7 +343,7 @@ E(g)$weight <- edges$weight
 
 Generated with `--gexf` and `--graphml`. Import directly into [Gephi](https://gephi.org/), [Cytoscape](https://cytoscape.org/), or any other network analysis application that reads GEXF or GraphML.
 
-Both files include all node attributes (channel name, organization, subscriber count, all computed measures, community assignments for each active strategy) and edge weights.
+Both files include all node attributes (channel name, organization, subscriber count, environment depth — `0` in target, `k` for an environment channel *k* citation hops out, `1` for a dead leaf — all computed measures, community assignments for each active strategy) and edge weights.
 
 ---
 
