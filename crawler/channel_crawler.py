@@ -756,12 +756,10 @@ class ChannelCrawler:
             if hasattr(telegram_message.media, "webpage"):
                 # Sliced to the model's max_length: preview URLs with tracking params can
                 # exceed it, and PostgreSQL raises DataError instead of truncating.
-                message.webpage_url = (
-                    telegram_message.media.webpage.url if hasattr(telegram_message.media.webpage, "url") else ""
-                )[:2048]
-                message.webpage_type = (
-                    telegram_message.media.webpage.type if hasattr(telegram_message.media.webpage, "type") else ""
-                )
+                # ``or ""``: a WebPagePending carries ``url=None`` (Telegram hasn't fetched the
+                # preview yet); slicing / saving None crashed the whole channel.
+                message.webpage_url = (getattr(telegram_message.media.webpage, "url", None) or "")[:2048]
+                message.webpage_type = getattr(telegram_message.media.webpage, "type", None) or ""
 
         replies_obj = getattr(telegram_message, "replies", None)
         message.replies = getattr(replies_obj, "replies", None)
