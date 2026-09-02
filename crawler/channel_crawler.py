@@ -29,6 +29,12 @@ from telethon.tl.types import InputChannel, MessageService, PeerChannel, User
 
 logger = logging.getLogger(__name__)
 
+# Forwarded-channel ids whose lookup failed with an error we cannot classify, remembered for
+# the rest of the process so _resolve_pending_forwards() stops re-attempting them. Their
+# messages keep pending_forward_telegram_id set, so the next run tries again. Same run-scoped
+# give-up as media_handler._TIMED_OUT_THIS_RUN.
+_UNRESOLVABLE_THIS_RUN: set[int] = set()
+
 
 class _UserAccountSeed(Exception):
     """Sentinel raised by get_basic_channel when the seed resolves to a Telegram User."""
@@ -788,13 +794,16 @@ class ChannelCrawler:
         get_message() so that a hard crash does not lose the work).  Resolves each
         unique channel with a full api_client.wait() between calls.  On FloodWaitError
         the loop stops early; unresolved rows keep pending_forward_telegram_id set and
-        are retried automatically on the next get_channel() call.
+        are retried automatically on the next get_channel() call — except the ids
+        ``_UNRESOLVABLE_THIS_RUN`` has given up on, which are skipped until the next run.
         """
-        pending_ids = list(
-            Message.objects.filter(pending_forward_telegram_id__isnull=False)
+        pending_ids = [
+            channel_id
+            for channel_id in Message.objects.filter(pending_forward_telegram_id__isnull=False)
             .values_list("pending_forward_telegram_id", flat=True)
             .distinct()
-        )
+            if channel_id not in _UNRESOLVABLE_THIS_RUN
+        ]
         if not pending_ids:
             return
         total = len(pending_ids)
@@ -821,18 +830,25 @@ class ChannelCrawler:
                     forwarded_from_private=channel_id,
                     pending_forward_telegram_id=None,
                 )
-            except (AttributeError, ValueError) as e:
+            except (AttributeError, ValueError, errors.rpcerrorlist.ChannelInvalidError) as e:
+                # ChannelInvalidError is the RPC-side twin of Telethon's "could not find the
+                # input entity" ValueError: we hold no access hash for the id, so Telegram
+                # refuses to address it. Permanent, not transient — resolve_channel_or_classify()
+                # pairs the two exceptions the same way.
                 logger.warning("Could not resolve forwarded channel %s (%s); treating as private", channel_id, e)
                 Message.objects.filter(pending_forward_telegram_id=channel_id).update(
                     forwarded_from_private=channel_id,
                     pending_forward_telegram_id=None,
                 )
             except Exception as e:  # noqa: BLE001 - one unresolvable id must not abort the whole crawl
-                # Other RPC errors (ChannelInvalidError, PeerIdInvalidError, transient
-                # ServerError, …) used to propagate and kill the run. Log and leave the
-                # row pending so it is retried on the next crawl. ``exc_info=True``
-                # surfaces the traceback so the operator can tell a real programming
-                # bug from a benign Telegram RPC error.
+                # Other RPC errors (PeerIdInvalidError, transient ServerError, …) used to
+                # propagate and kill the run. Log and leave the row pending so it is retried
+                # on the next crawl — but not again in this one: _resolve_pending_forwards
+                # runs after every channel, so an id that keeps failing would otherwise cost
+                # an API call, a rate-limit wait and a traceback per crawled channel.
+                # ``exc_info=True`` surfaces the traceback so the operator can tell a real
+                # programming bug from a benign Telegram RPC error.
+                _UNRESOLVABLE_THIS_RUN.add(channel_id)
                 logger.warning(
                     "Unexpected error resolving forwarded channel %s (%s); leaving pending for retry",
                     channel_id,
