@@ -3227,6 +3227,69 @@ class EnvironmentCandidatesTests(TestCase):
         self.assertEqual(found, [deeper, deeper_ref])
 
 
+class EnvironmentSeedScopeTests(TestCase):
+    """The environment is seeded by the in-target channels only — to_inspect ones ride along in the scope."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.in_target = make_channel(
+            telegram_id=1,
+            title="InTarget",
+            label=self.org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+        )
+        self.inspect = Channel.objects.create(telegram_id=2, title="Inspect", to_inspect=True)
+        self.cited_by_in_target = Channel.objects.create(telegram_id=10, title="CitedByInTarget")
+        self.cited_by_inspect = Channel.objects.create(telegram_id=11, title="CitedByInspect")
+        self.referenced_by_inspect = Channel.objects.create(telegram_id=12, title="ReferencedByInspect")
+
+        Message.objects.create(
+            telegram_id=100, channel=self.in_target, date=_dated(2023, 6, 1), forwarded_from=self.cited_by_in_target
+        )
+        Message.objects.create(
+            telegram_id=101, channel=self.inspect, date=_dated(2023, 6, 1), forwarded_from=self.cited_by_inspect
+        )
+        ref_msg = Message.objects.create(telegram_id=102, channel=self.inspect, date=_dated(2023, 6, 2))
+        ref_msg.references.add(self.referenced_by_inspect)
+
+        self.opts = _crawl_opts(channel_types=["CHANNEL"])
+        # The scope the command actually hands _crawl_environment: ever-in-target plus to_inspect.
+        self.scope_qs = Command()._build_crawl_qs(self.opts)
+
+    def _level1(self, scope_qs=None) -> list[Channel]:
+        scope_qs = self.scope_qs if scope_qs is None else scope_qs
+        return Command._environment_candidates(scope_qs, set(scope_qs.values_list("pk", flat=True)), self.opts)
+
+    def test_the_crawl_scope_carries_the_inspect_channel(self) -> None:
+        self.assertEqual(set(self.scope_qs), {self.in_target, self.inspect})
+
+    def test_only_the_in_target_channels_citations_seed_level_one(self) -> None:
+        # channel_cutoff_q() needs an in-target period covering the message date, and a
+        # to_inspect-only channel has none — so neither its forward nor its t.me/ reference counts.
+        self.assertEqual(self._level1(), [self.cited_by_in_target])
+
+    def test_window_ignores_the_inspect_channel(self) -> None:
+        self.assertEqual(
+            Command._environment_window(self.scope_qs),
+            (datetime.date(2023, 1, 1), datetime.date(2023, 12, 31)),
+        )
+
+    def test_to_inspect_is_no_disqualifier_when_the_channel_is_also_in_target(self) -> None:
+        both = make_channel(
+            telegram_id=3,
+            title="Both",
+            label=self.org,
+            attribution_start=datetime.date(2023, 1, 1),
+            attribution_end=datetime.date(2023, 12, 31),
+        )
+        both.to_inspect = True
+        both.save(update_fields=["to_inspect"])
+        cited = Channel.objects.create(telegram_id=13, title="CitedByBoth")
+        Message.objects.create(telegram_id=103, channel=both, date=_dated(2023, 6, 1), forwarded_from=cited)
+        self.assertEqual(self._level1(Command()._build_crawl_qs(self.opts)), [self.cited_by_in_target, cited])
+
+
 class GetChannelMessageWindowTests(TestCase):
     """``get_channel(message_window=…)`` stores only in-window messages and clips the Telegram walk."""
 
