@@ -2213,6 +2213,10 @@ class ChannelCrawlerSearchChannelTests(TestCase):
 @override_settings(IGNORE_FLOODWAIT=True, TELEGRAM_FLOODWAIT_SLEEP_SECONDS=0)
 class ChannelCrawlerPendingForwardsTests(TestCase):
     def setUp(self) -> None:
+        from crawler import channel_crawler
+
+        channel_crawler._UNRESOLVABLE_THIS_RUN.clear()
+        self.addCleanup(channel_crawler._UNRESOLVABLE_THIS_RUN.clear)
         self.api_client = _make_api_client()
         self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
         self.org = make_label(name="Org", is_in_target=True)
@@ -2370,6 +2374,37 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.assertEqual(self.msg.forwarded_from_private, 1608875596)
         self.assertIsNone(self.msg.forwarded_from)
         self.assertIsNone(self.msg.pending_forward_telegram_id)
+
+    def test_resolve_pending_marks_channel_invalid_as_private(self) -> None:
+        """CHANNEL_INVALID is the RPC twin of the ValueError above — we hold no access hash
+        for the id, so Telegram refuses to address it. Permanent, not worth a retry."""
+        self._set_pending(1503997693)
+        err = errors.rpcerrorlist.ChannelInvalidError.__new__(errors.rpcerrorlist.ChannelInvalidError)
+        self.api_client.client.get_entity.side_effect = err
+
+        self.crawler._resolve_pending_forwards()
+
+        self.msg.refresh_from_db()
+        self.assertEqual(self.msg.forwarded_from_private, 1503997693)
+        self.assertIsNone(self.msg.forwarded_from)
+        self.assertIsNone(self.msg.pending_forward_telegram_id)
+
+    def test_resolve_pending_gives_up_on_an_unclassified_error_for_the_rest_of_the_run(self) -> None:
+        """_resolve_pending_forwards runs after every crawled channel, so an id that keeps
+        failing must not cost an API call, a rate-limit wait and a traceback on each of them.
+        The give-up is process-wide (the environment pass builds its own ChannelCrawler) and
+        leaves the row pending, so the next run retries it."""
+        self._set_pending(2468)
+        self.api_client.client.get_entity.side_effect = RuntimeError("boom")
+
+        self.crawler._resolve_pending_forwards()
+        ChannelCrawler(self.api_client, MagicMock(), MagicMock())._resolve_pending_forwards()
+
+        self.assertEqual(self.api_client.client.get_entity.call_count, 1)
+        self.assertEqual(self.api_client.wait.call_count, 1)
+        self.msg.refresh_from_db()
+        self.assertEqual(self.msg.pending_forward_telegram_id, 2468)
+        self.assertIsNone(self.msg.forwarded_from)
 
     def test_resolve_pending_on_flood_wait_keeps_field_for_retry(self) -> None:
         self._set_pending(2222)
