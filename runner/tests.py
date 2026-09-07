@@ -177,6 +177,24 @@ class GetLogLinesTests(_TmpMixin, TestCase):
             ["line-error", "", "line-success", "line-warning"],
         )
 
+    def test_keyword_fallback_ignores_channel_title(self):
+        from runner.tasks import get_log_lines
+
+        # Per-channel progress lines embed the channel's own title, which is
+        # free text: a channel literally named "FATAL ERRORS | 18+" must not
+        # paint its whole crawl red. Only the status after the last " | "
+        # counts; lines without a title are still read in full.
+        self._write_log(
+            "crawl_channels",
+            b"[532/1896] [id=710] FATAL ERRORS | 18+ | fetching profile pictures\n"
+            b"[532/1896] [id=710] FATAL ERRORS | 18+ | messages processed: 120728\n"
+            b"[532/1896] [id=710] FATAL ERRORS | 18+ | completed (1 new messages, 0 downloaded images)\n"
+            b"[533/1896] [id=711] Skipping Club | error fetching messages\n"
+            b"[534/1896] resolving forwarded channels \xe2\x80\xa6 3/31\n",
+        )
+        lines, _ = get_log_lines("crawl_channels")
+        self.assertEqual([line["cls"] for line in lines], ["", "", "line-success", "line-error", ""])
+
     def test_carriage_return_keeps_last_segment(self):
         from runner.tasks import get_log_lines
 

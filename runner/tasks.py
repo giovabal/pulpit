@@ -28,6 +28,21 @@ _WARNING_RE = re.compile(r"^/.+\.py:\d+: \w+Warning:")
 # bold). Checked in this order so a line mixing styles keeps the most severe
 # colour. launch() passes --force-color so the styles survive the pipe.
 _SGR_CLASSES = (("31", "line-error"), ("33", "line-warning"), ("32", "line-success"))
+_PROGRESS_PREFIX_RE = re.compile(r"^\[\d+/\d+\] ")
+
+
+def _keyword_scope(text: str) -> str:
+    """The part of *text* the keyword fallback is allowed to read.
+
+    Per-channel progress lines are ``[i/N] [id=X] <title> | <status>`` (see
+    ``ProgressPrinter`` in crawl_channels). The title is free text chosen by
+    the channel's owner — one is literally "FATAL ERRORS | 18+" — so only the
+    status after the last separator says anything about the run. Titles may
+    themselves contain " | "; statuses never do.
+    """
+    if _PROGRESS_PREFIX_RE.match(text) and " | " in text:
+        return text.rsplit(" | ", 1)[1]
+    return text
 
 
 def _classify_line(raw: str, text: str) -> str:
@@ -45,7 +60,7 @@ def _classify_line(raw: str, text: str) -> str:
         if code in codes:
             return cls
 
-    lowered = text.lower()
+    lowered = _keyword_scope(text).lower()
     if "error" in lowered or lowered.startswith("traceback") or lowered.startswith("exception"):
         return "line-error"
     if "warning" in lowered or "skipping" in lowered:
