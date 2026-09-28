@@ -161,7 +161,7 @@ committing it to the battery.
 
 | Candidate | Reason for rejection |
 | :-- | :-- |
-| Bonacich β<0 power centrality | The "hub of small cells" intuition is better served by knn^w's low pole; negative-β is numerically unstable near the spectral bound on sparse citation graphs |
+| Bonacich β<0 power centrality (incl. the Everett & Schoch 2022 directed form) | Trialled in 2026-09 with β as a fraction of the spectral bound, which does fix the numerical instability — and then dropped on the evidence: on citation graphs the score is empirically redundant with in-strength (Spearman ≈ 1.00 under `PARTIAL_REFERENCES`, 0.99 unweighted), and at strong β the family's alternating higher-order terms *reward* being cited by promiscuous amplifiers. The power-dependence validation (Cook et al. 1983) holds for negatively connected exchange networks, where trading with one partner precludes another; forwards are non-rival, so the premise fails. Dominance is read from the dyads instead — David's score, two-sided dependence, steepness/linearity — see docs/dominance.md |
 | Simmelian-tie share (Krackhardt 1999) | Empirically ≈ f(clustering × reciprocity); redundant with two existing columns |
 | Local/multiscale assortativity (Peel et al. 2018) | Random-walk multiscale — violates one-degree; knn is its legitimate one-degree rung |
 | ECI / fitness-complexity on the channel×origin bipartite matrix | Measures curation *distinctiveness*, not relevance; leans on the opt-in coordination data |

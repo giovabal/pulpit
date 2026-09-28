@@ -104,6 +104,8 @@ class Command(BaseCommand):
             include_interest_structural=exists("interest_structural.html"),
             include_coordination_2d=exists("coordination.html"),
             include_coordination_3d=exists("coordination3d.html"),
+            include_dominance_html=exists("dominance.html"),
+            include_dominance_xlsx=exists("dominance.xlsx"),
             include_compare_html=True,
             compare_files=compare_files,
         )

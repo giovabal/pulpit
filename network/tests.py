@@ -1006,6 +1006,17 @@ class BuildGraphTests(TestCase):
         self.assertIn((str(self.ch2.pk), str(self.ch1.pk)), graph.edges())
         self.assertNotIn((str(self.ch1.pk), str(self.ch2.pk)), graph.edges())
 
+    def test_node_data_carries_citing_message_count_for_every_strategy(self) -> None:
+        # Two forwards + one original post on ch2: two citing messages, whatever the edge
+        # weighting (the count is the dominance dependence denominator).
+        self._create_forward()
+        Message.objects.create(telegram_id=2, channel=self.ch2, forwarded_from=self.ch1)
+        Message.objects.create(telegram_id=3, channel=self.ch2)
+        for strategy in ("PARTIAL_REFERENCES", "TOTAL", "NONE"):
+            graph, channel_dict, _, _ = build_graph(edge_weight_strategy=strategy)
+            self.assertEqual(graph.nodes[str(self.ch2.pk)]["data"]["citing_messages"], 2, strategy)
+            self.assertEqual(channel_dict[str(self.ch1.pk)]["data"]["citing_messages"], 0, strategy)
+
     def test_builds_graph_with_reference_edges(self) -> None:
         msg = Message.objects.create(telegram_id=1, channel=self.ch2)
         msg.references.add(self.ch1)
@@ -1995,6 +2006,10 @@ class ExportNetworkCommandTests(TestCase):
             f"{_b}.tables.write_community_table_html",
             f"{_b}.tables.write_network_table_xlsx",
             f"{_b}.tables.write_community_table_xlsx",
+            f"{_b}.tables.write_dominance_html",
+            f"{_b}.tables.write_dominance_xlsx",
+            f"{_b}.exporter.write_dominance_json",
+            f"{_b}.exporter.write_dominance_csv",
             f"{_b}.community_stats.compute_community_metrics",
             f"{_b}.os.makedirs",
             f"{_b}.os.rename",
@@ -5849,3 +5864,400 @@ class ResolveEnvironmentDepthTests(TestCase):
         self.assertEqual(self._resolve(5), (2, self._resolve(5)[1]))
         self.assertIn("using 2", self._resolve(5)[1])
         self.assertEqual(self._resolve(1)[0], 1)
+
+
+# ---------------------------------------------------------------------------
+# dominance.py — David's score, two-sided dependence, hierarchy tests
+# ---------------------------------------------------------------------------
+
+
+class DominanceStatisticsTests(TestCase):
+    """The dominance statistics on hand-built wins matrices (wins[i, j] = interactions i won over j)."""
+
+    @staticmethod
+    def _linear(n: int = 6, events: int = 5) -> np.ndarray:
+        wins = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                wins[i, j] = events
+        return wins
+
+    def test_david_score_is_antisymmetric_on_a_linear_hierarchy(self) -> None:
+        from network.dominance import david_scores
+
+        ds, norm = david_scores(self._linear())
+        self.assertEqual(list(np.argsort(-ds)), [0, 1, 2, 3, 4, 5])
+        self.assertAlmostEqual(float(ds.sum()), 0.0, places=9)
+        self.assertAlmostEqual(float(norm.mean()), (6 - 1) / 2, places=9)  # normalised scores centre on (N−1)/2
+
+    def test_david_score_dyadic_correction_shrinks_sparse_dyads(self) -> None:
+        from network.dominance import david_scores
+
+        one = np.array([[0.0, 1.0], [0.0, 0.0]])  # a beat b once
+        many = np.array([[0.0, 50.0], [0.0, 0.0]])  # a beat b fifty times
+        self.assertLess(david_scores(one)[0][0], david_scores(many)[0][0])
+        self.assertGreater(david_scores(one)[0][0], 0.0)
+
+    def test_triangle_transitivity_bounds(self) -> None:
+        from network.dominance import triangle_transitivity
+
+        t_tri, triads = triangle_transitivity(self._linear())
+        self.assertAlmostEqual(t_tri, 1.0, places=9)  # every triad of a transitive tournament is transitive
+        self.assertEqual(triads, 20)  # C(6, 3)
+        cycle = np.array([[0.0, 5.0, 0.0], [0.0, 0.0, 5.0], [5.0, 0.0, 0.0]])  # a beats b beats c beats a
+        t_tri, triads = triangle_transitivity(cycle)
+        self.assertAlmostEqual(t_tri, -3.0, places=9)  # P_t = 0 → 4·(0 − 0.75)
+        self.assertEqual(triads, 1)
+        star = np.zeros((4, 4))
+        star[0, 1:] = 5.0  # no triad has three decided dyads
+        self.assertEqual(triangle_transitivity(star), (None, 0))
+        tied = np.full((3, 3), 5.0)
+        np.fill_diagonal(tied, 0.0)
+        self.assertEqual(triangle_transitivity(tied), (None, 0))  # ties are undecided dyads
+
+    def test_rank_consistency_bounds(self) -> None:
+        from network.dominance import david_scores, rank_consistency
+
+        wins = self._linear()
+        self.assertAlmostEqual(rank_consistency(wins, david_scores(wins)[0]), 1.0, places=9)
+        self.assertAlmostEqual(rank_consistency(wins, -david_scores(wins)[0]), 0.0, places=9)  # order reversed
+        self.assertAlmostEqual(rank_consistency(wins, np.zeros(6)), 0.5, places=9)  # all tied → half
+        self.assertIsNone(rank_consistency(np.zeros((3, 3)), np.zeros(3)))
+
+    def test_springrank_orders_a_chain(self) -> None:
+        from network.dominance import springrank
+
+        ranks, energy = springrank(self._linear())
+        self.assertEqual(list(np.argsort(-ranks)), [0, 1, 2, 3, 4, 5])
+        self.assertGreater(energy, 0.0)
+        self.assertEqual(springrank(np.zeros((3, 3)))[1], 0.0)
+
+
+class ComputeDominanceTests(TestCase):
+    """Emerson power-dependence per pair and the node ranking / typology on a small citation graph."""
+
+    @staticmethod
+    def _graph(edges: dict[tuple[str, str], int], citing: dict[str, int]) -> tuple[nx.DiGraph, dict]:
+        graph = nx.DiGraph()
+        for (u, v), count in edges.items():
+            graph.add_edge(u, v, weight=1.0, weight_raw=1.0, weight_forwards=float(count), weight_mentions=0.0)
+        for node in graph.nodes():
+            graph.nodes[node]["data"] = {"citing_messages": citing.get(node, 0)}
+        graph_data = {
+            "nodes": [{"id": n, "label": f"ch_{n}", "organization": "org"} for n in graph.nodes()],
+            "edges": [],
+        }
+        return graph, graph_data
+
+    def _fixture(self) -> tuple[nx.DiGraph, dict]:
+        # a, d, e are satellites of S (S cites a back once); b spreads 30 citations over S, T, U;
+        # c and T cite each other heavily; U is cited only by b and never cites.
+        return self._graph(
+            {
+                ("a", "S"): 40,
+                ("S", "a"): 1,
+                ("b", "S"): 10,
+                ("b", "T"): 10,
+                ("b", "U"): 10,
+                ("c", "T"): 30,
+                ("T", "c"): 25,
+                ("d", "S"): 20,
+                ("e", "S"): 8,
+            },
+            {"a": 50, "S": 5, "b": 30, "c": 40, "T": 30, "U": 0, "d": 20, "e": 10},
+        )
+
+    @staticmethod
+    def _pair(payload: dict, x: str, y: str) -> dict:
+        return next(p for p in payload["pairs"] if {p["dependent"]["id"], p["dominant"]["id"]} == {x, y})
+
+    @staticmethod
+    def _node(payload: dict, nid: str) -> dict:
+        return next(n for n in payload["nodes"] if n["id"] == nid)
+
+    def test_two_sided_dependence_and_orientation(self) -> None:
+        from network.dominance import compute_dominance
+
+        payload = compute_dominance(*self._fixture(), permutations=20)
+        self.assertEqual(payload["meta"]["share_basis"], "citing_messages")
+        pair = self._pair(payload, "a", "S")
+        self.assertEqual(pair["dependent"]["id"], "a")
+        self.assertAlmostEqual(pair["ds"]["share"], 40 / 50)  # a's content dependence on S
+        self.assertAlmostEqual(pair["ds"]["reach"], 40 / 78)  # S's reach dependence on a (S receives 78)
+        self.assertAlmostEqual(pair["sd"]["share"], 1 / 5)  # S's content dependence on a
+        self.assertAlmostEqual(pair["sd"]["reach"], 1 / 1)  # a's reach dependence on S (a's only citer)
+        self.assertAlmostEqual(pair["dependence_of_dependent"], (40 / 50 + 1 / 1) / 2)
+        self.assertAlmostEqual(pair["dependence_of_dominant"], (1 / 5 + 40 / 78) / 2)
+        self.assertAlmostEqual(pair["net"], pair["dependence_of_dependent"] - pair["dependence_of_dominant"])
+        self.assertTrue(pair["mutual"])
+        # U never cites, yet depends on b for all of its reach: reach dependence orients the pair.
+        pair = self._pair(payload, "U", "b")
+        self.assertEqual(pair["dependent"]["id"], "U")
+        self.assertIsNone(pair["ds"])
+        self.assertAlmostEqual(pair["dependence_of_dependent"], (0 + 10 / 10) / 2)
+
+    def test_hypergeometric_p_and_min_events_floor(self) -> None:
+        from network.dominance import compute_dominance
+        from network.vacancy_analysis import _hypergeom_sf
+
+        payload = compute_dominance(*self._fixture(), permutations=0)
+        total = 40 + 1 + 10 + 10 + 10 + 30 + 25 + 20 + 8
+        pair = self._pair(payload, "a", "S")
+        self.assertAlmostEqual(pair["ds"]["p"], _hypergeom_sf(40, total, 78, 40), places=12)
+        self.assertIsNone(pair["sd"]["q"])  # S→a carries one citation: listed, not tested
+        self.assertEqual(pair["relation"], "dependence")
+        self.assertEqual(payload["meta"]["tested_links"], 8)
+        loose = compute_dominance(*self._fixture(), min_events=1, permutations=0)
+        self.assertEqual(self._pair(loose, "a", "S")["relation"], "alliance")
+
+    def test_relations_and_meta_counts(self) -> None:
+        from network.dominance import compute_dominance
+
+        payload = compute_dominance(*self._fixture(), permutations=0)
+        self.assertEqual(self._pair(payload, "c", "T")["relation"], "alliance")
+        self.assertEqual(self._pair(payload, "b", "S")["relation"], "unvalidated")
+        self.assertFalse(self._pair(payload, "b", "S")["mutual"])
+        meta = payload["meta"]
+        self.assertEqual(meta["pairs"], 7)
+        self.assertEqual(meta["links"], 9)
+        self.assertEqual(sum(meta["relations"].values()), 7)
+        self.assertEqual(sum(meta["roles"].values()), len(payload["nodes"]))
+        nets = [p["net"] for p in payload["pairs"]]
+        self.assertEqual(nets, sorted(nets, reverse=True))
+        self.assertTrue(all(n >= 0 for n in nets))
+
+    def test_ranking_and_roles(self) -> None:
+        from network.dominance import compute_dominance
+
+        payload = compute_dominance(*self._fixture(), permutations=0)
+        self.assertEqual(payload["nodes"][0]["id"], "S")  # the hub with three satellites ranks first
+        hub = self._node(payload, "S")
+        self.assertEqual(hub["role"], "dominant")
+        self.assertEqual(hub["satellites"], 3)  # a, d, e devote ≥ half of their citing output to S
+        self.assertEqual(hub["david_rank"], 1)
+        self.assertEqual(hub["springrank_rank"], 1)
+        self.assertEqual(self._node(payload, "a")["role"], "dependent")
+        self.assertEqual(self._node(payload, "U")["role"], "dependent")  # all of U's reach comes from b
+        self.assertEqual(self._node(payload, "b")["role"], "peripheral")  # spreads its citations, one satellite
+        self.assertEqual(self._node(payload, "c")["role"], "allied")  # c and T: mutual, nearly symmetric
+        self.assertEqual(self._node(payload, "T")["role"], "allied")
+        self.assertAlmostEqual(self._node(payload, "U")["relies"], 1.0)  # set through the reach component
+        self.assertEqual(self._node(payload, "S")["dependents_validated"], 3)
+
+    def test_hierarchy_tests_on_a_star_and_with_no_permutations(self) -> None:
+        from network.dominance import compute_dominance
+
+        payload = compute_dominance(*self._fixture(), permutations=50, seed=1)
+        h = payload["meta"]["hierarchy"]
+        self.assertEqual(h["n_ranked"], 8)
+        self.assertEqual(h["permutations"], 50)
+        self.assertIsNone(h["transitivity"])  # the star holds no triad with three decided dyads
+        self.assertEqual(h["triads"], 0)
+        self.assertGreater(h["consistency"], 0.5)
+        self.assertLessEqual(h["consistency_p"], 1.0)
+        self.assertEqual(h["springrank_nulls"], 50)
+        self.assertIsNotNone(h["unknown_share"])
+        none = compute_dominance(*self._fixture(), permutations=0)["meta"]["hierarchy"]
+        self.assertIsNone(none["consistency_p"])
+        self.assertIsNone(none["springrank_p"])
+        self.assertIsNotNone(none["consistency"])
+
+    def test_layered_hierarchy_is_significant(self) -> None:
+        from network.dominance import compute_dominance
+
+        # One top channel cited by six mids and by their thirty bottoms; every bottom splits its
+        # citing output between its mid and the top, every mid cites only the top. Reach is spread
+        # on the way up and content concentrated on the way down, so every pair is decided toward
+        # the parent and every (bottom, mid, top) triad is transitive.
+        edges: dict[tuple[str, str], int] = {}
+        citing: dict[str, int] = {"top": 0}
+        for m in range(6):
+            mid = f"mid{m}"
+            edges[(mid, "top")] = 10
+            citing[mid] = 10
+            for b in range(5):
+                bottom = f"bot{m}_{b}"
+                edges[(bottom, mid)] = 10
+                edges[(bottom, "top")] = 10
+                citing[bottom] = 20
+        payload = compute_dominance(*self._graph(edges, citing), permutations=100, seed=3)
+        order = [n["id"] for n in payload["nodes"]]
+        self.assertEqual(order[0], "top")
+        self.assertTrue(all(nid.startswith("mid") for nid in order[1:7]))
+        self.assertEqual(self._node(payload, "top")["role"], "dominant")
+        self.assertEqual(self._node(payload, "mid0")["role"], "broker")  # five satellites, itself top's satellite
+        self.assertEqual(self._node(payload, "bot0_0")["role"], "dependent")
+        h = payload["meta"]["hierarchy"]
+        self.assertEqual(h["triads"], 30)
+        self.assertAlmostEqual(h["transitivity"], 1.0, places=9)
+        self.assertLess(h["transitivity_p"], 0.05)
+        # Consistency is the mass-weighted share of dependence flowing up the ranking; it reaches 1
+        # only when every pair is completely one-sided, which the mids' reach dependence on their
+        # bottoms prevents here.
+        self.assertGreater(h["consistency"], 0.8)
+        self.assertGreater(h["consistency"], h["consistency_null_mean"])
+        self.assertLess(h["consistency_p"], 0.05)
+        self.assertLess(h["springrank_p"], 0.05)
+
+    def test_sole_outlet_wins_its_dyad(self) -> None:
+        from network.dominance import compute_dominance
+
+        # Distributor D relays five sources that nobody else cites; each source's whole reach
+        # depends on D, while D spreads its citations. D is the dominant side of every pair and
+        # ranks first, although it is the one doing the citing.
+        edges = {("D", f"s{i}"): 10 for i in range(5)}
+        payload = compute_dominance(*self._graph(edges, {"D": 50}), permutations=0)
+        self.assertEqual(payload["nodes"][0]["id"], "D")
+        self.assertEqual(self._node(payload, "D")["role"], "dominant")
+        self.assertEqual(self._node(payload, "s0")["role"], "dependent")
+        pair = self._pair(payload, "D", "s0")
+        self.assertEqual(pair["dominant"]["id"], "D")
+        self.assertGreater(self._node(payload, "D")["david_score"], 0.0)
+
+    def test_floor_excludes_small_dyads_from_the_ranking(self) -> None:
+        from network.dominance import compute_dominance
+
+        graph, graph_data = self._fixture()
+        graph.add_edge("S", "z", weight=1.0, weight_raw=1.0, weight_forwards=2.0, weight_mentions=0.0)
+        graph.nodes["z"]["data"] = {"citing_messages": 0}
+        graph_data["nodes"].append({"id": "z", "label": "ch_z", "organization": ""})
+        payload = compute_dominance(graph, graph_data, permutations=0)
+        pair = self._pair(payload, "S", "z")
+        self.assertTrue(pair["below_floor"])
+        self.assertEqual(pair["interactions"], 2)
+        self.assertNotIn("z", [n["id"] for n in payload["nodes"]])  # not ranked
+        self.assertEqual(payload["meta"]["hierarchy"]["n_ranked"], 8)
+        # S's citing base (5) is above the floor, so its content share on z is defined.
+        s_link = pair["sd"] if pair["dominant"]["id"] == "S" else pair["ds"]
+        self.assertAlmostEqual(s_link["share"], 2 / 5)
+
+    def test_events_basis_and_empty_graph(self) -> None:
+        from network.dominance import compute_dominance
+
+        graph = nx.DiGraph()
+        graph.add_edge("x", "y", weight_forwards=3.0, weight_mentions=1.0)
+        graph.add_edge("x", "z", weight_forwards=1.0, weight_mentions=0.0)
+        payload = compute_dominance(graph, {"nodes": [{"id": n} for n in graph.nodes()], "edges": []}, permutations=0)
+        self.assertEqual(payload["meta"]["share_basis"], "graph_events")
+        pair = self._pair(payload, "x", "y")
+        # y's whole reach comes from x, so y is the dependent side; the x→y link is then "sd".
+        self.assertEqual(pair["dependent"]["id"], "y")
+        self.assertAlmostEqual(pair["sd"]["share"], 4 / 5)
+        empty = compute_dominance(nx.DiGraph(), {"nodes": [], "edges": []})
+        self.assertEqual(empty["pairs"], [])
+        self.assertEqual(empty["nodes"], [])
+        self.assertIsNone(empty["meta"]["hierarchy"])
+        loop = nx.DiGraph()
+        loop.add_edge("x", "x", weight_forwards=5.0, weight_mentions=0.0)
+        self.assertEqual(compute_dominance(loop, {"nodes": [{"id": "x"}], "edges": []})["nodes"], [])
+
+    def test_inject_node_scores(self) -> None:
+        from network.dominance import compute_dominance, inject_node_scores
+
+        graph, graph_data = self._fixture()
+        graph.add_node("lonely", data={"citing_messages": 0})
+        graph_data["nodes"].append({"id": "lonely", "label": "lonely"})
+        payload = compute_dominance(graph, graph_data, permutations=0)
+        labels = inject_node_scores(graph_data, payload)
+        self.assertEqual(labels, [("david_score", "David's score")])
+        by_id = {n["id"]: n for n in graph_data["nodes"]}
+        self.assertIsNone(by_id["lonely"]["david_score"])
+        self.assertAlmostEqual(by_id["S"]["david_score"], self._node(payload, "S")["david_score"])
+
+    def test_flat_rows(self) -> None:
+        from network.dominance import NODE_COLUMNS, PAIR_COLUMNS, compute_dominance, flat_node_rows, flat_pair_rows
+
+        payload = compute_dominance(*self._fixture(), permutations=0)
+        headers, rows = flat_pair_rows(payload)
+        self.assertEqual(len(headers), len(PAIR_COLUMNS))
+        self.assertEqual(len(rows), 7)
+        headers, rows = flat_node_rows(payload)
+        self.assertEqual(len(headers), len(NODE_COLUMNS))
+        self.assertEqual(len(rows), 8)
+
+
+class WriteDominanceOutputsTests(TestCase):
+    def _payload(self) -> dict:
+        from network.dominance import compute_dominance
+
+        graph, graph_data = ComputeDominanceTests._graph(
+            {("a", "S"): 40, ("S", "a"): 1, ("b", "S"): 10}, {"a": 50, "S": 5, "b": 30}
+        )
+        return compute_dominance(graph, graph_data, permutations=10)
+
+    def test_json_round_trip_is_strict_json(self) -> None:
+        from network.exporter import write_dominance_json
+
+        payload = self._payload()
+        with tempfile.TemporaryDirectory() as tmp:
+            write_dominance_json(payload, tmp)
+            with open(os.path.join(tmp, "data", "dominance.json")) as f:
+                text = f.read()
+            self.assertNotIn("NaN", text)
+            decoded = json.loads(text)
+            self.assertEqual(decoded["meta"]["pairs"], 2)
+            self.assertEqual(len(decoded["nodes"]), 3)
+
+    def test_csv_writes_channels_and_pairs(self) -> None:
+        from network.exporter import write_dominance_csv
+
+        with tempfile.TemporaryDirectory() as tmp:
+            write_dominance_csv(self._payload(), tmp)
+            with open(os.path.join(tmp, "dominance_pairs.csv"), encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            self.assertEqual(len(lines), 3)
+            self.assertTrue(lines[0].startswith("Dependent,Dependent label,Dominant,Dominant label,Relation,Mutual"))
+            with open(os.path.join(tmp, "dominance_channels.csv"), encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            self.assertEqual(len(lines), 4)
+            self.assertTrue(lines[0].startswith("Channel,Label,Role,David's score"))
+
+    def test_xlsx_sheets_without_and_with_years(self) -> None:
+        from network.tables import write_dominance_xlsx
+
+        import openpyxl
+
+        payload = self._payload()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "dominance.xlsx")
+            write_dominance_xlsx(payload, output_filename=out, project_title="Test")
+            wb = openpyxl.load_workbook(out)
+            self.assertEqual(wb.sheetnames, ["Channels", "Pairs", "Hierarchy"])
+            self.assertEqual(wb["Channels"].cell(row=1, column=1).value, "Channel")
+            self.assertEqual(wb["Channels"].max_row, 4)
+            self.assertEqual(wb["Pairs"].max_row, 3)
+            self.assertEqual(wb["Hierarchy"].cell(row=2, column=1).value, "n_ranked")
+            write_dominance_xlsx(payload, output_filename=out, year_data=[(2021, payload)])
+            wb = openpyxl.load_workbook(out)
+            self.assertEqual(
+                wb.sheetnames,
+                ["Channels All", "Pairs All", "Hierarchy All", "Channels 2021", "Pairs 2021", "Hierarchy 2021"],
+            )
+
+    def test_html_page_renders_from_real_template(self) -> None:
+        from network.tables import write_dominance_html
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "dominance.html")
+            write_dominance_html(output_filename=out, seo=False, project_title="Test Project")
+            with open(out) as f:
+                content = f.read()
+            self.assertIn("<title>Test Project | Dominance</title>", content)
+            self.assertIn('src="js/dominance.js"', content)
+            self.assertIn('id="dm-nodes"', content)
+            self.assertIn('id="dm-pairs"', content)
+            self.assertIn("noindex", content)
+
+    def test_index_card_toggles(self) -> None:
+        from network.tables import write_index_html
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "index.html")
+            write_index_html(output_filename=out, include_dominance_html=True, include_dominance_xlsx=True)
+            with open(out) as f:
+                content = f.read()
+            self.assertIn('href="dominance.html"', content)
+            self.assertIn('href="dominance.xlsx"', content)
+            write_index_html(output_filename=out)
+            with open(out) as f:
+                self.assertNotIn("dominance.html", f.read())

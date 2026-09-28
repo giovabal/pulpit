@@ -494,6 +494,12 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate the behavioural equivalence page: a grid comparing every pair of channels by how they behave — how much they amplify others, how original and how fast they are, their following and how much they post. Channels that act alike score high."></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="dominance" {% if ad.SA_DOMINANCE %}checked{% endif %}>Dominance
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Dominance analysis (dominance.html with HTML tables, .xlsx with Excel, .csv with CSV): who dominates whom when a forward is an endorsement. Ranks channels by David's score and SpringRank, types them dominant / dependent / broker / peripheral from the satellites that depend on them and their own dependence on a partner, lists every connected pair with each side's content and reach dependence and a statistical validation of each link, and tests whether the whole network has a hierarchy at all (SpringRank energy, triangle transitivity, rank consistency). Adds a David's score column to the channel table and map. See docs/dominance.md."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: Dominance min. citations, Dominance permutations (Linked parameters)"></i>
+                </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate the consensus matrix page (consensus_matrix.html): how consistently each pair of channels ends up in the same group across all the automatic grouping methods."></i>
@@ -504,6 +510,22 @@
                   <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Tunable: Interest window, Include mentions in reach (Linked parameters)"></i>
                 </label>
+              </div>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="dominance_min_events">Dominance min. citations
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="A directed citation link is statistically tested, and a satellite tie or a channel's own dependence counted, only from this many citation events; links below the floor are listed but never validated (on one-off citations the test rewards uniqueness, not preference). Default: 3."></i>
+                  </label>
+                  <input type="number" name="dominance_min_events" id="dominance_min_events" placeholder="{{ ad.SA_DOMINANCE_MIN_EVENTS }}" value="{{ ad.SA_DOMINANCE_MIN_EVENTS }}" min="1" max="1000" data-width="sm">
+                </div>
+                <div class="ops-param">
+                  <label for="dominance_permutations">Dominance permutations
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values (each dyad keeps its counts, which side is on top is random). More = finer p-values, slower; cost grows with the square of the ranked channels. 0 skips the tests. Default: 200."></i>
+                  </label>
+                  <input type="number" name="dominance_permutations" id="dominance_permutations" placeholder="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" value="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" min="0" max="10000" data-width="sm">
+                </div>
               </div>
             </fieldset>
             <fieldset class="ops-fieldset">
@@ -2050,6 +2072,9 @@ function showToast(msg, type) {
         setCheck('consensus_matrix', opts.consensus_matrix);
         setCheck('structural_similarity', opts.structural_similarity);
         setCheck('behavioural_equivalence', opts.behavioural_equivalence);
+        setCheck('dominance',    opts.dominance);
+        setVal('dominance_min_events', opts.dominance_min_events != null ? opts.dominance_min_events : '');
+        setVal('dominance_permutations', opts.dominance_permutations != null ? opts.dominance_permutations : '');
         setCheck('draw_dead_leaves', opts.draw_dead_leaves);
         setCheck('timeline_step',    opts.timeline_step === 'year');
 

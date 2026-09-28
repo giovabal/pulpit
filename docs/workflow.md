@@ -236,6 +236,10 @@ Enable in the Structural Analysis options (or with `--robustness` on the CLI). T
 
 Results are written to `data/robustness.json` (always) and rendered as `robustness_table.html` (when `--html`) / `robustness_table.xlsx` (when `--xlsx`). See [Robustness analysis](robustness-analysis.md) for what each metric measures, when it is interpretable, and the limits of the null model.
 
+### Dominance: dominant and dependent channels
+
+Enable with **Dominance** in the Outputs fieldset (or `--dominance` on the CLI). For a milieu where citation is positive — one organisation's chapters, a movement family — Pulpit treats each forward as a deferral and ranks channels by **David's score** (with the de Vries correction for sparse dyads) and SpringRank, types them *dominant* / *dependent* / *broker* / *peripheral* from the satellites that depend on them and their own dependence on a partner, lists every connected pair with each side's content and reach dependence (Emerson's power-dependence, both ways) and a hypergeometric validation of each link (links under `--dominance-min-events` citations, default 3, are listed but not tested), and tests whether the network has a hierarchy at all — SpringRank energy, triangle transitivity and rank consistency against `--dominance-permutations` orientation-shuffled nulls (default 200). Written to `data/dominance.json` (always), `dominance.html` (with `--html`), `.xlsx` (with `--xlsx`) and two `.csv` files (with `--csv`); recomputed per year on a timeline export; adds a David's score column to the channel table and map. See [Dominance analysis](dominance.md).
+
 ### Coordination: temporal co-forwarding maps
 
 Enable with the two **Coordination map** toggles on the second row of the Outputs fieldset (or `--coordination-2d` / `--coordination-3d` on the CLI — the coordination counterparts of `--graph-2d` / `--graph-3d`). Pulpit ties together channels that repeatedly forward the **same origin message** within `--coordination-window` seconds of each other (default 300), keeping only pairs with at least `--coordination-min-events` distinct shared origins (default 3) — repetition across different content is what separates coordination from coincidence on viral posts. The result is a second network layer with its own force-directed layouts, rendered per selected toggle as a dedicated interactive map: `coordination.html` (2D) and `coordination3d.html` (3D), backed by `data_coordination/`. Node colours and community assignments are carried over from the main citation graph so the two maps read side by side; node size defaults to the number of coordinated co-forwards. Combined with `--timeline-step year`, the layer is recomputed per year (`data_coordination_YYYY/`, layouts seeded from the full-range coordination layout) and the coordination maps gain the same in-page year switcher as the main maps, listing only the years with surviving ties. See [Coordination analysis](coordination-analysis.md) for the method, the parameter guidance, and the interpretation guardrails.
@@ -345,6 +349,10 @@ python manage.py structural_analysis --robustness --robustness-runs 200 --robust
 python manage.py structural_analysis --robustness --robustness-null-model reciprocal   # preserve reciprocity in the null
 python manage.py structural_analysis --robustness --robustness-alpha-grid 0,0.01,0.05,0.1   # backbone-sensitivity sweep
 python manage.py structural_analysis --robustness --robustness-replay --timeline-step year  # validate against recorded closures
+
+# Dominance analysis (dominant / dependent channels: dominance.html / .xlsx / .csv)
+python manage.py structural_analysis --dominance --html --xlsx                          # David's score ranking + roles, two-sided dependence per pair, hierarchy tests
+python manage.py structural_analysis --dominance --dominance-min-events 5 --dominance-permutations 1000   # stricter floor, finer p-values
 
 # Coordination analysis (temporal co-forwarding maps: coordination.html / coordination3d.html)
 python manage.py structural_analysis --coordination-2d --coordination-3d                # both maps; defaults: 300 s window, ≥3 shared origins per pair

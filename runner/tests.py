@@ -1019,6 +1019,7 @@ class BuildArgsExportNetworkTests(TestCase):
             "--no-self-references",
             "--no-consensus-matrix",
             "--no-structural-similarity",
+            "--no-dominance",
             "--no-include-lost",
             "--no-include-private",
             "--no-robustness",

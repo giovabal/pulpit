@@ -185,6 +185,22 @@
   </div>
   {% endif %}
 
+  {% if include_dominance_html or include_dominance_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="card-title h5"><i class="bi bi-arrow-left-right text-secondary me-2" aria-hidden="true"></i>Dominance</h3>
+        <p class="card-text text-muted small">For every pair of channels that cite each other: how much of each one's citing output goes to the other, which direction is statistically validated, and whether the pair is a one-way dependence, a mutual alliance, or noise.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if include_dominance_html %}<a href="dominance.html" class="btn btn-outline-primary btn-sm">Open table</a>{% endif %}
+          {% if include_dominance_xlsx %}<a href="dominance.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="{{ repository_url }}/blob/main/docs/dominance.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 
 {% if include_vacancy_analysis %}

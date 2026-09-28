@@ -456,22 +456,25 @@ def build_graph(
         else {}
     )
 
-    referencing_counts = {}
-    if edge_weight_strategy == "PARTIAL_REFERENCES":
-        has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
-        ref_filter = (
-            Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
-            if include_mentions
-            else Q(forwarded_from_id__isnull=False)
-        )
-        referencing_counts = {
-            item["channel_id"]: item["total"]
-            for item in Message.objects.alive()
-            .filter(date_q, cutoff_q, channel_id__in=channel_ids)
-            .filter(ref_filter)
-            .values("channel_id")
-            .annotate(total=Count("id"))
-        }
+    # Citing messages per amplifier — the PARTIAL_REFERENCES denominator. Computed for every
+    # strategy (one aggregate query) because it is also Emerson's dependence denominator for the
+    # dominance analysis: the share of X's citing output that goes to Y.
+    has_reference_subq = references_through.objects.filter(message=OuterRef("pk"))
+    ref_filter = (
+        Q(forwarded_from_id__isnull=False) | Q(Exists(has_reference_subq))
+        if include_mentions
+        else Q(forwarded_from_id__isnull=False)
+    )
+    referencing_counts = {
+        item["channel_id"]: item["total"]
+        for item in Message.objects.alive()
+        .filter(date_q, cutoff_q, channel_id__in=channel_ids)
+        .filter(ref_filter)
+        .values("channel_id")
+        .annotate(total=Count("id"))
+    }
+    for entry in channel_dict.values():
+        entry["data"]["citing_messages"] = int(referencing_counts.get(entry["channel"].pk, 0))
 
     pk_to_str: dict[int, str] = {data["channel"].pk: cid for cid, data in channel_dict.items()}
     edge_list = _build_edge_list(

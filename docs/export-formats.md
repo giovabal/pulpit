@@ -20,6 +20,7 @@ exports/
     behavioural_equivalence.html  ← behavioural equivalence matrix (optional)
     network_compare_table.html   ← network comparison (optional)
     robustness_table.html   ← node-removal R-index page (optional)
+    dominance.html          ← dominance analysis (with --dominance)
     coordination.html       ← 2D co-forwarding coordination map (with --coordination-2d)
     coordination3d.html     ← 3D co-forwarding coordination map (with --coordination-3d)
     vacancy_analysis.html   ← replacement-candidate ranking (optional)
@@ -27,6 +28,9 @@ exports/
     network_table.xlsx
     community_table.xlsx
     robustness_table.xlsx   ← raw S(f) curves and summary (optional)
+    dominance.xlsx          ← dominance channels / pairs / hierarchy (with --dominance --xlsx)
+    dominance_channels.csv  ← dominance ranking (with --dominance --csv)
+    dominance_pairs.csv     ← dominance pairs (with --dominance --csv)
     network.gexf            ← GEXF network file (optional)
     network.graphml         ← GraphML network file (optional)
     nodes.csv               ← CSV node list (optional)
@@ -41,6 +45,7 @@ exports/
       structural_similarity.json  (when --structural-similarity)
       behavioural_equivalence.json  (when --behavioural-equivalence)
       robustness.json       (when --robustness)
+      dominance.json    (when --dominance)
       timeline.json         (when --timeline-step year)
     data_YYYY/              (one per year when --timeline-step year)
       ...
@@ -78,6 +83,7 @@ Some files can be opened directly from the filesystem (`file://`); others requir
 | `behavioural_equivalence.html` | — |
 | `network_compare_table.html` | — |
 | `robustness_table.html` | ✓ |
+| `dominance.html` | ✓ |
 | `coordination.html`, `coordination3d.html` | ✓ |
 | `index.html` | — |
 | `network.gexf`, `network.graphml` | — |
@@ -245,6 +251,16 @@ The HTML page contains a summary table (one row per `(strategy, metric)` with R,
 `data/robustness.json` carries the full payload (config, graph metadata, per-strategy curves and R/f_c values, optional null-model statistics, optional modular curves). `None` is used for undefined ratios so the file is plain JSON (no `Infinity` / `NaN`).
 
 See [Robustness analysis](robustness-analysis.md) for what each metric measures, how to interpret the z-score, and the limits of the null model.
+
+---
+
+## dominance.html / .xlsx / .csv — dominance analysis
+
+Generated when `--dominance` is enabled: `data/dominance.json` always, the HTML page with `--html`, the workbook with `--xlsx`, the two CSVs with `--csv`. **The HTML requires an HTTP server** — it loads `data/dominance.json` (and `timeline.json` for the year switcher) at runtime.
+
+The page opens with the whole-network hierarchy tests (SpringRank energy, triangle transitivity and rank consistency, each against orientation-shuffled nulls), then a **Channels** table — one row per ranked channel with its role (dominant / dependent / broker / peripheral), David's score and rank, SpringRank, satellites, supplies, its own largest dependence and reach concentration — and a **Pairs** table oriented dependent → dominant with each side's content and reach dependence, the validation of each link and the net balance. The workbook has `Channels`, `Pairs` and `Hierarchy` sheets (each suffixed `All` / `<year>` on a timeline export); the CSVs carry the same columns as the two tables. With `--dominance` on, the channel table and map also gain a **David's score** column. With `--timeline-step year` each `data_YYYY/` carries its own `dominance.json`.
+
+See [Dominance analysis](dominance.md) for the method, the null model and how to read the roles.
 
 ---
 
