@@ -6,7 +6,7 @@ import { fetchJson, fetchJsonOrNull } from './utils.js';
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 var INFLUENCE_KEYS = { "pagerank": 1, "hits_hub": 1, "hits_authority": 1, "in_degree_centrality": 1, "out_degree_centrality": 1 };
-var STRUCTURAL_KEYS = { "burt_constraint": 1, "within_module_z": 1, "participation": 1, "reciprocity": 1 };
+var STRUCTURAL_KEYS = { "burt_constraint": 1, "within_module_z": 1, "participation": 1, "reciprocity": 1, "david_score": 1 };
 var CONTENT_KEYS = { "content_originality": 1, "amplification_factor": 1, "diffusion_lag": 1 };
 var POSITION_ORDER = ["in_deg", "out_deg", "fans", "messages_count"];
 var POSITION_LABELS = { "in_deg": "In-strength", "out_deg": "Out-strength", "fans": "Users", "messages_count": "Messages" };
@@ -23,6 +23,7 @@ var COL_TOOLTIPS = {
     "burt_constraint": "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
     "within_module_z": "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
     "participation": "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's ties spread across communities; 0 → all ties inside one community, → 1 → a cross-community bridge. The continuous score behind the Role column's connector labels",
+    "david_score": "David's score (dominance): sum of the channel's dyadic dominance proportions over its citation partners — each pair's citations split in proportion to the dependence each side places on the other, corrected for sparse dyads (de Vries et al. 2006); positive → its partners rely on it more than it relies on them, negative → dependent; null for channels with no dyad above the evidence floor. From the Dominance analysis",
     "reciprocity": "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "amplification_factor": "Amplification factor: forwards received from tracked channels per own message",

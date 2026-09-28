@@ -192,6 +192,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
 | `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles) | `false` |
 | `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (cosine of behavioural-measure profiles) | `false` |
+| `outputs.dominance` | Run the dominance analysis: David's score ranking and roles per channel, two-sided dependence per connected pair with hypergeometric validation, SpringRank / transitivity / consistency tests of the whole network ([docs](dominance.md)) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
@@ -212,6 +213,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `computation.fa2_iterations` | ForceAtlas2 iteration count. Either an integer (e.g. `5000`) or a multiplier of the channel count expressed as `"Nx"` (e.g. `"7x"` → 7 × channels in the graph). Floored at 100 regardless. Empty `""` disables FA2. | `""` |
 | `computation.community_distribution_threshold` | Minimum % a community must reach in at least one organisation row to appear in the cross-tabulation tables. `0` keeps every community. | `0` |
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
+| `computation.dominance_min_events` | Dominance: minimum citation events for a directed link to be statistically tested, for a satellite tie to count and for a channel's own dependence to be assessed (links below the floor are listed but never validated). | `3` |
+| `computation.dominance_permutations` | Dominance: number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values; `0` skips the tests. Cost grows with the square of the ranked channels. | `200` |
 
 ## `[interest]`
 

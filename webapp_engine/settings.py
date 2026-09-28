@@ -483,6 +483,9 @@ SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
 SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
 SA_BEHAVIOURAL_EQUIVALENCE = _structural.outputs.behavioural_equivalence
+SA_DOMINANCE = _structural.outputs.dominance
+SA_DOMINANCE_MIN_EVENTS = _structural.computation.dominance_min_events
+SA_DOMINANCE_PERMUTATIONS = _structural.computation.dominance_permutations
 SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
 # CPM resolution moved into the per-instance community-strategy tokens (v0.25).
 SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold

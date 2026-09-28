@@ -699,6 +699,9 @@ def write_summary_json(
         "coordination_3d",
         "coordination_window",
         "coordination_min_events",
+        "dominance",
+        "dominance_min_events",
+        "dominance_permutations",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -769,6 +772,30 @@ def write_robustness_json(payload: dict, graph_dir: str) -> None:
         # the sanitizer rather than silently producing JSON the browser cannot
         # parse (cf. SyntaxError: Unexpected token 'N' on JSON.parse).
         f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+def write_dominance_json(payload: dict, graph_dir: str) -> None:
+    """Write data/dominance.json from compute_dominance."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "dominance.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+def write_dominance_csv(payload: dict, output_dir: str) -> None:
+    """Write dominance_channels.csv (one row per ranked channel) and dominance_pairs.csv (one row
+    per connected pair) next to nodes.csv / edges.csv."""
+    from network.dominance import flat_node_rows, flat_pair_rows
+
+    os.makedirs(output_dir, exist_ok=True)
+    for filename, (headers, rows) in (
+        ("dominance_channels.csv", flat_node_rows(payload)),
+        ("dominance_pairs.csv", flat_pair_rows(payload)),
+    ):
+        with open(os.path.join(output_dir, filename), "w", newline="", encoding="utf-8") as fh:
+            writer = _csv.writer(fh)
+            writer.writerow(headers)
+            writer.writerows(rows)
 
 
 _COORDINATION_DATA_DIR = "data_coordination"

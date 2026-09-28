@@ -18,6 +18,7 @@ from network import (
     community,
     community_stats,
     coordination,
+    dominance,
     exporter,
     graph_builder,
     interest_structural,
@@ -396,6 +397,11 @@ class ResolvedOptions:
     coordination_window: int = 300
     coordination_min_events: int = 3
 
+    # Dominance analysis (David's score ranking, two-sided dependence per pair, hierarchy tests)
+    do_dominance: bool = False
+    dominance_min_events: int = 3
+    dominance_permutations: int = 200
+
     # Export naming
     export_name: str = ""
 
@@ -452,6 +458,9 @@ class ResolvedOptions:
             if self.robustness_alpha_grid
             else "",
             "robustness_replay": self.do_robustness_replay,
+            "dominance": self.do_dominance,
+            "dominance_min_events": self.dominance_min_events,
+            "dominance_permutations": self.dominance_permutations,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -803,6 +812,44 @@ class Command(BaseCommand):
                 "Generate a structural equivalence matrix page (structural_similarity.html) showing "
                 "pairwise cosine similarity of each channel's weighted in+out tie profile "
                 "(Lorrain & White 1971): high = cite, and are cited by, the same channels."
+            ),
+        )
+        parser.add_argument(
+            "--dominance",
+            dest="dominance",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Run the dominance analysis (data/dominance.json; dominance.html with --html, .xlsx with --xlsx, "
+                ".csv with --csv): who dominates whom when a forward is an endorsement. Ranks channels by David's "
+                "score and SpringRank, types them dominant / dependent / broker / peripheral, lists every connected "
+                "pair with each side's content and reach dependence (Emerson's power-dependence) and a "
+                "hypergeometric validation of each link, and tests the whole network for a hierarchy (SpringRank energy, "
+                "triangle transitivity, rank consistency). Adds a David's score column to the channel table and map."
+            ),
+        )
+        parser.add_argument(
+            "--dominance-permutations",
+            dest="dominance_permutations",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Dominance: number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity "
+                "and rank-consistency p-values (0 skips the tests; cost grows with the square of the ranked channels). "
+                "Default: 200."
+            ),
+        )
+        parser.add_argument(
+            "--dominance-min-events",
+            dest="dominance_min_events",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Dominance: a directed link needs at least N citation events to be statistically tested, a "
+                "satellite tie to count and a channel's own dependence to be assessed (links below the floor "
+                "are listed with no p/q and can never be validated). Default: 3."
             ),
         )
         parser.add_argument(
@@ -1786,6 +1833,9 @@ class Command(BaseCommand):
         window_start: datetime.date | None = None,
         window_end: datetime.date | None = None,
         temporal_results: "dict[str, tuple] | None" = None,
+        do_dominance: bool = False,
+        dominance_min_events: int = 3,
+        dominance_permutations: int = 200,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         # Clamp the calendar year to the user's --startdate/--enddate window so a
@@ -1861,6 +1911,13 @@ class Command(BaseCommand):
             environment_depth=options.get("environment_depth"),
         )
 
+        dominance_payload: dict | None = None
+        if do_dominance:
+            dominance_payload = dominance.compute_dominance(
+                graph, graph_data, min_events=dominance_min_events, permutations=dominance_permutations
+            )
+            measures_labels += dominance.inject_node_scores(graph_data, dominance_payload)
+
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         community_table_data = None
 
@@ -1929,6 +1986,9 @@ class Command(BaseCommand):
                 )
                 _annotate_ban_wave_labels(rob_payload, communities_data)
                 exporter.write_robustness_json(rob_payload, graph_dir=tmp_dir)
+
+            if dominance_payload is not None:
+                exporter.write_dominance_json(dominance_payload, graph_dir=tmp_dir)
 
             if do_interest_structural:
                 year_window_filter = _date_window_filter(start_date, end_date)
@@ -2014,6 +2074,7 @@ class Command(BaseCommand):
             "has_network_html": True,
             "has_community_html": True,
             "has_robustness": do_robustness and rob_payload is not None,
+            "has_dominance": dominance_payload is not None,
             "has_coordination": has_coordination,
             "coordination_nodes": coordination_nodes,
             "coordination_ties": coordination_ties,
@@ -2021,6 +2082,7 @@ class Command(BaseCommand):
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
             "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
+            "_xlsx_dominance_data": dominance_payload if (do_xlsx and dominance_payload is not None) else None,
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
@@ -2257,6 +2319,9 @@ class Command(BaseCommand):
             do_consensus_matrix=_o("consensus_matrix", False),
             do_structural_similarity=_o("structural_similarity", False),
             do_behavioural_equivalence=_o("behavioural_equivalence", False),
+            do_dominance=_o("dominance", False),
+            dominance_min_events=max(int(_o("dominance_min_events", 3) or 0), 1),
+            dominance_permutations=max(int(_o("dominance_permutations", 200) or 0), 0),
             seo=_o("seo", False),
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
@@ -2345,6 +2410,7 @@ class Command(BaseCommand):
                 opts.do_robustness,
                 opts.do_interest_structural,
                 opts.do_coordination,
+                opts.do_dominance,
             )
         ):
             self.stdout.write(
@@ -2433,6 +2499,22 @@ class Command(BaseCommand):
             environment_depth=opts.environment_depth,
         )
 
+        # Dominance runs on the finished graph_data (it reads the channel labels) and before the
+        # exports so its David's score joins measures_labels — a sizeable column in the channel
+        # table, the map's size-by menu, CSV/XLSX and GEXF/GraphML.
+        global_dominance_payload: dict | None = None
+        if opts.do_dominance:
+            self.stdout.write("- dominance (David's score, dependences, hierarchy tests) … ", ending="")
+            self.stdout.flush()
+            global_dominance_payload = dominance.compute_dominance(
+                graph,
+                graph_data,
+                min_events=opts.dominance_min_events,
+                permutations=opts.dominance_permutations,
+            )
+            measures_labels += dominance.inject_node_scores(graph_data, global_dominance_payload)
+            self.stdout.write("done")
+
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
         # All writes go to the staging directory; it is renamed to _final_target only after
         # write_summary_json completes, making every live export atomically consistent.
@@ -2465,6 +2547,7 @@ class Command(BaseCommand):
             or opts.do_behavioural_equivalence
             or opts.do_vacancy
             or opts.do_robustness
+            or (opts.do_dominance and opts.do_html)
             # interest_structural.html imports ./js/utils.js and css/tables.css from
             # the copied map assets, like the vacancy/robustness pages above.
             or opts.do_interest_structural
@@ -2605,6 +2688,19 @@ class Command(BaseCommand):
                 seo=opts.seo,
                 project_title=project_title,
             )
+
+        if opts.do_dominance and global_dominance_payload is not None:
+            self.stdout.write("- dominance (json" + (" + html" if opts.do_html else "") + ")")
+            os.makedirs(root_target, exist_ok=True)
+            exporter.write_dominance_json(global_dominance_payload, root_target)
+            if opts.do_html:
+                tables.write_dominance_html(
+                    output_filename=os.path.join(root_target, "dominance.html"),
+                    seo=opts.seo,
+                    project_title=project_title,
+                )
+            if opts.do_csv:
+                exporter.write_dominance_csv(global_dominance_payload, root_target)
 
         if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("- media")
@@ -2892,6 +2988,9 @@ class Command(BaseCommand):
                         window_start=opts.start_date,
                         window_end=opts.end_date,
                         temporal_results=temporal_results,
+                        do_dominance=opts.do_dominance,
+                        dominance_min_events=opts.dominance_min_events,
+                        dominance_permutations=opts.dominance_permutations,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
@@ -2946,6 +3045,19 @@ class Command(BaseCommand):
                     project_title=project_title,
                     year_data=robustness_years,
                 )
+            if opts.do_dominance and global_dominance_payload is not None:
+                dominance_years = [
+                    (e["year"], e["_xlsx_dominance_data"])
+                    for e in timeline_entries
+                    if e.get("_xlsx_dominance_data") is not None
+                ] or None
+                self.stdout.write("- dominance (xlsx)")
+                tables.write_dominance_xlsx(
+                    global_dominance_payload,
+                    output_filename=os.path.join(root_target, "dominance.xlsx"),
+                    project_title=project_title,
+                    year_data=dominance_years,
+                )
 
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)
@@ -2974,6 +3086,8 @@ class Command(BaseCommand):
             include_interest_structural=opts.do_interest_structural,
             include_coordination_2d=coordination_written and opts.do_coordination_2d,
             include_coordination_3d=coordination_written and opts.do_coordination_3d,
+            include_dominance_html=opts.do_dominance and opts.do_html,
+            include_dominance_xlsx=opts.do_dominance and opts.do_xlsx,
         )
 
         exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))

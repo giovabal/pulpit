@@ -850,6 +850,62 @@ def write_robustness_table_xlsx(
     wb.save(output_filename)
 
 
+def write_dominance_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
+    _write_page(
+        "network/dominance.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Dominance",
+        seo_title_part="Dominance analysis",
+    )
+
+
+def write_dominance_xlsx(
+    payload: dict,
+    output_filename: str,
+    project_title: str = "",
+    year_data: "list[tuple[int, dict]] | None" = None,
+) -> None:
+    """Write the dominance analysis as an Excel workbook: a ``Channels`` sheet (ranked nodes) and a
+    ``Pairs`` sheet, plus a ``Hierarchy`` sheet with the whole-network tests; with *year_data*
+    ``[(year, payload), …]`` each family gets ``… All`` plus one sheet per year."""
+    from network.dominance import flat_node_rows, flat_pair_rows
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+    scopes: list[tuple[str, dict]] = [("All", payload)] if year_data else [("", payload)]
+    for yr, yr_payload in year_data or []:
+        scopes.append((str(yr), yr_payload))
+    for suffix, scope_payload in scopes:
+        for prefix, (headers, rows) in (
+            ("Channels", flat_node_rows(scope_payload)),
+            ("Pairs", flat_pair_rows(scope_payload)),
+        ):
+            ws = wb.create_sheet(title=_safe_sheet_title(f"{prefix} {suffix}".strip()))
+            ws.append(headers)
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+            for row in rows:
+                ws.append(row)
+        ws = wb.create_sheet(title=_safe_sheet_title(f"Hierarchy {suffix}".strip()))
+        ws.append(["Statistic", "Value"])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        meta = scope_payload.get("meta") or {}
+        for key, value in (meta.get("hierarchy") or {}).items():
+            ws.append([key, value])
+        for key in ("total_events", "links", "tested_links", "validated_links", "pairs", "share_basis"):
+            ws.append([key, meta.get(key)])
+        for group in ("relations", "roles"):
+            for key, value in (meta.get(group) or {}).items():
+                ws.append([f"{group}.{key}", value])
+    wb.save(output_filename)
+
+
 def write_index_html(
     output_filename: str,
     seo: bool = False,
@@ -875,6 +931,8 @@ def write_index_html(
     include_interest_structural: bool = False,
     include_coordination_2d: bool = False,
     include_coordination_3d: bool = False,
+    include_dominance_html: bool = False,
+    include_dominance_xlsx: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -908,6 +966,8 @@ def write_index_html(
         "include_interest_structural": include_interest_structural,
         "include_coordination_2d": include_coordination_2d,
         "include_coordination_3d": include_coordination_3d,
+        "include_dominance_html": include_dominance_html,
+        "include_dominance_xlsx": include_dominance_xlsx,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

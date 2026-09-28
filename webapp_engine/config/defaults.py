@@ -90,6 +90,7 @@ STRUCTURAL_DEFAULTS: dict = {
         "vertical_layout": False,
         "structural_similarity": False,
         "behavioural_equivalence": False,
+        "dominance": False,
         "consensus_matrix": False,
         "draw_dead_leaves": False,
         "timeline_step": "none",
@@ -113,6 +114,10 @@ STRUCTURAL_DEFAULTS: dict = {
         # community-strategy token (e.g. "LEIDEN_CPM(resolution=0.05)"). Old files are upgraded by
         # loader._migrate_community_params.
         "diffusion_window": 30,
+        # Dominance analysis: minimum citation events for a link to be tested / a tie to count, and
+        # the number of orientation-shuffled permutations behind the hierarchy p-values.
+        "dominance_min_events": 3,
+        "dominance_permutations": 200,
     },
     "layouts": {
         "layouts_2d": [],

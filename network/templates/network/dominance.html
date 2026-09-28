@@ -1,0 +1,86 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <h2 class="mb-0">Dominance</h2>
+  <div class="d-flex gap-2">
+    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
+    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+    <a href="{{ repository_url }}/blob/main/docs/dominance.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+  </div>
+</div>
+<p class="text-muted small mb-2">
+  <strong>Who dominates whom.</strong> A forward is a deferral: when X forwards Y, X took up Y's content and Y won that
+  interaction. Channels are ranked by <em>David's score</em> (each pair's citations split between its sides in proportion to
+  the dependence each places on the other, corrected for sparse dyads) and by SpringRank, and typed <span class="badge text-bg-danger">dominant</span> (has satellites, is nobody's satellite),
+  <span class="badge text-bg-warning">dependent</span> (a satellite: at least half of its content or of its reach comes from one partner),
+  <span class="badge text-bg-info">broker</span> (both), <span class="badge text-bg-success">allied</span> (neither, but in a validated mutual pair)
+  or <span class="badge text-bg-secondary">peripheral</span> (none of these).
+  Pairs carry each side's <em>dependence</em> on the other — content (share of its citing output) and reach (share of its
+  received citations) — the net balance, and a validation of each link against a null of heterogeneous activity:
+  <span class="badge text-bg-success">alliance</span> (both directions validated), <span class="badge text-bg-warning">dependence</span> (one),
+  <span class="badge text-bg-secondary">unvalidated</span> (none).
+</p>
+<div id="timeline-nav" class="mb-2"></div>
+<div id="dm-preamble" class="mb-2"></div>
+<div id="dm-hierarchy" class="mb-3"></div>
+
+<h3 class="h5 mt-3">Channels</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div>
+    <label for="dm-role" class="form-label mb-0 small">Role</label>
+    <select id="dm-role" class="form-select form-select-sm">
+      <option value="all" selected>All roles</option>
+      <option value="dominant">Dominant</option>
+      <option value="dependent">Dependent</option>
+      <option value="broker">Broker</option>
+      <option value="allied">Allied</option>
+      <option value="peripheral">Peripheral</option>
+    </select>
+  </div>
+  <div class="flex-grow-1">
+    <label for="dm-node-search" class="form-label mb-0 small">Channel</label>
+    <input type="search" id="dm-node-search" class="form-control form-control-sm" placeholder="Filter by channel or label…">
+  </div>
+</div>
+<p class="text-muted" id="dm-node-count">Loading…</p>
+<div class="table-responsive export-wide">
+  <table class="table table-hover table-sm sortable" id="dm-nodes" aria-label="Dominance ranking of channels">
+    <caption class="sr-only">One row per channel with at least one citation partner: role, David's score, SpringRank, satellites and dependences. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h3 class="h5 mt-4">Pairs</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div>
+    <label for="dm-relation" class="form-label mb-0 small">Relation</label>
+    <select id="dm-relation" class="form-select form-select-sm">
+      <option value="all">All pairs</option>
+      <option value="validated" selected>Validated only</option>
+      <option value="dependence">Dependence</option>
+      <option value="alliance">Alliance</option>
+      <option value="unvalidated">Unvalidated</option>
+    </select>
+  </div>
+  <div>
+    <label for="dm-min-count" class="form-label mb-0 small">Min. citations (either direction)</label>
+    <input type="number" id="dm-min-count" class="form-control form-control-sm" min="1" step="1" value="1">
+  </div>
+  <div class="flex-grow-1">
+    <label for="dm-pair-search" class="form-label mb-0 small">Channel</label>
+    <input type="search" id="dm-pair-search" class="form-control form-control-sm" placeholder="Filter by channel or label…">
+  </div>
+</div>
+<p class="text-muted" id="dm-pair-count">Loading…</p>
+<div class="table-responsive export-wide">
+  <table class="table table-hover table-sm sortable" id="dm-pairs" aria-label="Dyadic dominance">
+    <caption class="sr-only">One row per connected pair of channels, oriented dependent → dominant: dependences, validation and net balance. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<script type="module" src="js/dominance.js"></script>
+{% endblock %}

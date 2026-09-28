@@ -145,6 +145,9 @@ class OperationsView(View):
             # SA numeric params
             "SA_FA2_ITERATIONS": settings.SA_FA2_ITERATIONS,
             "SA_DIFFUSION_WINDOW": settings.SA_DIFFUSION_WINDOW,
+            "SA_DOMINANCE": settings.SA_DOMINANCE,
+            "SA_DOMINANCE_MIN_EVENTS": settings.SA_DOMINANCE_MIN_EVENTS,
+            "SA_DOMINANCE_PERMUTATIONS": settings.SA_DOMINANCE_PERMUTATIONS,
             # Default value pre-filled on a freshly-dragged community-strategy chip (per-instance).
             "SA_CPM_RESOLUTION": net_community.CPM_DEFAULT_RESOLUTION,
             "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
@@ -671,6 +674,9 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
         ("bool_explicit", "behavioural_equivalence", "--behavioural-equivalence", "--no-behavioural-equivalence"),
+        ("bool_explicit", "dominance", "--dominance", "--no-dominance"),
+        ("value", "dominance_min_events", "--dominance-min-events"),
+        ("value", "dominance_permutations", "--dominance-permutations"),
         ("bool_explicit", "interest_structural", "--interest-structural", "--no-interest-structural"),
         ("value", "interest_window_days", "--interest-window-days"),
         (
@@ -782,6 +788,9 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("vertical_layout", "outputs.vertical_layout", "bool"),
         ("structural_similarity", "outputs.structural_similarity", "bool"),
         ("behavioural_equivalence", "outputs.behavioural_equivalence", "bool"),
+        ("dominance", "outputs.dominance", "bool"),
+        ("dominance_min_events", "computation.dominance_min_events", "int"),
+        ("dominance_permutations", "computation.dominance_permutations", "int"),
         ("consensus_matrix", "outputs.consensus_matrix", "bool"),
         ("draw_dead_leaves", "outputs.draw_dead_leaves", "bool"),
         ("dead_leaves_color", "graph.dead_leaves_color", "value"),
