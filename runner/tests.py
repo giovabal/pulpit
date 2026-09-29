@@ -346,17 +346,19 @@ class OperationsViewTests(TestCase):
         self.assertLess(names.index("crawl_channels"), names.index("structural_analysis"))
         self.assertLess(names.index("structural_analysis"), names.index("compare_analysis"))
 
-    def test_context_lists_environment_depths_up_to_the_deepest_registered(self):
+    def test_context_caps_environment_level_at_the_deepest_registered(self):
         from webapp.models import Channel
 
         resp = self.client.get(reverse("operations"))
-        self.assertEqual(resp.context["environment_depth_choices"], [])
+        self.assertEqual(resp.context["environment_deepest"], 0)
+        self.assertContains(resp, 'name="environment_depth" id="environment_depth" value="0" min="0" max="0"')
+        self.assertContains(resp, "No environment has been crawled yet.")
         Channel.objects.create(telegram_id=1, title="E1", environment_depth=1)
         Channel.objects.create(telegram_id=2, title="E3", environment_depth=3)
         resp = self.client.get(reverse("operations"))
-        self.assertEqual(resp.context["environment_depth_choices"], [1, 2, 3])
-        self.assertContains(resp, '<option value="0" selected>None</option>')
-        self.assertContains(resp, '<option value="3">3</option>')
+        self.assertEqual(resp.context["environment_deepest"], 3)
+        self.assertContains(resp, 'max="3"')
+        self.assertContains(resp, "Deepest level crawled so far: 3.")
 
     def test_context_contains_channel_sources(self):
         ChannelSource.objects.create(name="Alpha")
@@ -509,7 +511,19 @@ class RunTaskViewTests(TestCase):
                 {"graph": "on", "environment_depth": "-1"},
             )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("Environment depth", resp.json()["error"])
+        self.assertIn("Environment level", resp.json()["error"])
+
+    def test_run_rejects_structural_environment_level_deeper_than_crawled(self):
+        from webapp.models import Channel
+
+        Channel.objects.create(telegram_id=1, title="E1", environment_depth=1)
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["structural_analysis"]),
+                {"graph": "on", "environment_depth": "2"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("exceeds the deepest level crawled so far (1)", resp.json()["error"])
 
     def test_run_rejects_non_numeric_environment_depth(self):
         with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):

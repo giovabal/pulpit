@@ -269,7 +269,7 @@ For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` b
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `scope.include_lost` | Include channels currently flagged `is_lost=True` | `false` |
-| `scope.environment_depth` | Environment depth pre-selected in the **Environment** dropdown of the Filters fieldset (`--environment-depth`): `0` = None (in-target channels only), `N` = also the environment channels within `N` citation hops of the monitored ones, as full participants | `0` |
+| `scope.environment_depth` | Environment level pre-filled in the **Environment level** field of the Outputs fieldset (`--environment-depth`): `0` = None (in-target channels only), `N` = also the environment channels within `N` citation hops of the monitored ones, as full participants | `0` |
 | `scope.include_private` | Include channels currently flagged `is_private=True` | `false` |
 
 ## `[vacancy]`
