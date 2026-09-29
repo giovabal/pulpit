@@ -431,6 +431,17 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate the structural 3D map (graph3d.html), rendered with Three.js. Rotate, zoom, and pan with the mouse."></i>
                 </label>
+              </div>
+              <div class="ops-params">
+                <div class="ops-param">
+                  <label for="environment_depth">Environment level
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="0 = in-target channels only; nothing changes. 1 or more = the environment previously crawled by Crawl Channels' Environment pass enters the analysis: the out-of-target channels within this many citation hops of the monitored ones take part in full (edges, measures, communities, coordination, dominance), and every node gets an Environment depth (0 in target) the map can colour by. {% if environment_deepest %}Deepest level crawled so far: {{ environment_deepest }}.{% else %}No environment has been crawled yet.{% endif %}"></i>
+                  </label>
+                  <input type="number" name="environment_depth" id="environment_depth" value="{{ ad.SA_ENVIRONMENT_DEPTH }}" min="0" max="{{ environment_deepest }}" step="1" data-width="sm">
+                </div>
+              </div>
+              <div class="ops-flags">
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="coordination_2d" {% if ad.SA_COORDINATION_2D %}checked{% endif %}>Coordination 2D map
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -602,20 +613,6 @@
                   <i class="bi bi-info-circle ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Include dead leaves in the graph: out-of-target channels that an in-target channel has forwarded from or mentioned via a t.me/ link. Adds context but can significantly increase graph size. The colour picker below controls the node colour."></i>
                 </label>
-              </div>
-              <div class="ops-params mt-2">
-                <div class="ops-param">
-                  <label for="environment_depth">Environment
-                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Also include the environment: the out-of-target channels Crawl Channels' Environment pass reached within this many citation hops of the monitored ones. They take part in full (edges, measures, communities, coordination) and every node gets an Environment depth (0 in target) the map can colour by. None = in-target channels only. The list stops at the deepest channel registered so far."></i>
-                  </label>
-                  <select name="environment_depth" id="environment_depth" data-width="sm">
-                    <option value="0"{% if not ad.SA_ENVIRONMENT_DEPTH %} selected{% endif %}>None</option>
-                    {% for depth in environment_depth_choices %}
-                    <option value="{{ depth }}"{% if depth == ad.SA_ENVIRONMENT_DEPTH %} selected{% endif %}>{{ depth }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
               </div>
               <div class="ops-params" style="margin-top:.5rem">
                 {# data-requires-flag on the wrapper (not the <input>) so the input stays #}
@@ -2085,6 +2082,7 @@ function showToast(msg, type) {
         setVal('fa2_iterations',                 opts.fa2_iterations);
         setVal('community_distribution_threshold', opts.community_distribution_threshold);
         setVal('community_backbone_alpha',       opts.community_backbone_alpha != null ? opts.community_backbone_alpha : '');
+        setVal('environment_depth',              opts.environment_depth != null ? opts.environment_depth : 0);
 
         // Measures: rebuild the drag-and-drop builder from the ordered token list (each token
         // carries its own parameters, e.g. "DIFFUSIONLAG(window=60)"). window.splitTokens keeps

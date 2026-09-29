@@ -69,8 +69,8 @@ class OperationsView(View):
             task_info.append({**defn, "name": name, **status})
         channel_sources = list(ChannelSource.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
-        # Environment dropdown of the Structural Analysis form: None plus every depth up to the
-        # deepest channel the crawler's environment pass has registered (empty when it never ran).
+        # Environment level field of the Structural Analysis form (Outputs): capped at the deepest
+        # channel the crawler's environment pass has registered (0 when it never ran).
         deepest_environment = Channel.objects.aggregate(deepest=Max("environment_depth"))["deepest"] or 0
         # Partition label groups: each is selectable in the "Label groups" fieldset and participates
         # like a detected community (its LABELGROUP<id> token is merged into --community-strategies).
@@ -196,7 +196,7 @@ class OperationsView(View):
                 "channel_sources": channel_sources,
                 "container_groups": container_groups,
                 "has_vacancies": has_vacancies,
-                "environment_depth_choices": list(range(1, deepest_environment + 1)),
+                "environment_deepest": deepest_environment,
                 # MODULEROLE basis choices: every algorithmic strategy plus each manual LABELGROUP<id>
                 # partition (so a within-module role can be computed against a label group too).
                 "all_basis_choices": sorted(
@@ -233,7 +233,7 @@ class RunTaskView(View):
         if tasks.get_status(task)["status"] == "running":
             return JsonResponse({"error": "Task already running"}, status=409)
         try:
-            _validate_post_constraints(task, request.POST)
+            _validate_post_constraints(task, request.POST, launching=True)
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
         args = _build_args(task, request.POST)
@@ -854,7 +854,7 @@ def _set_nested(d: dict, dotted_path: str, value: Any) -> None:
 _FORM_PAYLOAD_MISSING = object()
 
 
-def _validate_post_constraints(task: str, post: Any) -> None:
+def _validate_post_constraints(task: str, post: Any, *, launching: bool = False) -> None:
     """Cross-field validation shared by Save and Run.
 
     Raises ValueError on inconsistent input. Both DefaultsListView.post
@@ -880,7 +880,9 @@ def _validate_post_constraints(task: str, post: Any) -> None:
 
     * ``crawl_channels``: ``download_timeout``, when set, must be zero
       (no limit) or a positive integer number of seconds;
-      ``environment_depth``, when set, must be a positive integer.
+      ``environment_depth``, when set, must be zero or a positive integer (crawl: positive); when
+      *launching* a run it must also be no deeper than the deepest environment level the crawler
+      has registered — a saved snapshot may legitimately name a level not crawled yet.
     """
     if not hasattr(post, "getlist"):
         return
@@ -943,7 +945,14 @@ def _validate_post_constraints(task: str, post: Any) -> None:
             except ValueError as exc:
                 raise ValueError(f"Environment depth must be an integer number of hops, got {raw_depth!r}") from exc
             if depth < 0:
-                raise ValueError(f"Environment depth must be zero (none) or positive, got {depth}")
+                raise ValueError(f"Environment level must be zero (none) or positive, got {depth}")
+            if depth > 0 and launching:
+                deepest = Channel.objects.aggregate(deepest=Max("environment_depth"))["deepest"] or 0
+                if depth > deepest:
+                    raise ValueError(
+                        f"Environment level {depth} exceeds the deepest level crawled so far ({deepest}); "
+                        "run Crawl Channels with the Environment option first"
+                    )
         return
 
     if task == "compare_analysis":
