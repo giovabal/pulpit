@@ -583,10 +583,15 @@
                   <input type="checkbox" name="near_copy_edges" {% if ad.SA_NEAR_COPY_EDGES %}checked{% endif %}>Include near-copies as edges
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Also read a post whose text is near-identical to an earlier original post of another channel as a forward of that earliest publication (Jaccard similarity of word 3-shingles at or above the threshold below — Broder 1997): an edge from the copier to the origin, one citation event per re-post, counted by Amplification, Content originality and Diffusion lag too. Forwards are never copies; a copy of the channel's own earlier post follows Include self-references. Off (default): nothing changes. Every detected link is listed in data/near_copies.csv — a match shows the same text appeared earlier elsewhere in scope, not who copied whom."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: Near-copy similarity ≥"></i>
                 </label>
               </div>
               <div class="ops-params" style="margin-top:.5rem">
-                <div class="ops-param">
+                {# data-requires-flag on the wrapper (not the <input>), like the other linked parameters: #}
+                {# the field greys out while near-copies are off but its value still rides along in       #}
+                {# FormData, so Save as defaults keeps a tuned threshold across toggles.                   #}
+                <div class="ops-param" data-requires-flag="near_copy_edges">
                   <label for="near_copy_threshold">Near-copy similarity ≥
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                        title="Minimum Jaccard resemblance of two posts' word 3-shingle sets (links, handles, punctuation and emoji removed; posts under 8 words ignored; a channel's recurring header or signature lines discounted) for the later post to count as a copy of the earlier one. 1 = verbatim; 0.8 (default) = verbatim text with a prefix or suffix added; below 0.8 the same organisation's announcement templates with a city swapped start to match. Only used when near-copies are on."></i>
