@@ -175,6 +175,9 @@ class OperationsView(View):
             "SA_COORDINATION_MIN_EVENTS": settings.SA_COORDINATION_MIN_EVENTS,
             # SA string params
             "SA_EDGE_WEIGHT_STRATEGY": settings.SA_EDGE_WEIGHT_STRATEGY,
+            # SA near-copy edges (Edge weights fieldset)
+            "SA_NEAR_COPY_EDGES": settings.SA_NEAR_COPY_EDGES,
+            "SA_NEAR_COPY_THRESHOLD": settings.SA_NEAR_COPY_THRESHOLD,
             # SA expanded sets for checkbox groups
             # sa_measure_tokens / sa_strategy_tokens seed the drag-and-drop builders; passed at top
             # level (below) so the templates' json_script tags can read them.
@@ -670,6 +673,8 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("bool_explicit", "include_mentions", "--mentions", "--no-mentions"),
         ("bool_explicit", "include_self_references", "--self-references", "--no-self-references"),
         ("value", "edge_weight_strategy", "--edge-weight-strategy"),
+        ("bool_explicit", "near_copy_edges", "--near-copy-edges", "--no-near-copy-edges"),
+        ("value", "near_copy_threshold", "--near-copy-threshold"),
         ("value", "diffusion_window", "--diffusion-window"),
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
@@ -800,6 +805,8 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("edge_weight_strategy", "edges.weight_strategy", "value"),
         ("include_mentions", "edges.include_mentions", "bool"),
         ("include_self_references", "edges.include_self_references", "bool"),
+        ("near_copy_edges", "edges.near_copy_edges", "bool"),
+        ("near_copy_threshold", "edges.near_copy_threshold", "float"),
         ("include_lost", "scope.include_lost", "bool"),
         ("include_private", "scope.include_private", "bool"),
         ("environment_depth", "scope.environment_depth", "int"),
@@ -937,6 +944,15 @@ def _validate_post_constraints(task: str, post: Any, *, launching: bool = False)
         # Leiden temporal couples the per-year timeline slices — meaningless without the timeline.
         if any(inst.name == "LEIDEN_TEMPORAL" for inst in parsed_strategies) and not post.get("timeline_step"):
             raise ValueError("Leiden temporal requires the Timeline option (per-year exports) to be enabled")
+
+        raw_threshold = (post.get("near_copy_threshold") or "").strip()
+        if raw_threshold:
+            try:
+                threshold = float(raw_threshold)
+            except ValueError as exc:
+                raise ValueError(f"Near-copy similarity must be a number, got {raw_threshold!r}") from exc
+            if not 0 < threshold <= 1:
+                raise ValueError(f"Near-copy similarity must be above 0 and at most 1, got {raw_threshold}")
 
         raw_depth = (post.get("environment_depth") or "").strip()
         if raw_depth:

@@ -513,6 +513,15 @@ class RunTaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Environment level", resp.json()["error"])
 
+    def test_run_rejects_structural_near_copy_threshold_above_one(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["structural_analysis"]),
+                {"graph": "on", "near_copy_edges": "on", "near_copy_threshold": "1.5"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Near-copy similarity", resp.json()["error"])
+
     def test_run_rejects_structural_environment_level_deeper_than_crawled(self):
         from webapp.models import Channel
 

@@ -43,7 +43,9 @@ from network.exporter import (
     write_coordination_files,
     write_coordination_pages,
     write_coordination_timeline_json,
+    write_csv,
     write_graph_files,
+    write_near_copies_csv,
 )
 from network.graph_builder import build_graph, resolve_window_label
 from network.measures import (
@@ -51,6 +53,7 @@ from network.measures import (
     apply_base_node_measures,
     apply_burt_constraint,
     apply_content_originality,
+    apply_diffusion_lag,
     apply_hits,
     apply_in_degree_centrality,
     apply_local_clustering,
@@ -62,6 +65,7 @@ from network.measures import (
     parse_measures,
     role_companions,
 )
+from network.near_copies import _similar_pairs, find_near_copies, normalise_tokens, shingle_set
 from network.tokens import split_tokens
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, Message
@@ -6261,3 +6265,265 @@ class WriteDominanceOutputsTests(TestCase):
             write_index_html(output_filename=out)
             with open(out) as f:
                 self.assertNotIn("dominance.html", f.read())
+
+
+# ---------------------------------------------------------------------------
+# near_copies.py — detection, and the near-copy edges through build_graph / measures / exports
+# ---------------------------------------------------------------------------
+
+_NC_T0 = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC)
+_NC_TEXT = (
+    "Legionary life is beautiful not because of riches or partying "
+    "but because of the noble comradeship which binds all of us together"
+)
+
+
+def _nc_day(days: int, hours: int = 0) -> datetime.datetime:
+    return _NC_T0 + datetime.timedelta(days=days, hours=hours)
+
+
+class NearCopyDetectionTests(TestCase):
+    def test_normalise_drops_links_handles_case_and_punctuation(self) -> None:
+        tokens = normalise_tokens("Join @Some_Channel now: https://t.me/x/123 — WE rise! mail me@proton.me 🔥")
+        self.assertEqual(tokens, ["join", "now", "we", "rise", "mail"])
+
+    def test_verbatim_copy_with_suffix_points_to_earliest(self) -> None:
+        links = find_near_copies(
+            [(1, 10, _nc_day(0), _NC_TEXT), (2, 20, _nc_day(0, 5), _NC_TEXT + " 👉 join us https://t.me/x")]
+        )
+        self.assertEqual(len(links), 1)
+        link = links[0]
+        self.assertEqual((link.copy_id, link.origin_id), (2, 1))
+        self.assertEqual((link.copy_channel_id, link.origin_channel_id), (20, 10))
+        self.assertGreaterEqual(link.similarity, 0.8)
+        self.assertAlmostEqual(link.lag_hours, 5.0)
+        self.assertEqual(link.cluster_size, 2)
+        self.assertFalse(link.is_self_copy)
+
+    def test_template_with_substitution_is_not_a_copy_at_default_threshold(self) -> None:
+        alberta = (
+            "What is Alberta Youth Club? Alberta Youth Club is a nationalist organization "
+            "in Alberta Canada promoting purpose and discipline"
+        )
+        manitoba = alberta.replace("Alberta", "Manitoba")
+        docs = [(1, 10, _nc_day(0), alberta), (2, 20, _nc_day(1), manitoba)]
+        self.assertEqual(find_near_copies(docs), [])
+        # 3 substituted words kill 9 of 17 shingles: the resemblance is 8/26 — a loose threshold does link them.
+        self.assertEqual(len(find_near_copies(docs, threshold=0.2)), 1)
+
+    def test_short_messages_are_ineligible(self) -> None:
+        docs = [(1, 10, _nc_day(0), "Go to the gym."), (2, 20, _nc_day(1), "Go to the gym.")]
+        self.assertEqual(find_near_copies(docs), [])
+
+    def test_self_copy_when_own_post_is_earliest_and_origin_is_global_earliest(self) -> None:
+        docs = [(1, 10, _nc_day(0), _NC_TEXT), (2, 10, _nc_day(1), _NC_TEXT), (3, 20, _nc_day(2), _NC_TEXT)]
+        by_copy = {link.copy_id: link for link in find_near_copies(docs)}
+        self.assertEqual(set(by_copy), {2, 3})
+        self.assertTrue(by_copy[2].is_self_copy)
+        self.assertEqual(by_copy[3].origin_id, 1)  # the earliest match, not the nearest in time
+        self.assertFalse(by_copy[3].is_self_copy)
+        self.assertEqual(by_copy[3].cluster_size, 3)
+
+    def test_channel_boilerplate_does_not_create_matches(self) -> None:
+        header = " ".join(f"h{i}" for i in range(40))
+        own = [(i, 10, _nc_day(i), f"{header} story number {i} alpha{i} beta{i} gamma{i}") for i in range(6)]
+        other = (99, 20, _nc_day(100), f"{header} story number 99 alpha99 beta99 gamma99")
+        # The two posts share the 40-token header only (resemblance ≈ 0.83): a match when channel 10 has
+        # too few posts for its header to be recognised as boilerplate …
+        self.assertEqual(len(find_near_copies([own[0], other])), 1)
+        # … and none once the header recurs across the channel's posts and is discounted.
+        self.assertEqual(find_near_copies([*own, other]), [])
+
+    def test_rejects_invalid_parameters(self) -> None:
+        with self.assertRaises(ValueError):
+            find_near_copies([], threshold=1.5)
+        with self.assertRaises(ValueError):
+            find_near_copies([], min_tokens=2, shingle_size=3)
+
+    def test_prefix_filtering_join_is_exact(self) -> None:
+        import random
+
+        rng = random.Random(7)
+        vocab = [f"w{i}" for i in range(30)]
+        texts = [" ".join(rng.choice(vocab) for _ in range(rng.randint(8, 16))) for _ in range(60)]
+        for i in range(60):  # perturbed near-duplicates
+            words = texts[i].split()
+            words[rng.randrange(len(words))] = rng.choice(vocab)
+            texts.append(" ".join(words))
+        docs = {i: shingle_set(normalise_tokens(t), 3) for i, t in enumerate(texts)}
+        docs = {i: s for i, s in docs.items() if len(s) >= 3}
+        ids = sorted(docs)
+        for threshold in (0.3, 0.5, 0.8):
+            brute = {}
+            for a_index, a in enumerate(ids):
+                for b in ids[a_index + 1 :]:
+                    inter = len(docs[a] & docs[b])
+                    union = len(docs[a] | docs[b])
+                    if union and inter / union >= threshold:
+                        brute[(a, b)] = inter / union
+            fast = _similar_pairs(docs, threshold)
+            self.assertEqual(set(fast), set(brute), threshold)
+            for pair, similarity in fast.items():
+                self.assertAlmostEqual(similarity, brute[pair])
+
+
+class BuildGraphNearCopyTests(TestCase):
+    def setUp(self) -> None:
+        self.label = make_label("Org", color="#FF0000")
+        self.origin = make_channel(telegram_id=1, label=self.label, title="Origin")
+        self.copier = make_channel(telegram_id=2, label=self.label, title="Copier")
+        self.first = Message.objects.create(telegram_id=1, channel=self.origin, date=_nc_day(0), message=_NC_TEXT)
+        # A forward on day 1 so the graph has an edge even when near-copies are off: origin → copier.
+        Message.objects.create(telegram_id=2, channel=self.origin, date=_nc_day(1), forwarded_from=self.copier)
+        self.copy = Message.objects.create(
+            telegram_id=3, channel=self.copier, date=_nc_day(3), message=_NC_TEXT + " 👉 join us"
+        )
+
+    def test_off_by_default_changes_nothing(self) -> None:
+        graph, channel_dict, edge_list, _ = build_graph()
+        self.assertEqual(graph.graph["near_copies"], [])
+        self.assertFalse(graph.graph["near_copies_enabled"])
+        self.assertNotIn((str(self.copier.pk), str(self.origin.pk)), graph.edges())
+        self.assertEqual([edge[5] for edge in edge_list], [0.0])
+        self.assertEqual(channel_dict[str(self.copier.pk)]["data"]["citing_messages"], 0)
+
+    def test_copy_becomes_an_edge_toward_the_origin_and_a_citing_message(self) -> None:
+        graph, channel_dict, edge_list, _ = build_graph(include_near_copies=True)
+        self.assertTrue(graph.graph["near_copies_enabled"])
+        self.assertEqual([link.copy_id for link in graph.graph["near_copies"]], [self.copy.pk])
+        data = graph.edges[str(self.copier.pk), str(self.origin.pk)]
+        self.assertEqual((data["weight_forwards"], data["weight_mentions"], data["weight_copies"]), (0.0, 0.0, 1.0))
+        self.assertEqual(data["weight_raw"], 1.0)  # PARTIAL_REFERENCES: 1 copy / 1 citing message
+        self.assertEqual(channel_dict[str(self.copier.pk)]["data"]["citing_messages"], 1)
+        self.assertEqual(channel_dict[str(self.origin.pk)]["data"]["citing_messages"], 1)  # the forward only
+        row = next(edge for edge in edge_list if edge[0] == str(self.copier.pk))
+        self.assertEqual(row[5], 1.0)
+
+    def test_total_strategy_sums_copies_with_forwards_and_mentions(self) -> None:
+        graph, _, _, _ = build_graph(include_near_copies=True, edge_weight_strategy="TOTAL")
+        self.assertEqual(graph.edges[str(self.copier.pk), str(self.origin.pk)]["weight_raw"], 1.0)
+
+    def test_copy_carrying_a_reference_is_one_citing_message(self) -> None:
+        self.copy.references.add(self.origin)
+        graph, channel_dict, _, _ = build_graph(include_near_copies=True, include_mentions=True)
+        data = graph.edges[str(self.copier.pk), str(self.origin.pk)]
+        self.assertEqual((data["weight_mentions"], data["weight_copies"]), (1.0, 1.0))
+        self.assertEqual(channel_dict[str(self.copier.pk)]["data"]["citing_messages"], 1)
+
+    def test_self_copies_follow_include_self_references(self) -> None:
+        Message.objects.create(telegram_id=4, channel=self.origin, date=_nc_day(2), message=_NC_TEXT)
+        graph, channel_dict, _, _ = build_graph(include_near_copies=True)
+        self.assertNotIn((str(self.origin.pk), str(self.origin.pk)), graph.edges())
+        self.assertEqual(sum(link.is_self_copy for link in graph.graph["near_copies"]), 1)
+        # Like a self-forward, the archive re-post is still one of the channel's citing messages.
+        self.assertEqual(channel_dict[str(self.origin.pk)]["data"]["citing_messages"], 2)
+        graph, _, _, _ = build_graph(include_near_copies=True, include_self_references=True)
+        self.assertEqual(graph.edges[str(self.origin.pk), str(self.origin.pk)]["weight_copies"], 1.0)
+        # The other channel's copy still points to the earliest publication, not to the re-post.
+        cross = [link for link in graph.graph["near_copies"] if not link.is_self_copy]
+        self.assertEqual([(link.copy_id, link.origin_id) for link in cross], [(self.copy.pk, self.first.pk)])
+
+    def test_origin_outside_the_date_window_still_counts_for_a_copy_inside_it(self) -> None:
+        # Keep both channels active in either window with unrelated posts; the origin's day-0 text stays
+        # outside the first window.
+        Message.objects.create(
+            telegram_id=5, channel=self.origin, date=_nc_day(3), message="an unrelated post keeping the channel active"
+        )
+        Message.objects.create(
+            telegram_id=6, channel=self.copier, date=_nc_day(1), message="an early unrelated post by the copier"
+        )
+        graph, _, _, _ = build_graph(include_near_copies=True, start_date=_nc_day(2).date())
+        self.assertEqual(graph.edges[str(self.copier.pk), str(self.origin.pk)]["weight_copies"], 1.0)
+        # A window that ends before the copy drops it (the forward on day 1 keeps the graph non-empty).
+        graph, _, _, _ = build_graph(include_near_copies=True, end_date=_nc_day(2).date())
+        self.assertEqual(graph.graph["near_copies"], [])
+
+    def test_threshold_parameter_is_honoured(self) -> None:
+        graph, _, _, _ = build_graph(include_near_copies=True, near_copy_threshold=1.0)
+        self.assertEqual(graph.graph["near_copies"], [])  # the suffix breaks verbatim identity
+
+
+class NearCopyMeasuresTests(TestCase):
+    def setUp(self) -> None:
+        label = make_label("Org", color="#FF0000")
+        self.origin = make_channel(telegram_id=1, label=label, title="Origin")
+        self.copier = make_channel(telegram_id=2, label=label, title="Copier")
+        Message.objects.create(telegram_id=1, channel=self.origin, date=_nc_day(0), message=_NC_TEXT)
+        Message.objects.create(
+            telegram_id=2, channel=self.origin, date=_nc_day(0), message="another original post of the origin channel"
+        )
+        Message.objects.create(telegram_id=3, channel=self.copier, date=_nc_day(2), message=_NC_TEXT)  # lag 48 h
+        Message.objects.create(
+            telegram_id=4, channel=self.copier, date=_nc_day(2), message="something else entirely by the copier"
+        )
+        self.graph, self.channel_dict, self.edge_list, _ = build_graph(include_near_copies=True)
+        self.graph_data = build_graph_data(self.graph, {})
+
+    def _nodes(self) -> dict:
+        return {node["id"]: node for node in self.graph_data["nodes"]}
+
+    def test_copies_received_count_as_amplification(self) -> None:
+        apply_amplification_factor(self.graph_data, self.graph, self.channel_dict)
+        nodes = self._nodes()
+        self.assertAlmostEqual(nodes[str(self.origin.pk)]["amplification_factor"], 0.5)  # 1 copy / 2 posts
+        self.assertEqual(nodes[str(self.copier.pk)]["amplification_factor"], 0.0)
+
+    def test_copies_made_lower_content_originality(self) -> None:
+        apply_content_originality(self.graph_data, self.graph, self.channel_dict)
+        nodes = self._nodes()
+        self.assertAlmostEqual(nodes[str(self.copier.pk)]["content_originality"], 0.5)
+        self.assertAlmostEqual(nodes[str(self.origin.pk)]["content_originality"], 1.0)
+
+    def test_copy_lag_feeds_diffusion_lag(self) -> None:
+        apply_diffusion_lag(self.graph_data, self.graph, self.channel_dict)
+        nodes = self._nodes()
+        self.assertAlmostEqual(nodes[str(self.copier.pk)]["diffusion_lag"], 48.0)
+        self.assertIsNone(nodes[str(self.origin.pk)]["diffusion_lag"])
+        apply_diffusion_lag(self.graph_data, self.graph, self.channel_dict, window_days=1)
+        self.assertIsNone(self._nodes()[str(self.copier.pk)]["diffusion_lag"])  # 48 h > 1-day window
+
+    def test_without_links_the_three_measures_read_forwards_only(self) -> None:
+        self.graph.graph["near_copies"] = []
+        apply_amplification_factor(self.graph_data, self.graph, self.channel_dict)
+        apply_content_originality(self.graph_data, self.graph, self.channel_dict)
+        apply_diffusion_lag(self.graph_data, self.graph, self.channel_dict)
+        nodes = self._nodes()
+        self.assertEqual(nodes[str(self.origin.pk)]["amplification_factor"], 0.0)
+        self.assertAlmostEqual(nodes[str(self.copier.pk)]["content_originality"], 1.0)
+        self.assertIsNone(nodes[str(self.copier.pk)]["diffusion_lag"])
+
+    def test_edges_csv_and_audit_csv(self) -> None:
+        import csv
+
+        with tempfile.TemporaryDirectory() as tmp:
+            write_csv(self.graph_data, self.edge_list, [], [], tmp)
+            with open(os.path.join(tmp, "edges.csv"), newline="", encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+            self.assertEqual(rows[0]["weight_copies"], "1.0")
+            self.assertEqual((rows[0]["source_label"], rows[0]["target_label"]), ("Copier", "Origin"))
+            path = write_near_copies_csv(self.graph, self.graph_data, os.path.join(tmp, "data"))
+            with open(path, newline="", encoding="utf-8") as fh:
+                audit = list(csv.DictReader(fh))
+        self.assertEqual(len(audit), 1)
+        self.assertEqual((audit[0]["copy_channel"], audit[0]["origin_channel"]), ("Copier", "Origin"))
+        self.assertEqual(audit[0]["lag_hours"], "48.0")
+        self.assertEqual(audit[0]["similarity"], "1.0")
+        self.assertEqual(audit[0]["cluster_size"], "2")
+        self.assertEqual(audit[0]["self_copy"], "0")
+
+
+class NearCopyCommandOptionTests(TestCase):
+    def test_threshold_outside_unit_interval_is_rejected(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("structural_analysis", near_copy_threshold=1.5, stdout=io.StringIO(), stderr=io.StringIO())
+        with self.assertRaises(CommandError):
+            call_command(
+                "structural_analysis",
+                near_copy_min_tokens=2,
+                near_copy_shingle_size=3,
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )

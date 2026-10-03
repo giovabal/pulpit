@@ -114,8 +114,15 @@ DAVID_SCORE_LABEL = "David's score"
 
 
 def _edge_count(data: dict) -> int:
-    """Raw citation events on an edge: forwards + mentions, as build_graph stores them."""
-    return int(round(float(data.get("weight_forwards") or 0) + float(data.get("weight_mentions") or 0)))
+    """Raw citation events on an edge: forwards + mentions (+ near-copies when that option is on),
+    as build_graph stores them."""
+    return int(
+        round(
+            float(data.get("weight_forwards") or 0)
+            + float(data.get("weight_mentions") or 0)
+            + float(data.get("weight_copies") or 0)
+        )
+    )
 
 
 def _node_ref(node_info: dict[str, dict], nid: str) -> dict[str, Any]:

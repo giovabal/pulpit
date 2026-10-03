@@ -99,6 +99,13 @@ STRUCTURAL_DEFAULTS: dict = {
         "weight_strategy": "",
         "include_mentions": False,
         "include_self_references": False,
+        # Near-copies as edges: an original post whose text is near-identical (Jaccard resemblance
+        # of word 3-shingles ≥ near_copy_threshold) to an earlier original post counts as a forward
+        # of the earliest publication. Off by default; the three parameters only matter when on.
+        "near_copy_edges": False,
+        "near_copy_threshold": 0.8,
+        "near_copy_min_tokens": 8,
+        "near_copy_shingle_size": 3,
     },
     "scope": {
         "include_lost": False,

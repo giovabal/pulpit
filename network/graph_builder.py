@@ -5,6 +5,13 @@ from django.conf import settings
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet
 from django.utils import timezone
 
+from network.near_copies import (
+    NEAR_COPY_MIN_TOKENS,
+    NEAR_COPY_SHINGLE_SIZE,
+    NEAR_COPY_THRESHOLD,
+    NearCopy,
+    near_copies_for_channels,
+)
 from network.utils import channel_cutoff_q, environment_channels, make_date_q
 from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
@@ -206,21 +213,25 @@ def _build_edge_list(
     pk_to_str: dict[int, str],
     edge_weight_strategy: str,
     include_self_references: bool = False,
+    copy_counts: dict | None = None,
 ) -> list[list[str | float]]:
     """Compute weighted edge list from raw count dicts.
 
-    Each row: ``[amplifier, cited, weight, weight_forwards, weight_mentions]``,
+    Each row: ``[amplifier, cited, weight, weight_forwards, weight_mentions, weight_copies]``,
     matching the citation orientation the graph is built in (citing → cited).
-    ``weight_forwards`` and ``weight_mentions`` are the raw forward/mention
-    counts (before any normalisation), available for CSV export.
+    ``weight_forwards``, ``weight_mentions`` and ``weight_copies`` are the raw
+    forward / mention / near-copy counts (before any normalisation), available
+    for CSV export. ``copy_counts`` is empty unless near-copy edges are on.
     """
+    copy_counts = copy_counts or {}
     edge_list: list[list[str | float]] = []
-    for amplifier_pk, source_pk in set(forwarded_counts.keys()) | set(reference_counts.keys()):
+    for amplifier_pk, source_pk in set(forwarded_counts) | set(reference_counts) | set(copy_counts):
         if not include_self_references and amplifier_pk == source_pk:
             continue
         f_count = forwarded_counts.get((amplifier_pk, source_pk), 0)
         m_count = reference_counts.get((amplifier_pk, source_pk), 0)
-        total = f_count + m_count
+        c_count = copy_counts.get((amplifier_pk, source_pk), 0)
+        total = f_count + m_count + c_count
         if edge_weight_strategy == "NONE":
             weight = 1.0
         elif edge_weight_strategy == "TOTAL":
@@ -238,7 +249,7 @@ def _build_edge_list(
             # the opposite content-flow orientation (SIR spreading, trophic
             # level) reverse the graph internally.
             edge: list[str | float] = [pk_to_str[amplifier_pk], pk_to_str[source_pk]]
-            edge.extend([weight, float(f_count), float(m_count)])
+            edge.extend([weight, float(f_count), float(m_count), float(c_count)])
             edge_list.append(edge)
     return edge_list
 
@@ -257,11 +268,24 @@ def build_graph(
     include_private: bool = False,
     dead_leaves_color: str | None = None,
     environment_depth: int | None = None,
+    include_near_copies: bool = False,
+    near_copy_threshold: float = NEAR_COPY_THRESHOLD,
+    near_copy_min_tokens: int = NEAR_COPY_MIN_TOKENS,
+    near_copy_shingle_size: int = NEAR_COPY_SHINGLE_SIZE,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
     Returns (graph, channel_dict, edge_list, channel_qs).
     Raises ValueError if no edges are found between channels.
+
+    ``include_near_copies`` (off by default) also reads *near-copies* as citations: an
+    original message whose text is near-identical (Jaccard resemblance of word shingles ≥
+    ``near_copy_threshold``, see :mod:`network.near_copies`) to an earlier original message
+    counts as if its channel had forwarded the earliest publication — an edge copier → origin,
+    the copying message joining the citing-message denominator, every re-post counting once
+    like every forward. A copy whose earliest match is the channel's own post is a self-copy
+    and follows ``include_self_references`` like a self-forward. The detected links are kept
+    on ``graph.graph["near_copies"]`` for the content measures and the audit CSV.
 
     ``environment_depth`` (``None`` / ``0`` = off) admits the *environment*: the
     out-of-target channels ``crawl_channels --environment`` reached within that
@@ -473,6 +497,40 @@ def build_graph(
         .values("channel_id")
         .annotate(total=Count("id"))
     }
+
+    # Near-copies: text re-posted without the forward header, read as a forward of the earliest
+    # publication. Each copying message is one citation event copier → origin and one citing
+    # message for the PARTIAL_REFERENCES denominator — unless it already counts there through a
+    # t.me/ reference it carries (a forwarded message can never be a copy, by construction).
+    near_copies: list[NearCopy] = []
+    copy_counts: dict[tuple[int, int], int] = {}
+    if include_near_copies:
+        near_copies = near_copies_for_channels(
+            channel_ids,
+            cutoff_q=cutoff_q,
+            start_date=start_date,
+            end_date=end_date,
+            threshold=near_copy_threshold,
+            min_tokens=near_copy_min_tokens,
+            shingle_size=near_copy_shingle_size,
+        )
+        already_citing: set[int] = set()
+        if include_mentions:
+            copy_ids = [link.copy_id for link in near_copies]
+            for start in range(0, len(copy_ids), 500):
+                already_citing.update(
+                    references_through.objects.filter(message_id__in=copy_ids[start : start + 500])
+                    .values_list("message_id", flat=True)
+                    .distinct()
+                )
+        for link in near_copies:
+            pair = (link.copy_channel_id, link.origin_channel_id)
+            copy_counts[pair] = copy_counts.get(pair, 0) + 1
+            if link.copy_id not in already_citing:
+                referencing_counts[link.copy_channel_id] = referencing_counts.get(link.copy_channel_id, 0) + 1
+    graph.graph["near_copies"] = near_copies
+    graph.graph["near_copies_enabled"] = bool(include_near_copies)
+
     for entry in channel_dict.values():
         entry["data"]["citing_messages"] = int(referencing_counts.get(entry["channel"].pk, 0))
 
@@ -485,6 +543,7 @@ def build_graph(
         pk_to_str,
         edge_weight_strategy,
         include_self_references=include_self_references,
+        copy_counts=copy_counts,
     )
 
     if not edge_list:
@@ -501,6 +560,7 @@ def build_graph(
             weight_raw=float(edge[2]),
             weight_forwards=edge[3],
             weight_mentions=edge[4],
+            weight_copies=edge[5],
         )
 
     # Remove org-less nodes that ended up with no edges. Two ways they arise:
