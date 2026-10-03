@@ -35,6 +35,7 @@ exports/
     network.graphml         ← GraphML network file (optional)
     nodes.csv               ← CSV node list (optional)
     edges.csv               ← CSV edge list (optional)
+    data/near_copies.csv    ← near-copy audit list (only with --near-copy-edges)
     data/
       channels.json
       channel_position.json
@@ -323,8 +324,9 @@ One row per directed edge in the network:
 | `weight` | Combined edge weight computed by the active `--edge-weight-strategy` |
 | `weight_forwards` | Raw count of message forwards contributing to this edge (before normalisation) |
 | `weight_mentions` | Raw count of `t.me/` reference mentions contributing to this edge (before normalisation) |
+| `weight_copies` | Raw count of near-copies contributing to this edge — posts of the source channel whose text re-posted an earlier post of the target channel without the forward header; always `0` unless `--near-copy-edges` was on (see [Configuration § Near-copies as edges](configuration.md#near-copies-as-edges)) |
 
-`weight_forwards + weight_mentions` equals the raw total from which `weight` is computed (with the exception of the `NONE` strategy, where `weight` is always 1.0 regardless of counts). This lets you re-apply any normalisation or filter to only forwards vs. only mentions.
+`weight_forwards + weight_mentions + weight_copies` equals the raw total from which `weight` is computed (with the exception of the `NONE` strategy, where `weight` is always 1.0 regardless of counts). This lets you re-apply any normalisation or filter to only forwards vs. only mentions vs. only copies — in particular to drop the *inferred* copy citations and keep Telegram's own forward provenance.
 
 **Quick start in Python:**
 
@@ -353,6 +355,22 @@ g <- graph_from_data_frame(edges[, c("source_label", "target_label")],
 E(g)$weight <- edges$weight
 ```
 
+### data/near_copies.csv
+
+Written whenever **Include near-copies as edges** (`--near-copy-edges`) is on, whatever the other outputs — it is the audit trail of the copy citations the graph was built with. One row per detected copy → origin link; on a timeline export each `data_<year>/` carries the year's own list.
+
+| Column | Content |
+| :----- | :------ |
+| `copy_channel`, `copy_channel_id`, `copy_message_id`, `copy_date` | The later post (the one read as a forward) and its channel |
+| `origin_channel`, `origin_channel_id`, `origin_message_id`, `origin_date` | The earliest in-scope post with near-identical text and its channel — the edge target |
+| `lag_hours` | `copy_date − origin_date` in hours (what Diffusion lag receives) |
+| `similarity` | Jaccard resemblance of the two posts' word-shingle sets (≥ the threshold by construction) |
+| `copy_tokens`, `origin_tokens` | Normalised word counts of the two posts |
+| `cluster_size` | Number of in-scope posts near-identical to this one, transitively — a text shared by ten channels is more likely a common quotation or meme than a copy of one specific post |
+| `self_copy` | `1` when the origin is the copier's own earlier post (an archive re-post; it enters the graph only with *Include self-references*), else `0` |
+
+A match proves the same text appeared earlier in another in-scope channel, not who copied whom; read this file before interpreting a copy edge.
+
 ---
 
 ## network.gexf / network.graphml — network exchange formats
@@ -365,7 +383,7 @@ Both files include all node attributes (channel name, organization, subscriber c
 
 ## summary.json / meta.json — machine-readable metadata
 
-`summary.json` records the name, creation timestamp, node and edge counts, and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology.
+`summary.json` records the name, creation timestamp, node and edge counts (plus `near_copies`, the number of copy → origin links the graph was built with, `null` when that option was off), and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology.
 
 `meta.json` records export date, project title, edge direction description, edge weight strategy, date range, total node/edge counts, and configuration flags.
 

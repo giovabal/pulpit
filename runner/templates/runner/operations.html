@@ -578,6 +578,22 @@
                      title="Count cases where a channel forwards from or mentions itself as self-loop edges. Off by default — self-loops add no network information and have no effect on most centrality measures."></i>
                 </label>
               </div>
+              <div class="ops-flags" style="margin-top:.5rem">
+                <label class="ops-flag">
+                  <input type="checkbox" name="near_copy_edges" {% if ad.SA_NEAR_COPY_EDGES %}checked{% endif %}>Include near-copies as edges
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Also read a post whose text is near-identical to an earlier original post of another channel as a forward of that earliest publication (Jaccard similarity of word 3-shingles at or above the threshold below — Broder 1997): an edge from the copier to the origin, one citation event per re-post, counted by Amplification, Content originality and Diffusion lag too. Forwards are never copies; a copy of the channel's own earlier post follows Include self-references. Off (default): nothing changes. Every detected link is listed in data/near_copies.csv — a match shows the same text appeared earlier elsewhere in scope, not who copied whom."></i>
+                </label>
+              </div>
+              <div class="ops-params" style="margin-top:.5rem">
+                <div class="ops-param">
+                  <label for="near_copy_threshold">Near-copy similarity ≥
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Minimum Jaccard resemblance of two posts' word 3-shingle sets (links, handles, punctuation and emoji removed; posts under 8 words ignored; a channel's recurring header or signature lines discounted) for the later post to count as a copy of the earlier one. 1 = verbatim; 0.8 (default) = verbatim text with a prefix or suffix added; below 0.8 the same organisation's announcement templates with a city swapped start to match. Only used when near-copies are on."></i>
+                  </label>
+                  <input type="number" name="near_copy_threshold" id="near_copy_threshold" placeholder="{{ ad.SA_NEAR_COPY_THRESHOLD }}" value="{{ ad.SA_NEAR_COPY_THRESHOLD }}" min="0.01" max="1" step="0.01" data-width="sm">
+                </div>
+              </div>
             </fieldset>
           </div>
 
@@ -2115,6 +2131,8 @@ function showToast(msg, type) {
         if (opts.edge_weight_strategy) setRadio('edge_weight_strategy', opts.edge_weight_strategy);
         if (opts.include_mentions !== undefined) setCheck('include_mentions', opts.include_mentions);
         if (opts.include_self_references !== undefined) setCheck('include_self_references', opts.include_self_references);
+        if (opts.near_copy_edges !== undefined) setCheck('near_copy_edges', opts.near_copy_edges);
+        setVal('near_copy_threshold', opts.near_copy_threshold != null ? opts.near_copy_threshold : '');
 
         // Vacancy analysis
         setMulti('vacancy_measures',       opts.vacancy_measures || '');

@@ -358,8 +358,9 @@ def write_csv(
 
     nodes.csv mirrors channel_table.xlsx. A role measure requested with several community bases
     contributes one companion column group per instance, each carrying its parameter annotation.
-    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions
-    where weight_forwards and weight_mentions are the raw forward/mention counts.
+    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies
+    where the last three are the raw forward / mention / near-copy counts (weight_copies is 0 unless
+    near-copy edges were on).
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -415,14 +416,70 @@ def write_csv(
 
     with open(os.path.join(output_dir, "edges.csv"), "w", newline="", encoding="utf-8") as fh:
         writer = _csv.writer(fh)
-        writer.writerow(["source_label", "target_label", "weight", "weight_forwards", "weight_mentions"])
+        writer.writerow(
+            ["source_label", "target_label", "weight", "weight_forwards", "weight_mentions", "weight_copies"]
+        )
         for edge in edge_list:
             source_label = label_by_id.get(str(edge[0]), str(edge[0]))
             target_label = label_by_id.get(str(edge[1]), str(edge[1]))
             weight = edge[2]
             weight_forwards = edge[3]
             weight_mentions = edge[4]
-            writer.writerow([source_label, target_label, weight, weight_forwards, weight_mentions])
+            weight_copies = edge[5] if len(edge) > 5 else 0.0
+            writer.writerow([source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies])
+
+
+NEAR_COPIES_CSV = "near_copies.csv"
+_NEAR_COPY_COLUMNS = (
+    "copy_channel",
+    "copy_channel_id",
+    "copy_message_id",
+    "copy_date",
+    "origin_channel",
+    "origin_channel_id",
+    "origin_message_id",
+    "origin_date",
+    "lag_hours",
+    "similarity",
+    "copy_tokens",
+    "origin_tokens",
+    "cluster_size",
+    "self_copy",
+)
+
+
+def write_near_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: str) -> str:
+    """Write the near-copy audit list (``data/near_copies.csv``): one row per copy → origin link
+    ``build_graph`` detected, with its similarity, publication lag and text-cluster size, so an
+    analyst can check what counted as a copy. Written whenever near-copy edges are on (self-copies
+    included and flagged, whether or not self-references entered the graph). Returns the path.
+    """
+    label_by_pk = {str(node["id"]): node.get("label") or str(node["id"]) for node in graph_data["nodes"]}
+    os.makedirs(data_dir, exist_ok=True)
+    path = os.path.join(data_dir, NEAR_COPIES_CSV)
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(_NEAR_COPY_COLUMNS)
+        for link in graph.graph.get("near_copies") or []:
+            writer.writerow(
+                [
+                    label_by_pk.get(str(link.copy_channel_id), str(link.copy_channel_id)),
+                    link.copy_channel_id,
+                    link.copy_id,
+                    link.copy_date.isoformat(timespec="seconds"),
+                    label_by_pk.get(str(link.origin_channel_id), str(link.origin_channel_id)),
+                    link.origin_channel_id,
+                    link.origin_id,
+                    link.origin_date.isoformat(timespec="seconds"),
+                    round(link.lag_hours, 2),
+                    link.similarity,
+                    link.copy_tokens,
+                    link.origin_tokens,
+                    link.cluster_size,
+                    int(link.is_self_copy),
+                ]
+            )
+    return path
 
 
 def write_robots_txt(root_target: str, seo: bool) -> None:
@@ -642,8 +699,12 @@ def write_summary_json(
     options: dict,
     nodes: int,
     edges: int,
+    near_copies: int | None = None,
 ) -> None:
-    """Write summary.json at the export root with name, timestamp, result counts, and all CLI options."""
+    """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
+
+    ``near_copies`` — number of copy → origin links the graph was built with (``None`` = option off).
+    """
     _OPTION_KEYS = (
         "graph",
         "graph_3d",
@@ -675,6 +736,10 @@ def write_summary_json(
         "edge_weight_strategy",
         "include_mentions",
         "include_self_references",
+        "near_copy_edges",
+        "near_copy_threshold",
+        "near_copy_min_tokens",
+        "near_copy_shingle_size",
         "channel_types",
         "channel_sources",
         "filter_labels",
@@ -718,6 +783,7 @@ def write_summary_json(
         "pulpit_version": getattr(settings, "APP_VERSION", ""),
         "nodes": nodes,
         "edges": edges,
+        "near_copies": near_copies,
         "options": opts,
     }
     os.makedirs(graph_dir, exist_ok=True)

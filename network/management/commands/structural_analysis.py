@@ -29,6 +29,7 @@ from network import (
     vacancy_analysis,
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
+from network.near_copies import NEAR_COPY_MIN_TOKENS, NEAR_COPY_SHINGLE_SIZE, NEAR_COPY_THRESHOLD
 from network.robustness.disparity_filter import disparity_filter
 from network.tokens import split_tokens
 from network.utils import GraphData
@@ -347,6 +348,12 @@ class ResolvedOptions:
     # many citation hops as full participants (None = in-target channels only).
     environment_depth: int | None
     edge_weight_strategy: str
+    # Near-copies as edges (off by default): an original post whose text is near-identical to an
+    # earlier original post counts as a forward of the earliest publication (network.near_copies).
+    include_near_copies: bool
+    near_copy_threshold: float
+    near_copy_min_tokens: int
+    near_copy_shingle_size: int
 
     # Communities and measures
     communities_strategy: list["community.StrategyInstance"]
@@ -435,6 +442,10 @@ class ResolvedOptions:
             "community_palette_reversed": self.community_palette_reversed,
             "include_mentions": self.include_mentions,
             "include_self_references": self.include_self_references,
+            "near_copy_edges": self.include_near_copies,
+            "near_copy_threshold": self.near_copy_threshold,
+            "near_copy_min_tokens": self.near_copy_min_tokens,
+            "near_copy_shingle_size": self.near_copy_shingle_size,
             "include_lost": self.include_lost,
             "include_private": self.include_private,
             "environment_depth": self.environment_depth,
@@ -690,6 +701,55 @@ class Command(BaseCommand):
                 "PARTIAL_REFERENCES = count / forwarded-or-citing messages. "
                 "Defaults to the [edges].weight_strategy entry in "
                 "configuration/.operations-structural, else PARTIAL_REFERENCES."
+            ),
+        )
+        parser.add_argument(
+            "--near-copy-edges",
+            dest="near_copy_edges",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Also read near-copies as citations (default: off): an original post whose text is "
+                "near-identical to an earlier original post of another channel — Jaccard resemblance of "
+                "word shingles at or above --near-copy-threshold (Broder 1997) — counts as a forward of "
+                "the earliest publication: an edge copier → origin, one citation event per re-post, also "
+                "counted by AMPLIFICATION, CONTENTORIGINALITY and DIFFUSIONLAG. Forwarded messages are never "
+                "copies; a copy of the channel's own earlier post follows --self-references. The detected "
+                "links are written to data/near_copies.csv."
+            ),
+        )
+        parser.add_argument(
+            "--near-copy-threshold",
+            dest="near_copy_threshold",
+            type=float,
+            default=None,
+            metavar="JACCARD",
+            help=(
+                "Minimum Jaccard resemblance of two posts' word-shingle sets for the later one to count as a "
+                "near-copy (0 < value ≤ 1; 1 = verbatim). Defaults to [edges].near_copy_threshold in "
+                f"configuration/.operations-structural, else {NEAR_COPY_THRESHOLD}."
+            ),
+        )
+        parser.add_argument(
+            "--near-copy-min-tokens",
+            dest="near_copy_min_tokens",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Posts with fewer normalised word tokens (links, handles and punctuation removed) are ignored "
+                f"by the near-copy search. Defaults to [edges].near_copy_min_tokens, else {NEAR_COPY_MIN_TOKENS}."
+            ),
+        )
+        parser.add_argument(
+            "--near-copy-shingle-size",
+            dest="near_copy_shingle_size",
+            type=int,
+            default=None,
+            metavar="W",
+            help=(
+                "Word-shingle length the near-copy resemblance is computed over. Defaults to "
+                f"[edges].near_copy_shingle_size, else {NEAR_COPY_SHINGLE_SIZE}."
             ),
         )
         parser.add_argument(
@@ -1228,6 +1288,33 @@ class Command(BaseCommand):
             return deepest
         return raw
 
+    @staticmethod
+    def _resolve_near_copy_params(options: dict) -> tuple[float, int, int]:
+        """Resolve and validate ``--near-copy-threshold`` / ``-min-tokens`` / ``-shingle-size``
+        (CLI value, else the ``[edges]`` config entry, else the module default)."""
+
+        def _pick(key: str, setting: str, fallback: Any) -> Any:
+            value = options.get(key)
+            if value is None:
+                value = getattr(settings, setting, None)
+            return fallback if value is None or value == "" else value
+
+        try:
+            threshold = float(_pick("near_copy_threshold", "SA_NEAR_COPY_THRESHOLD", NEAR_COPY_THRESHOLD))
+            min_tokens = int(_pick("near_copy_min_tokens", "SA_NEAR_COPY_MIN_TOKENS", NEAR_COPY_MIN_TOKENS))
+            shingle_size = int(_pick("near_copy_shingle_size", "SA_NEAR_COPY_SHINGLE_SIZE", NEAR_COPY_SHINGLE_SIZE))
+        except (TypeError, ValueError) as exc:
+            raise CommandError(f"Invalid near-copy parameter: {exc}") from exc
+        if not 0 < threshold <= 1:
+            raise CommandError(f"--near-copy-threshold must be in (0, 1], got {threshold}.")
+        if shingle_size < 1:
+            raise CommandError(f"--near-copy-shingle-size must be at least 1, got {shingle_size}.")
+        if min_tokens < shingle_size:
+            raise CommandError(
+                f"--near-copy-min-tokens ({min_tokens}) must be at least the shingle size ({shingle_size})."
+            )
+        return threshold, min_tokens, shingle_size
+
     def _validate_settings(
         self,
         communities_strategy: list[str],
@@ -1704,6 +1791,10 @@ class Command(BaseCommand):
                     include_lost=opts.include_lost,
                     include_private=opts.include_private,
                     environment_depth=opts.environment_depth,
+                    include_near_copies=opts.include_near_copies,
+                    near_copy_threshold=opts.near_copy_threshold,
+                    near_copy_min_tokens=opts.near_copy_min_tokens,
+                    near_copy_shingle_size=opts.near_copy_shingle_size,
                 )
             except ValueError:
                 continue  # year without relationships — no slice, matching the year loop's skip
@@ -1767,6 +1858,10 @@ class Command(BaseCommand):
                     include_lost=opts.include_lost,
                     include_private=opts.include_private,
                     environment_depth=opts.environment_depth,
+                    include_near_copies=opts.include_near_copies,
+                    near_copy_threshold=opts.near_copy_threshold,
+                    near_copy_min_tokens=opts.near_copy_min_tokens,
+                    near_copy_shingle_size=opts.near_copy_shingle_size,
                 )
             except ValueError:
                 continue
@@ -1860,6 +1955,10 @@ class Command(BaseCommand):
                 include_lost=options["include_lost"],
                 include_private=options["include_private"],
                 environment_depth=options.get("environment_depth"),
+                include_near_copies=bool(options.get("near_copy_edges")),
+                near_copy_threshold=options.get("near_copy_threshold") or NEAR_COPY_THRESHOLD,
+                near_copy_min_tokens=options.get("near_copy_min_tokens") or NEAR_COPY_MIN_TOKENS,
+                near_copy_shingle_size=options.get("near_copy_shingle_size") or NEAR_COPY_SHINGLE_SIZE,
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -2006,6 +2105,8 @@ class Command(BaseCommand):
                 )
                 exporter.write_interest_structural_json(year_int_payload, graph_dir=tmp_dir)
 
+            if options.get("near_copy_edges"):
+                exporter.write_near_copies_csv(graph, graph_data, os.path.join(tmp_dir, "data"))
             year_data_dst = os.path.join(root_target, f"data_{year}")
             if os.path.exists(year_data_dst):
                 shutil.rmtree(year_data_dst)
@@ -2167,6 +2268,10 @@ class Command(BaseCommand):
         # value would otherwise reach build_graph and silently zero every edge weight
         # (the PARTIAL_REFERENCES branch only fills referencing_counts for the exact token).
         edge_weight_strategy: str = _o("edge_weight_strategy", settings.SA_EDGE_WEIGHT_STRATEGY) or "PARTIAL_REFERENCES"
+        # Near-copy edges: the toggle follows the factory-empty rule (a bare CLI run adds nothing), the
+        # three parameters fall back to the config file so a hand-tuned threshold is honoured.
+        include_near_copies = bool(_o("near_copy_edges", False))
+        near_copy_threshold, near_copy_min_tokens, near_copy_shingle_size = self._resolve_near_copy_params(options)
         _raw_vacancy = _o("vacancy_measures", "")
         raw_vacancy_measures = _parse_csv(_raw_vacancy) if _raw_vacancy else []
         selected_vacancy_measures = (
@@ -2336,6 +2441,10 @@ class Command(BaseCommand):
             community_palette_reversed=community_palette_reversed,
             include_mentions=_o("include_mentions", False),
             include_self_references=_o("include_self_references", False),
+            include_near_copies=include_near_copies,
+            near_copy_threshold=near_copy_threshold,
+            near_copy_min_tokens=near_copy_min_tokens,
+            near_copy_shingle_size=near_copy_shingle_size,
             include_lost=_o("include_lost", False),
             include_private=_o("include_private", False),
             channel_types=channel_types,
@@ -2436,10 +2545,21 @@ class Command(BaseCommand):
                 include_lost=opts.include_lost,
                 include_private=opts.include_private,
                 environment_depth=opts.environment_depth,
+                include_near_copies=opts.include_near_copies,
+                near_copy_threshold=opts.near_copy_threshold,
+                near_copy_min_tokens=opts.near_copy_min_tokens,
+                near_copy_shingle_size=opts.near_copy_shingle_size,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
         self.stdout.write(f"{len(graph.nodes)} nodes, {len(graph.edges)} edges")
+        if opts.include_near_copies:
+            links = graph.graph.get("near_copies") or []
+            cross = sum(1 for link in links if not link.is_self_copy)
+            self.stdout.write(
+                f"- near-copies read as citations: {cross} cross-channel, {len(links) - cross} self "
+                f"(Jaccard ≥ {opts.near_copy_threshold:g}, ≥ {opts.near_copy_min_tokens} tokens)"
+            )
         self.stdout.flush()
 
         # LEIDEN_TEMPORAL is precomputed over every timeline year at once (its whole point is
@@ -3090,7 +3210,18 @@ class Command(BaseCommand):
             include_dominance_xlsx=opts.do_dominance and opts.do_xlsx,
         )
 
-        exporter.write_summary_json(root_target, opts.export_name or None, options, len(graph.nodes), len(graph.edges))
+        near_copy_count: int | None = None
+        if opts.include_near_copies:
+            near_copy_count = len(graph.graph.get("near_copies") or [])
+            exporter.write_near_copies_csv(graph, graph_data, os.path.join(root_target, "data"))
+        exporter.write_summary_json(
+            root_target,
+            opts.export_name or None,
+            options,
+            len(graph.nodes),
+            len(graph.edges),
+            near_copies=near_copy_count,
+        )
 
         _atomic_publish(root_target, _final_target)
         self.stdout.write(self.style.SUCCESS("\nDone."))
