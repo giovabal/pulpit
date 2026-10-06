@@ -24,6 +24,9 @@ tagger) to avoid N+1 queries — webapp.views._MESSAGE_LIST_PREFETCH carries the
 full set. A message's tag_links include the tags put on its original or on any
 other share of the same post (webapp.models.tag_models).
 
+Pictures link to their full-size file; pages that load webapp/js/post_lightbox.js
+open them in an overlay that steps through the post's pictures.
+
 Message tags (chips + the tag editor panel) render only for CAN_VIEW_TAGS /
 CAN_EDIT_TAGS (webapp.context_processors); the page must load
 webapp/js/post_tags.js for the editor. post_tags.js rebuilds the chip row with
@@ -73,7 +76,11 @@ sharing the same (channel_id, grouped_id).
   {% for picture in pictures %}
   {% if picture.picture %}
   <figure class="mb-0">
-    <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ post.channel.title }}">
+    {# Links to the stored file (the largest size Telegram keeps); post_lightbox.js opens it in an overlay with the post's other pictures. #}
+    <a href="{{ picture.picture.url }}" class="post-image-link" data-lightbox="post-{{ post.pk }}">
+      <img src="{{ picture.picture.url }}" class="post-image" alt="Message image from {{ post.channel.title }}">
+      <span class="visually-hidden"> — view full size</span>
+    </a>
   </figure>
   {% endif %}
   {% endfor %}
