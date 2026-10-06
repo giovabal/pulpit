@@ -2534,3 +2534,34 @@ class MessageTagPropagationTests(TestCase):
         # The post already carried the target; only other_post's single message is gained.
         self.assertEqual(self.tag.merge_into(target), 1)
         self.assertEqual(MessageTagging.objects.get(tag=target, origin_post_tid=5).note, "kept note")
+
+
+class PictureLightboxTests(TestCase):
+    """Pictures link to their full-size file, grouped per post for the viewer's arrows."""
+
+    def setUp(self) -> None:
+        import tempfile
+
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(media.cleanup)
+        override = override_settings(MEDIA_ROOT=media.name)
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def test_album_pictures_link_to_their_files_in_one_group(self) -> None:
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        channel = make_channel(telegram_id=1, title="c", label=make_label("Org"))
+        urls = []
+        for i in range(2):
+            msg = Message.objects.create(telegram_id=10 + i, channel=channel, grouped_id=5, media_type="photo")
+            pic = MessagePicture.objects.create(message=msg, telegram_id=900 + i)
+            pic.picture.save(f"p{i}.jpg", ContentFile(b"jpeg-bytes"), save=True)
+            urls.append(pic.picture.url)
+        head = Message.objects.get(telegram_id=10)
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": channel.pk})).content.decode()
+        for url in urls:
+            self.assertIn(f'<a href="{url}" class="post-image-link" data-lightbox="post-{head.pk}">', html)
+        self.assertIn("webapp/js/post_lightbox.js", html)

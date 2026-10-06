@@ -667,6 +667,16 @@ body {
   display: block;
 }
 
+.post-image-link {
+  display: block;
+  cursor: zoom-in;
+}
+
+.post-image-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .media-placeholder {
   display: flex;
   flex-direction: column;
@@ -2396,4 +2406,138 @@ a.post-tag.is-dark:hover {
 
 .post-tags-status.is-error {
   color: var(--danger);
+}
+
+/* ---------- Picture viewer (post_lightbox.js) ---------- */
+/* Always dark, whatever the theme: pictures read best on a dim surround. */
+html.lightbox-open {
+  overflow: hidden;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(10, 10, 12, .92);
+  color: #f5f5f4;
+}
+
+.lightbox-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3.5rem 4.5rem;
+  overflow: auto;
+}
+
+.lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .6);
+  transition: opacity .15s;
+}
+
+.lightbox.is-loading .lightbox-img {
+  opacity: .35;
+}
+
+.lightbox.is-zoomable .lightbox-img {
+  cursor: zoom-in;
+}
+
+/* 1:1 pixels: the stage scrolls; block layout so a picture larger than the
+   screen can be scrolled to its top-left corner (flex centring would clip it). */
+.lightbox.is-zoomed .lightbox-stage {
+  display: block;
+  padding: 0;
+}
+
+.lightbox.is-zoomed .lightbox-img {
+  display: block;
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  cursor: zoom-out;
+}
+
+.lightbox-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(0, 0, 0, .5);
+  color: #fff;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+
+.lightbox-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .18);
+}
+
+.lightbox-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.lightbox-btn:disabled {
+  opacity: .3;
+  cursor: default;
+}
+
+.lightbox-close {
+  top: .75rem;
+  right: .75rem;
+}
+
+.lightbox-prev,
+.lightbox-next {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.lightbox-prev {
+  left: .75rem;
+}
+
+.lightbox-next {
+  right: .75rem;
+}
+
+.lightbox-bar {
+  position: absolute;
+  left: 50%;
+  bottom: .75rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .3rem .9rem;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, .6);
+  font-family: var(--font-mono);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+
+.lightbox-bar a {
+  color: #fff;
+}
+
+.lightbox-count:empty,
+.lightbox-size:empty {
+  display: none;
+}
+
+@media (max-width: 576px) {
+  .lightbox-stage {
+    padding: 3.5rem .5rem;
+  }
 }
