@@ -13,10 +13,15 @@ from webapp.models import (
     Label,
     LabelGroup,
     LabelParent,
+    Message,
+    MessageTag,
+    MessageTagging,
     ProfilePicture,
     Project,
     SearchTerm,
+    TaggedMessage,
 )
+from webapp.models.tag_models import message_origin, next_tag_color, with_message_counts
 
 from .serializers import (
     ChannelLabelSerializer,
@@ -28,6 +33,8 @@ from .serializers import (
     LabelGroupSerializer,
     LabelParentSerializer,
     LabelSerializer,
+    MessageTaggingSerializer,
+    MessageTagSerializer,
     ProjectSerializer,
     SearchTermSerializer,
     UserSerializer,
@@ -410,6 +417,97 @@ class EventViewSet(viewsets.ModelViewSet):
                 raise ValidationError({"year": "must be a 4-digit year"})
             qs = qs.filter(date__year=int(year))
         return qs
+
+
+class MessageTagViewSet(viewsets.ModelViewSet):
+    serializer_class = MessageTagSerializer
+
+    def get_queryset(self):
+        return with_message_counts(MessageTag.objects.all()).order_by("key")
+
+    @action(detail=False, methods=["get"], url_path="next-color")
+    def next_color(self, request):
+        """The colour a new tag gets when none is given (first unused palette colour)."""
+        return Response({"color": next_tag_color()})
+
+    @action(detail=True, methods=["post"])
+    def merge(self, request, pk=None):
+        """Fold this tag into ``{"into": <tag id>}``: its messages move there, then it is deleted."""
+        source = self.get_object()
+        into = request.data.get("into")
+        if isinstance(into, bool) or not isinstance(into, int | str) or not str(into).isdigit():
+            raise ValidationError({"into": "must be a tag id"})
+        target = MessageTag.objects.filter(pk=int(into)).first()
+        if target is None:
+            raise ValidationError({"into": "No such tag."})
+        if target.pk == source.pk:
+            raise ValidationError({"into": "Cannot merge a tag into itself."})
+        moved = source.merge_into(target)
+        target = self.get_queryset().get(pk=target.pk)
+        return Response({"moved": moved, "tag": self.get_serializer(target).data})
+
+
+class MessageTaggingViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = MessageTaggingSerializer
+
+    def get_queryset(self):
+        qs = (
+            MessageTagging.objects.select_related("tag", "tagged_by")
+            .annotate(member_count=Count("members", distinct=True))
+            .order_by("tag__key")
+        )
+        message_id = self._int_param("message")
+        if message_id is not None:
+            # The post's tags: those linked to this message, plus any put on its
+            # original or another share since the last sync (crawl-end) linked it.
+            message = Message.objects.select_related("channel", "forwarded_from").filter(pk=message_id).first()
+            if message is None:
+                return qs.none()
+            channel_tid, post_tid = message_origin(message)
+            linked = TaggedMessage.objects.filter(message_id=message_id).values("tagging_id")
+            qs = qs.filter(Q(pk__in=linked) | Q(origin_channel_tid=channel_tid, origin_post_tid=post_tid))
+        tag_id = self._int_param("tag")
+        if tag_id is not None:
+            qs = qs.filter(tag_id=tag_id)
+        return qs
+
+    def _int_param(self, name):
+        value = self.request.query_params.get(name, "").strip()
+        if not value:
+            return None
+        if not value.isdigit():
+            raise ValidationError({name: "must be an integer"})
+        return int(value)
+
+    @action(detail=False, methods=["get"], url_path="for-messages")
+    def for_messages(self, request):
+        """``{message id: [tagging, …]}`` for ``?ids=1,2,3`` — refreshes a page's chips in one call."""
+        raw = [part.strip() for part in request.query_params.get("ids", "").split(",") if part.strip()]
+        if not all(part.isdigit() for part in raw):
+            raise ValidationError({"ids": "must be comma-separated integers"})
+        ids = sorted({int(part) for part in raw})
+        if len(ids) > 500:
+            raise ValidationError({"ids": "at most 500 messages"})
+        links = list(
+            TaggedMessage.objects.filter(message_id__in=ids).select_related("tagging__tag", "tagging__tagged_by")
+        )
+        counts = dict(
+            TaggedMessage.objects.filter(tagging_id__in={link.tagging_id for link in links})
+            .values("tagging_id")
+            .annotate(n=Count("id"))
+            .values_list("tagging_id", "n")
+        )
+        out = {str(i): [] for i in ids}
+        for link in links:
+            link.tagging.member_count = counts.get(link.tagging_id, 0)
+            out[str(link.message_id)].append(self.get_serializer(link.tagging).data)
+        return Response(out)
 
 
 class UserViewSet(viewsets.ModelViewSet):

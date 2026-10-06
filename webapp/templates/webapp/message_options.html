@@ -81,6 +81,28 @@
         </label>
       </div>
 
+      {% if CAN_VIEW_TAGS and all_tags %}
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
+        <div class="msg-options-label">Tags <span class="msg-options-hint">any of</span></div>
+        <div class="msg-options-tags">
+          <label class="msg-options-item">
+            <input type="checkbox" name="tag" value="any" class="msg-opt-input"
+                   {% if any_tag %}checked{% endif %}> Any tag
+          </label>
+          {% for tag in all_tags %}
+          <label class="msg-options-item">
+            <input type="checkbox" name="tag" value="{{ tag.pk }}" class="msg-opt-input"
+                   {% if tag.pk in selected_tag_ids %}checked{% endif %}>
+            <span class="tag-swatch" style="background: {{ tag.color }};" aria-hidden="true"></span>
+            {{ tag.name }} <span class="msg-options-count">{{ tag.message_count }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <div class="msg-options-divider"></div>
 
       <div class="msg-options-section">

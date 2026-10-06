@@ -81,6 +81,19 @@ See [Vacancy analysis](vacancy-analysis.md) for the full documentation.
 
 ---
 
+## Message tags
+
+Tags are informal, colour-coded bookmarks for posts, kept so you can find them again. They are separate from [labels](#labels--managelabels): a tag has no group, no period and no in-target meaning, and it never affects crawls or exports.
+
+- **Tagging** — the tag button in a post card's footer opens a small editor. Type a tag name (existing tags are suggested as you type; a new name creates the tag, with the next free palette colour) and an optional note, then **Add**. Each tag on the message has its own editable note and a remove button. The set of tags is shared by the whole team, and each tagging records who added it and when.
+- **A tag goes on the whole post** — tagging a message also tags every share of it, and tagging a share also tags its original and every other share. A share is a forward: Telegram's forward header names the first publication even when a share is re-shared, so all shares lead back to the same original, which doesn't need to be crawled itself. Shares of a post from a private channel the crawler couldn't resolve are linked too. A forward that carries no original post id is a post of its own. Shares crawled after the tagging get the tag at the end of the next crawl. The note belongs to the post, and removing the tag from any of its messages removes it from all of them. The editor says how many messages a tag reached, and adding a tag the post already carries through its original or a share is refused.
+- **Chips** — a message's tags appear as coloured chips under its text. Hovering a chip shows its note and who added it; clicking it lists every message carrying that tag.
+- **Finding tagged messages** — every message list (home, search, top messages, both channel-page tabs) has a **Tags** section in its *Options* menu: tick one or more tags to keep the messages carrying *any* of them, or tick *Any tag* for every tagged message. In a search box, `tag:name` (or `tag:"two words"`) keeps only messages carrying that tag; each such token narrows further, and the rest of the box is searched as text: `tag:drones recruitment`. Matching ignores case. On the search page, a tag filter also reaches messages outside the in-target scope, such as one tagged on a `to_inspect` channel.
+- **Who sees what** — anyone may see and edit tags under `WEB_ACCESS=ALL`. Under `OPEN` and `PROTECTED`, logged-in users see them and staff edit them; anonymous visitors of an `OPEN` deployment see neither the chips nor the filter.
+- **Kept on purge** — `purge_out_of_target_messages` never deletes a tagged message (the original or any share), or the other messages of its album.
+
+---
+
 ## Exports browser — `/operations/exports/`
 
 The export browser. Shows all completed exports ordered by date. For each export:
@@ -156,6 +169,10 @@ Create and edit label groups and their labels. Labels live in *groups* (a *parti
 - **In target** — when checked, a channel's periods under this label are included in crawls and exports (`is_in_target`)
 
 A group can additionally be flagged as a **container**: its labels are purely structural — they can never be assigned to channels (the channel editors hide them and the API rejects them; a group with channel-linked labels can't become a container) and instead act as parents for labels of *other* groups — e.g. a "Continents" container whose Europe / Africa / Asia / Americas / Oceania labels collect the labels of a "Nation" group. The container's card swaps the In target / Channels columns for a **Children** column and an assignment palette: pick the source group in the dropdown, then drag each of its labels onto the right row (or click a label chip and choose from the list). Within one container a label has a single parent — dropping an already-assigned label on another row moves it; dragging a chip back to the palette (or its ×) unassigns it. A label may sit under several *different* containers at once (France under both "Continents: Europe" and "Unions: EU"). Container labels drive the home page's [scope selector](#home-page--): selecting one scopes the dashboard to the channels of its child labels.
+
+### Tags — `/manage/tags/`
+
+The shared list of [message tags](#message-tags) with the number of messages carrying each one (the count links to them). Add a tag ahead of use, rename it, change its colour or description, or delete it, which removes it from all its messages. **Merge** moves a tag's posts onto another tag and deletes the first — use it when near-duplicates like `ukraine` and `Ukraine war` pile up. A post that already carries the target keeps the target's note, or takes the merged tag's note if the target's was empty. The message counts include every share of a tagged post.
 
 ### Sources — `/manage/sources/`
 

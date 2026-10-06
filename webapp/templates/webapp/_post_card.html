@@ -19,7 +19,15 @@ Optional context:
 
 Views including this partial should prefetch_related("messagepicture_set",
 "messagevideo_set", "messageaudio_set", "messagesticker_set",
-"messageothermedia_set", "reactions") to avoid N+1 queries.
+"messageothermedia_set", "reactions", "tag_links" with their tagging, tag and
+tagger) to avoid N+1 queries — webapp.views._MESSAGE_LIST_PREFETCH carries the
+full set. A message's tag_links include the tags put on its original or on any
+other share of the same post (webapp.models.tag_models).
+
+Message tags (chips + the tag editor panel) render only for CAN_VIEW_TAGS /
+CAN_EDIT_TAGS (webapp.context_processors); the page must load
+webapp/js/post_tags.js for the editor. post_tags.js rebuilds the chip row with
+the same markup after each edit — keep the two in step.
 
 Telegram media-group albums (multiple photos/videos posted together) are
 collapsed by `_exclude_album_tails` in webapp/views.py so only the head of
@@ -142,6 +150,17 @@ sharing the same (channel_id, grouped_id).
     <i class="bi bi-pen" aria-hidden="true"></i> {{ post.post_author }}
   </div>
   {% endif %}
+  {% if CAN_VIEW_TAGS %}
+  {% with links=post.tag_links.all %}
+  <div class="post-tags" id="pt-{{ post.pk }}" data-search-url="{% url 'message-search' %}"{% if not links %} hidden{% endif %}>
+    {% for link in links %}{% with tagging=link.tagging %}
+    <a class="post-tag{% if tagging.tag.is_color_dark %} is-dark{% endif %}" style="--tag-color: {{ tagging.tag.color }};"
+       href="{% url 'message-search' %}?tag={{ tagging.tag.pk }}"
+       title="{% if tagging.note %}{{ tagging.note }} — {% endif %}tagged{% if tagging.tagged_by %} by {{ tagging.tagged_by.username }}{% endif %} on {{ tagging.tagged_at|date:'Y-m-d' }}">{% if tagging.note %}<i class="bi bi-sticky" aria-hidden="true"></i>{% endif %}{{ tagging.tag.name }}</a>
+    {% endwith %}{% endfor %}
+  </div>
+  {% endwith %}
+  {% endif %}
   <footer class="post-footer">
     <div class="post-meta">
       <span class="post-meta-item" data-bs-toggle="tooltip" title="Views"><i class="bi bi-eye" aria-hidden="true"></i> {{ post.views|default:"0" }}</span>
@@ -154,6 +173,16 @@ sharing the same (channel_id, grouped_id).
       {% endfor %}
     </div>
     <div class="post-footer-actions">
+      {% if CAN_EDIT_TAGS %}
+      <button type="button" class="post-tags-btn"
+              data-post-pk="{{ post.pk }}"
+              aria-expanded="false"
+              aria-controls="ptp-{{ post.pk }}"
+              title="Tags">
+        <i class="bi bi-tag" aria-hidden="true"></i>
+        <span class="visually-hidden">Edit tags</span>
+      </button>
+      {% endif %}
       {% if post.replies %}
       <button type="button" class="post-replies-btn"
               data-replies-url="{% url 'message-replies' channel_pk=post.channel.pk telegram_id=post.telegram_id %}"
@@ -177,6 +206,9 @@ sharing the same (channel_id, grouped_id).
   <div class="post-replies-panel" id="pr-{{ post.pk }}" style="display:none">
     <div class="post-replies-inner"></div>
   </div>
+  {% if CAN_EDIT_TAGS %}
+  <div class="post-tags-panel" id="ptp-{{ post.pk }}" hidden></div>
+  {% endif %}
   <div class="collapse post-details-panel" id="pd-{{ post.pk }}">
     <dl class="post-details-dl">
       {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}

@@ -15,6 +15,11 @@ A message survives the purge iff its channel is either:
   Channel row itself stays in the database (it's used as a dead-leaf node in
   structural analysis); we just don't keep any messages crawled from it.
 
+Whatever its channel, a message carrying a message tag (``TaggedMessage`` — the
+tagged post or any share of it) is never purged, together with the other
+messages of its Telegram album: tagging is the analyst's declaration that this
+post matters.
+
 The command also deletes the underlying media files from disk so the operation
 actually reclaims storage and not just rows.
 
@@ -46,6 +51,7 @@ from webapp.models import (
     MessagePicture,
     MessageSticker,
     MessageVideo,
+    TaggedMessage,
 )
 
 # Per-model FileField descriptors that hold the actual on-disk payload. Used to
@@ -99,6 +105,10 @@ def find_purgeable_messages() -> QuerySet[Message]:
       ``to_inspect`` and environment channels keep every message (the
       environment pass stores by its own window, not by label periods); pure
       forward-source (out-of-target) channels keep every message too.
+
+    Tagged messages are exempt from both, and so are their album siblings — the
+    post card shows an album's media through its head, so purging the tails
+    would strip a tagged album of its pictures.
     """
     marked = marked_in_target_channels()
     marked_ids = set(marked.values_list("id", flat=True))
@@ -119,7 +129,14 @@ def find_purgeable_messages() -> QuerySet[Message]:
     # is vacuously true for it, so guard with date__isnull=False to keep such messages
     # of in-target channels (matching the per-channel detail view, which keeps them).
     out_of_period = Q(channel_id__in=prune_channel_ids) & Q(date__isnull=False) & ~channel_cutoff_q()
-    return Message.objects.filter(~Q(channel_id__in=keep_channel_ids) | out_of_period)
+    tagged = Exists(TaggedMessage.objects.filter(message=OuterRef("pk")))
+    # A NULL grouped_id never equals the outer row's, so ungrouped messages match only via ``tagged``.
+    tagged_album = Exists(
+        TaggedMessage.objects.filter(
+            message__channel_id=OuterRef("channel_id"), message__grouped_id=OuterRef("grouped_id")
+        )
+    )
+    return Message.objects.filter(~Q(channel_id__in=keep_channel_ids) | out_of_period).exclude(tagged | tagged_album)
 
 
 def collect_media_files(messages: QuerySet[Message]) -> list[tuple[object, str]]:

@@ -716,7 +716,8 @@ body {
   gap: .375rem;
 }
 
-.post-details-btn {
+.post-details-btn,
+.post-tags-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -733,7 +734,9 @@ body {
 }
 
 .post-details-btn:hover,
-.post-details-btn[aria-expanded="true"] {
+.post-details-btn[aria-expanded="true"],
+.post-tags-btn:hover,
+.post-tags-btn[aria-expanded="true"] {
   background: var(--hover);
   border-color: var(--muted);
   color: var(--text);
@@ -1525,6 +1528,36 @@ body {
   margin: .5rem 0;
 }
 
+.msg-options-hint {
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.msg-options-tags {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.msg-options-count {
+  margin-left: auto;
+  padding-left: .5rem;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  color: var(--muted);
+}
+
+.tag-swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: .65rem;
+  height: .65rem;
+  border-radius: 50%;
+}
+
 .search-result-channel {
   display: flex;
   align-items: center;
@@ -2237,4 +2270,130 @@ body {
 
 .update-banner-close:hover {
   opacity: 1;
+}
+
+
+/* ---------- Message tags ---------- */
+/* Chip colours come from each tag (--tag-color, inline); the text flips to white
+   on dark tag colours (.is-dark, from BaseColorModel.is_color_dark). */
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  padding: 0 .875rem .5rem;
+}
+
+.post-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  max-width: 100%;
+  padding: .1rem .5rem;
+  border-radius: 99px;
+  background: var(--tag-color, var(--muted));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+  color: #1c1917;
+  font-size: .72rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.post-tag.is-dark {
+  color: #fff;
+}
+
+a.post-tag:hover {
+  color: #1c1917;
+  text-decoration: underline;
+}
+
+a.post-tag.is-dark:hover {
+  color: #fff;
+}
+
+.post-tags-panel {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.post-tags-inner {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: .5rem .875rem;
+}
+
+.post-tags-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+
+.post-tags-form input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.post-tags-hint {
+  margin: 0;
+  font-size: .72rem;
+  color: var(--muted);
+}
+
+.post-tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  margin: 0;
+}
+
+/* A fixed chip column keeps every note input aligned, whatever the tag names. */
+.post-tags-item {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) 1fr auto;
+  align-items: center;
+  gap: .4rem;
+}
+
+.post-tags-item .post-tag {
+  justify-self: start;
+}
+
+.post-tags-note {
+  min-width: 0;
+  font-size: .75rem;
+}
+
+.post-tags-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: .7rem;
+  cursor: pointer;
+}
+
+.post-tags-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.post-tags-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: .72rem;
+  color: var(--muted);
+}
+
+.post-tags-status.is-error {
+  color: var(--danger);
 }

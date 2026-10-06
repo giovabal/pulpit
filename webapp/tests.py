@@ -1523,6 +1523,34 @@ class PurgeOutOfTargetTests(TestCase):
         self._run_purge()
         self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
 
+    def test_tagged_message_and_its_album_kept(self) -> None:
+        """A tag declares the message worth keeping — with its album siblings, whose media the card shows."""
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        head = Message.objects.create(telegram_id=210, channel=self.purgeable, grouped_id=77)
+        tail = Message.objects.create(telegram_id=211, channel=self.purgeable, grouped_id=77)
+        other_album = Message.objects.create(telegram_id=212, channel=self.purgeable, grouped_id=78)
+        tag = MessageTag.objects.create(name="keep")
+        tag_post(self.purge_msg, tag)
+        tag_post(head, tag)
+        self._run_purge()
+        self.assertTrue(Message.objects.filter(pk=self.purge_msg.pk).exists())
+        self.assertEqual(Message.objects.filter(pk__in=[head.pk, tail.pk]).count(), 2)
+        self.assertFalse(Message.objects.filter(pk=other_album.pk).exists())
+
+    def test_share_of_a_tagged_post_kept(self) -> None:
+        """Tagging the original keeps its shares, even in a channel the purge would otherwise empty."""
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        share = Message.objects.create(
+            telegram_id=203, channel=self.mention_target, forwarded_from=self.purgeable, fwd_from_channel_post=200
+        )
+        tag_post(self.purge_msg, MessageTag.objects.create(name="keep"))
+        self._run_purge()
+        self.assertEqual(Message.objects.filter(pk__in=[self.purge_msg.pk, share.pk]).count(), 2)
+
     def test_environment_channel_messages_kept(self) -> None:
         """A channel reached by ``crawl_channels --environment`` keeps every message, like to_inspect."""
         env = Channel.objects.create(telegram_id=8, title="env-chan", environment_depth=2)
@@ -2022,8 +2050,11 @@ class FetchModeGuardTests(TestCase):
                 self.assertIsNotNone(message.forwarded_from.title)
 
     def test_home_message_list_is_fully_fetched(self) -> None:
+        from django.contrib.auth.models import AnonymousUser
+
         view = HomeView()
         view.request = RequestFactory().get("/")
+        view.request.user = AnonymousUser()
         self._read_card_fields(view.get_queryset().fetch_mode(models.FETCH_RAISE))
 
     def test_channel_list_label_resolution_is_fully_fetched(self) -> None:
@@ -2159,3 +2190,347 @@ class VersionCheckForceRefreshTests(TestCase):
             status = version_check.version_status(force_refresh=True)
         self.assertIsNone(status["latest"])
         self.assertFalse(status["update_available"])
+
+
+# ─── Message tags ──────────────────────────────────────────────────────────────
+
+
+class MessageTagModelTests(TestCase):
+    def test_name_is_trimmed_and_key_casefolded(self) -> None:
+        from webapp.models import MessageTag
+
+        tag = MessageTag.objects.create(name="  Key   Event ")
+        self.assertEqual(tag.name, "Key Event")
+        self.assertEqual(tag.key, "key event")
+
+    def test_key_is_unique_across_case_beyond_ascii(self) -> None:
+        # SQLite's LOWER/iexact fold only ASCII — the stored casefolded key catches Cyrillic too.
+        from webapp.models import MessageTag
+
+        MessageTag.objects.create(name="Война")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MessageTag.objects.create(name="война")
+
+    def test_new_tags_take_the_first_unused_palette_colour(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import TAG_PALETTE
+
+        first = MessageTag.objects.create(name="a")
+        second = MessageTag.objects.create(name="b")
+        self.assertEqual([first.color, second.color], list(TAG_PALETTE[:2]))
+        # A colour freed by recolouring is handed out again before later ones.
+        first.color = "#000000"
+        first.save()
+        self.assertEqual(MessageTag.objects.create(name="c").color, TAG_PALETTE[0])
+
+    def test_palette_cycles_once_every_colour_is_taken(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import TAG_PALETTE
+
+        for i in range(len(TAG_PALETTE)):
+            MessageTag.objects.create(name=f"t{i}")
+        self.assertEqual(MessageTag.objects.create(name="extra").color, TAG_PALETTE[0])
+
+    def test_merge_moves_taggings_and_fills_empty_notes(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        ch = make_channel(telegram_id=1, title="c")
+        m1 = Message.objects.create(telegram_id=1, channel=ch)
+        m2 = Message.objects.create(telegram_id=2, channel=ch)
+        source = MessageTag.objects.create(name="ukraine")
+        target = MessageTag.objects.create(name="Ukraine war")
+        tag_post(m1, source, note="moved")
+        tag_post(m2, source, note="from source")
+        tag_post(m2, target)
+        self.assertEqual(source.merge_into(target), 1)
+        self.assertFalse(MessageTag.objects.filter(pk=source.pk).exists())
+        from webapp.models import MessageTagging
+
+        notes = dict(MessageTagging.objects.filter(tag=target).values_list("message_id", "note"))
+        self.assertEqual(notes, {m1.pk: "moved", m2.pk: "from source"})
+
+    def test_merge_into_itself_is_refused(self) -> None:
+        from webapp.models import MessageTag
+
+        tag = MessageTag.objects.create(name="x")
+        with self.assertRaises(ValueError):
+            tag.merge_into(tag)
+
+
+@override_settings(WEB_ACCESS="ALL")
+class MessageTagFilterTests(TestCase):
+    """``_apply_message_options``: dropdown tags (any of), ``tag:`` tokens (each required), access."""
+
+    def setUp(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        self.channel = make_channel(telegram_id=1, title="c", label=make_label("Org"))
+        self.m_a = Message.objects.create(telegram_id=1, channel=self.channel, message="drones over the city")
+        self.m_b = Message.objects.create(telegram_id=2, channel=self.channel, message="drones at sea")
+        self.m_ab = Message.objects.create(telegram_id=3, channel=self.channel, message="nothing")
+        self.m_none = Message.objects.create(telegram_id=4, channel=self.channel, message="drones")
+        self.a = MessageTag.objects.create(name="Air")
+        self.b = MessageTag.objects.create(name="Key event")
+        for msg, tag in ((self.m_a, self.a), (self.m_b, self.b), (self.m_ab, self.a), (self.m_ab, self.b)):
+            tag_post(msg, tag)
+
+    def _visible(self, query: str, user=None) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        return set(_apply_message_options(qs, QueryDict(query), user).values_list("id", flat=True))
+
+    def test_split_tag_tokens(self) -> None:
+        from webapp.views import _split_tag_tokens
+
+        self.assertEqual(_split_tag_tokens('drones tag:Air  tag:"key event" sea'), ("drones sea", ["Air", "key event"]))
+        self.assertEqual(_split_tag_tokens("no tokens  here"), ("no tokens  here", []))
+        # Only a whole-word token counts: "hashtag:x" is text.
+        self.assertEqual(_split_tag_tokens("hashtag:x"), ("hashtag:x", []))
+
+    def test_dropdown_tags_match_any_of(self) -> None:
+        self.assertEqual(self._visible(f"tag={self.a.pk}"), {self.m_a.pk, self.m_ab.pk})
+        self.assertEqual(self._visible(f"tag={self.a.pk}&tag={self.b.pk}"), {self.m_a.pk, self.m_b.pk, self.m_ab.pk})
+
+    def test_any_tag_keeps_every_tagged_message(self) -> None:
+        self.assertEqual(self._visible("tag=any"), {self.m_a.pk, self.m_b.pk, self.m_ab.pk})
+
+    def test_tag_tokens_each_narrow_and_leave_the_rest_as_text(self) -> None:
+        self.assertEqual(self._visible("q=tag:air"), {self.m_a.pk, self.m_ab.pk})
+        self.assertEqual(self._visible('q=tag:air+tag:"KEY EVENT"'), {self.m_ab.pk})
+        self.assertEqual(self._visible("q=drones+tag:air"), {self.m_a.pk})
+
+    def test_unknown_tag_token_matches_nothing(self) -> None:
+        self.assertEqual(self._visible("q=tag:nope"), set())
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_anonymous_visitors_cannot_filter_by_tag(self) -> None:
+        from django.contrib.auth.models import AnonymousUser
+
+        anon = AnonymousUser()
+        everything = {self.m_a.pk, self.m_b.pk, self.m_ab.pk, self.m_none.pk}
+        self.assertEqual(self._visible(f"tag={self.a.pk}", anon), everything)
+        # "tag:air" stays plain text, so it can't be used to probe which tags exist.
+        self.assertEqual(self._visible("q=tag:air", anon), set())
+
+    def test_options_context_marks_tags_and_keeps_them_in_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict(f"tag=any&tag={self.b.pk}"))
+        self.assertTrue(ctx["options_active"])
+        self.assertTrue(ctx["any_tag"])
+        self.assertEqual(ctx["selected_tags"], [self.b])
+        self.assertIn("tag=any", ctx["original_query"])
+        self.assertIn(f"tag={self.b.pk}", ctx["original_query"])
+        counts = {tag.name: tag.message_count for tag in ctx["all_tags"]}
+        self.assertEqual(counts, {"Air": 2, "Key event": 2})
+
+
+class MessageTagPageTests(TestCase):
+    def setUp(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        self.channel = make_channel(telegram_id=1, title="in", label=make_label("Org"))
+        self.msg = Message.objects.create(telegram_id=1, channel=self.channel, message="tagged post")
+        self.tag = MessageTag.objects.create(name="Watch")
+        tag_post(self.msg, self.tag, note="check later")
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_tag_search_reaches_messages_outside_the_target(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        inspected = make_channel(telegram_id=2, title="inspected", to_inspect=True)
+        outside = Message.objects.create(telegram_id=9, channel=inspected, message="from an inspected channel")
+        tag_post(outside, self.tag)
+        resp = self.client.get(reverse("message-search") + f"?tag={self.tag.pk}")
+        self.assertContains(resp, "from an inspected channel")
+        self.assertContains(resp, "tagged post")
+        # Without a tag filter the search keeps its in-target scope.
+        self.assertNotContains(self.client.get(reverse("message-search")), "from an inspected channel")
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_chips_and_editor_render_when_access_is_all(self) -> None:
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": self.channel.pk})).content.decode()
+        self.assertIn(f'href="{reverse("message-search")}?tag={self.tag.pk}"', html)
+        self.assertIn("check later", html)
+        self.assertIn("post-tags-btn", html)
+        self.assertIn("webapp/js/post_tags.js", html)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_tag_chips_cost_no_query_per_message(self) -> None:
+        # The chips read tagging.tag and tagging.tagged_by; FETCH_RAISE does not reach
+        # rows loaded by a custom Prefetch, so guard the select_related by query count.
+        from django.contrib.auth.models import User
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        url = reverse("message-search") + "?tag=any"
+
+        def queries() -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                self.client.get(url)
+            return len(ctx.captured_queries)
+
+        baseline = queries()
+        user = User.objects.create_user("u@x.co")
+        for i in range(2, 6):
+            msg = Message.objects.create(telegram_id=i, channel=self.channel, message=f"post {i}")
+            tag = MessageTag.objects.create(name=f"tag {i}")
+            tag_post(msg, tag, tagged_by=user)
+        self.assertEqual(queries(), baseline)
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_open_mode_hides_tags_from_anonymous_visitors(self) -> None:
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": self.channel.pk})).content.decode()
+        self.assertIn("tagged post", html)
+        self.assertNotIn("check later", html)
+        self.assertNotIn('class="post-tag', html)
+        self.assertNotIn("post-tags-btn", html)
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_open_mode_logged_in_non_staff_sees_tags_but_cannot_edit(self) -> None:
+        from django.contrib.auth.models import User
+
+        self.client.force_login(User.objects.create_user("reader@x.co", password="x"))
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": self.channel.pk})).content.decode()
+        self.assertIn("check later", html)
+        self.assertNotIn("post-tags-btn", html)
+        self.assertNotIn("webapp/js/post_tags.js", html)
+
+
+class MessageTagPropagationTests(TestCase):
+    """A tag goes on the post: the original and every share of it, whichever one is tagged."""
+
+    def setUp(self) -> None:
+        from webapp.models import MessageTag
+
+        org = make_label("Org")
+        self.a = make_channel(telegram_id=100, title="origin", label=org)
+        self.b = make_channel(telegram_id=200, title="sharer B", label=org)
+        self.c = make_channel(telegram_id=300, title="sharer C", label=org)
+        self.original = Message.objects.create(telegram_id=5, channel=self.a, message="the post")
+        self.share_b = Message.objects.create(
+            telegram_id=1, channel=self.b, forwarded_from=self.a, fwd_from_channel_post=5
+        )
+        self.share_c = Message.objects.create(
+            telegram_id=1, channel=self.c, forwarded_from=self.a, fwd_from_channel_post=5
+        )
+        self.other_post = Message.objects.create(
+            telegram_id=2, channel=self.b, forwarded_from=self.a, fwd_from_channel_post=6
+        )
+        self.tag = MessageTag.objects.create(name="watch")
+
+    def _members(self, tagging) -> set[int]:
+        return set(tagging.members.values_list("message_id", flat=True))
+
+    def test_message_origin(self) -> None:
+        from webapp.models.tag_models import message_origin
+
+        self.assertEqual(message_origin(self.original), (100, 5))
+        self.assertEqual(message_origin(self.share_b), (100, 5))
+        private = Message(channel=self.b, telegram_id=9, forwarded_from_private=999, fwd_from_channel_post=7)
+        self.assertEqual(message_origin(private), (999, 7))
+        no_post = Message(channel=self.b, telegram_id=10, forwarded_from=self.a)
+        self.assertEqual(message_origin(no_post), (200, 10))
+
+    def test_tagging_the_original_tags_every_share(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        tagging = tag_post(self.original, self.tag)
+        self.assertEqual(self._members(tagging), {self.original.pk, self.share_b.pk, self.share_c.pk})
+
+    def test_tagging_a_share_tags_the_original_and_the_other_shares(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        tagging = tag_post(self.share_b, self.tag)
+        self.assertEqual(tagging.origin, (100, 5))
+        self.assertEqual(self._members(tagging), {self.original.pk, self.share_b.pk, self.share_c.pk})
+
+    def test_shares_of_a_post_from_a_private_channel_are_linked(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        p1 = Message.objects.create(telegram_id=20, channel=self.b, forwarded_from_private=999, fwd_from_channel_post=7)
+        p2 = Message.objects.create(telegram_id=20, channel=self.c, forwarded_from_private=999, fwd_from_channel_post=7)
+        Message.objects.create(telegram_id=21, channel=self.c, forwarded_from_private=999, fwd_from_channel_post=8)
+        self.assertEqual(self._members(tag_post(p1, self.tag)), {p1.pk, p2.pk})
+
+    def test_forward_without_an_origin_post_id_is_a_post_of_its_own(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        n1 = Message.objects.create(telegram_id=30, channel=self.b, forwarded_from=self.a)
+        Message.objects.create(telegram_id=30, channel=self.c, forwarded_from=self.a)
+        self.assertEqual(self._members(tag_post(n1, self.tag)), {n1.pk})
+
+    def test_sync_links_shares_and_originals_stored_after_the_tagging(self) -> None:
+        from webapp.models.tag_models import sync_tag_members, tag_post
+
+        self.original.delete()
+        tagging = tag_post(self.share_b, self.tag)
+        later_share = Message.objects.create(
+            telegram_id=3, channel=self.c, forwarded_from=self.a, fwd_from_channel_post=5
+        )
+        original = Message.objects.create(telegram_id=5, channel=self.a)
+        self.assertEqual(sync_tag_members(), 2)
+        self.assertEqual(sync_tag_members(), 0)
+        self.assertEqual(self._members(tagging), {self.share_b.pk, self.share_c.pk, later_share.pk, original.pk})
+
+    def test_removing_the_tagging_untags_the_whole_post(self) -> None:
+        from webapp.models import TaggedMessage
+        from webapp.models.tag_models import tag_post
+
+        tag_post(self.share_c, self.tag).delete()
+        self.assertFalse(TaggedMessage.objects.exists())
+
+    def test_tagged_message_survives_deleting_the_message_it_was_tagged_from(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        tagging = tag_post(self.share_b, self.tag)
+        self.share_b.delete()
+        tagging.refresh_from_db()
+        self.assertIsNone(tagging.message)
+        self.assertEqual(self._members(tagging), {self.original.pk, self.share_c.pk})
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_filter_and_counts_include_shares(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post, with_message_counts
+        from webapp.views import _apply_message_options
+
+        tag_post(self.share_c, self.tag)
+        qs = Message.objects.all()
+        visible = set(_apply_message_options(qs, QueryDict(f"tag={self.tag.pk}")).values_list("pk", flat=True))
+        self.assertEqual(visible, {self.original.pk, self.share_b.pk, self.share_c.pk})
+        self.assertEqual(with_message_counts(MessageTag.objects.all()).get(pk=self.tag.pk).message_count, 3)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_chip_shows_on_a_share_of_the_tagged_post(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        tag_post(self.original, self.tag, note="seen")
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": self.c.pk})).content.decode()
+        self.assertIn(f'href="{reverse("message-search")}?tag={self.tag.pk}"', html)
+        self.assertIn("seen", html)
+
+    def test_merge_counts_messages_gained_across_shares(self) -> None:
+        from webapp.models import MessageTag, MessageTagging
+        from webapp.models.tag_models import tag_post
+
+        target = MessageTag.objects.create(name="target")
+        tag_post(self.share_b, self.tag, note="kept note")
+        tag_post(self.original, target)
+        tag_post(self.other_post, self.tag)
+        # The post already carried the target; only other_post's single message is gained.
+        self.assertEqual(self.tag.merge_into(target), 1)
+        self.assertEqual(MessageTagging.objects.get(tag=target, origin_post_tid=5).note, "kept note")

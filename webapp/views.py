@@ -31,8 +31,12 @@ from .models import (
     Message,
     MessageReaction,
     MessageReply,
+    MessageTag,
     ProfilePicture,
+    TaggedMessage,
 )
+from .models.tag_models import tag_key, with_message_counts
+from .utils.access import can_view_message_tags
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_day_month_year, fmt_ttl
 from .utils.emoji import emoji_present
@@ -73,7 +77,7 @@ def _channel_message_stats() -> dict[str, Any]:
 # media types plus reactions, and rendering them per-row without prefetching
 # fires a query storm. ChannelDetailView additionally prefetches
 # ``references`` because its template shows the t.me link column.
-_MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
+_MESSAGE_LIST_PREFETCH: tuple[str | Prefetch, ...] = (
     "messagepicture_set",
     "messagevideo_set",
     "messageaudio_set",
@@ -81,6 +85,7 @@ _MESSAGE_LIST_PREFETCH: tuple[str, ...] = (
     "messageothermedia_set",
     "reactions",
     "channel__channel_labels__label__group",
+    Prefetch("tag_links", queryset=TaggedMessage.objects.select_related("tagging__tag", "tagging__tagged_by")),
 )
 
 _CONTENT_TYPES = ["text", "image", "video", "sound", "sticker", "other"]
@@ -161,7 +166,70 @@ def _exclude_album_tails(qs: QuerySet) -> QuerySet:
     )
 
 
-def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
+# ---- message tags --------------------------------------------------------
+
+# ``tag:name`` / ``tag:"two words"`` tokens in a search box. Not ``#``: that would
+# shadow searches for the literal Telegram hashtags inside message text.
+_TAG_TOKEN_RE = re.compile(r'(?<!\S)tag:(?:"([^"]+)"|(\S+))', re.IGNORECASE)
+# The Options dropdown's "Any tag" checkbox value (other values are tag ids).
+_ANY_TAG = "any"
+
+
+def _split_tag_tokens(q: str) -> tuple[str, list[str]]:
+    """Split ``tag:`` tokens out of a search query: ``(remaining text, tag names)``."""
+    names = [quoted or bare for quoted, bare in _TAG_TOKEN_RE.findall(q)]
+    if not names:
+        return q, []
+    return " ".join(_TAG_TOKEN_RE.sub(" ", q).split()), names
+
+
+def _message_query(params: Any, user: Any) -> tuple[str, list[str]]:
+    """The search box as ``(free text, tag:-token names)``.
+
+    ``tag:`` tokens are only parsed for users who may see tags; for anyone else
+    the box is plain text, so a URL can't be used to probe which tags exist.
+    """
+    q = params.get("q", "").strip()
+    if not can_view_message_tags(user):
+        return q, []
+    return _split_tag_tokens(q)
+
+
+def _selected_tags(params: Any, user: Any) -> tuple[bool, list[int]]:
+    """The Options dropdown's tag selection: ``("Any tag" checked, selected tag ids)``."""
+    if not can_view_message_tags(user):
+        return False, []
+    raw = params.getlist("tag")
+    return _ANY_TAG in raw, sorted({int(v) for v in raw if v.isdigit()})
+
+
+def _tag_filter_active(params: Any, user: Any) -> bool:
+    any_tag, tag_ids = _selected_tags(params, user)
+    return any_tag or bool(tag_ids) or bool(_message_query(params, user)[1])
+
+
+def _apply_tag_filter(qs: QuerySet, params: Any, user: Any) -> QuerySet:
+    """Dropdown tags match *any of* the selection; each ``tag:`` token must *also* match.
+
+    Reads the materialised ``TaggedMessage`` links — a share of a tagged post
+    carries the tag — so the test stays one primary-key probe per message.
+    """
+    any_tag, tag_ids = _selected_tags(params, user)
+    links = TaggedMessage.objects.filter(message=OuterRef("pk"))
+    if any_tag:
+        qs = qs.filter(Exists(links))
+    elif tag_ids:
+        qs = qs.filter(Exists(links.filter(tagging__tag_id__in=tag_ids)))
+    for name in _message_query(params, user)[1]:
+        qs = qs.filter(Exists(links.filter(tagging__tag__key=tag_key(name))))
+    return qs
+
+
+def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> QuerySet:
+    text = _message_query(params, user)[0]
+    if text:
+        qs = qs.filter(message__icontains=text)
+    qs = _apply_tag_filter(qs, params, user)
     sort = _resolve_sort(params.get("sort"))
     qs = qs.order_by(*_SORT_ORDER_BY[sort])
     date_from = _parse_iso_date(params.get("date_from"))
@@ -191,7 +259,7 @@ def _apply_message_options(qs: QuerySet, params: Any) -> QuerySet:
     return _exclude_album_tails(qs)
 
 
-def _message_options_context(params: Any) -> dict[str, Any]:
+def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
     sort = _resolve_sort(params.get("sort"))
     date_from = _parse_iso_date(params.get("date_from"))
     date_to = _parse_iso_date(params.get("date_to"))
@@ -202,6 +270,7 @@ def _message_options_context(params: Any) -> dict[str, Any]:
     if lost not in _LOST_MODES:
         lost = "exclude"
     pinned = bool(params.get("pinned"))
+    any_tag, tag_ids = _selected_tags(params, user)
     options_active = (
         sort != _DEFAULT_SORT
         or date_from is not None
@@ -209,6 +278,8 @@ def _message_options_context(params: Any) -> dict[str, Any]:
         or set(selected) != set(_CONTENT_TYPES)
         or lost != "exclude"
         or pinned
+        or any_tag
+        or bool(tag_ids)
     )
 
     extra: dict[str, Any] = {}
@@ -226,7 +297,12 @@ def _message_options_context(params: Any) -> dict[str, Any]:
         extra["lost"] = lost
     if pinned:
         extra["pinned"] = "1"
+    if any_tag or tag_ids:
+        extra["tag"] = ([_ANY_TAG] if any_tag else []) + tag_ids
     original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
+
+    tags_visible = can_view_message_tags(user)
+    all_tags = list(with_message_counts(MessageTag.objects.all())) if tags_visible else []
 
     return {
         "sort": sort,
@@ -236,6 +312,10 @@ def _message_options_context(params: Any) -> dict[str, Any]:
         "all_types": _CONTENT_TYPES,
         "lost": lost,
         "pinned": pinned,
+        "all_tags": all_tags,
+        "any_tag": any_tag,
+        "selected_tag_ids": tag_ids,
+        "selected_tags": [tag for tag in all_tags if tag.pk in tag_ids],
         "options_active": options_active,
         "original_query": original_query,
     }
@@ -255,7 +335,6 @@ class HomeView(ListView):
         return Label.from_filter_param(self.request.GET.get("filter"))
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        q = self.request.GET.get("q", "").strip()
         channels = Channel.objects.in_target()
         if self.filter_voice is not None:
             channels = channels.in_container_label(self.filter_voice)
@@ -264,9 +343,7 @@ class HomeView(ListView):
             .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
-        if q:
-            qs = qs.filter(message__icontains=q)
-        return _apply_message_options(qs, self.request.GET)
+        return _apply_message_options(qs, self.request.GET, self.request.user)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         from django.urls import reverse
@@ -276,7 +353,7 @@ class HomeView(ListView):
 
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
-        ctx.update(_message_options_context(self.request.GET))
+        ctx.update(_message_options_context(self.request.GET, self.request.user))
 
         # Dashboard scope: a container-group label ("voice", e.g. Continents → Europe)
         # restricts the summary cards, the chart panels, and the message list to the
@@ -450,22 +527,21 @@ class MessageSearchView(ListView):
     page_kwarg = "page"
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
-        qs = (
-            Message.objects.filter(channel__in=Channel.objects.in_target())
-            .select_related("channel", "forwarded_from")
-            .prefetch_related(*_MESSAGE_LIST_PREFETCH)
-        )
-        q = self.request.GET.get("q", "").strip()
-        if q:
-            qs = qs.filter(message__icontains=q)
-        return _apply_message_options(qs, self.request.GET)
+        qs = Message.objects.all()
+        # A tag is a deliberate pick: a message tagged on a to_inspect or
+        # environment channel's page must still be found, so a tag filter
+        # lifts the in-target scope.
+        if not _tag_filter_active(self.request.GET, self.request.user):
+            qs = qs.filter(channel__in=Channel.objects.in_target())
+        qs = qs.select_related("channel", "forwarded_from").prefetch_related(*_MESSAGE_LIST_PREFETCH)
+        return _apply_message_options(qs, self.request.GET, self.request.user)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(ctx["object_list"])
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
-        ctx.update(_message_options_context(self.request.GET))
+        ctx.update(_message_options_context(self.request.GET, self.request.user))
         return ctx
 
 
@@ -502,17 +578,14 @@ class MessageHighlightsView(ListView):
             .select_related("channel", "forwarded_from")
             .prefetch_related(*_MESSAGE_LIST_PREFETCH)
         )
-        q = self.request.GET.get("q", "").strip()
-        if q:
-            qs = qs.filter(message__icontains=q)
-        return _apply_message_options(qs, self._params())
+        return _apply_message_options(qs, self._params(), self.request.user)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(ctx["object_list"])
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
-        ctx.update(_message_options_context(self._params()))
+        ctx.update(_message_options_context(self._params(), self.request.user))
         return ctx
 
 
@@ -534,7 +607,6 @@ class ChannelDetailView(ListView):
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         tab = self.request.GET.get("tab", "messages")
-        q = self.request.GET.get("q", "").strip()
         if tab == "received":
             # Period-aware: a forward by an in-target amplifier counts only when
             # the amplifier was in an in-target period at the message date,
@@ -548,14 +620,12 @@ class ChannelDetailView(ListView):
                 .select_related("channel", "forwarded_from")
                 .prefetch_related("references", *_MESSAGE_LIST_PREFETCH)
             )
-            if q:
-                qs = qs.filter(message__icontains=q)
             self_ref = self.request.GET.get("self_ref", "include")
             if self_ref == "exclude":
                 qs = qs.exclude(channel=self.selected_channel)
             elif self_ref == "only":
                 qs = qs.filter(channel=self.selected_channel)
-            return _apply_message_options(qs, self.request.GET)
+            return _apply_message_options(qs, self.request.GET, self.request.user)
         qs = (
             Message.objects.filter(channel=self.selected_channel)
             .select_related("forwarded_from")
@@ -563,11 +633,9 @@ class ChannelDetailView(ListView):
         )
         if self.selected_channel.in_target_periods.exists():
             qs = qs.filter(channel_period_date_q(self.selected_channel))
-        if q:
-            qs = qs.filter(message__icontains=q)
         if self.request.GET.get("forwards_only"):
             qs = qs.filter(forwarded_from__isnull=False)
-        return _apply_message_options(qs, self.request.GET)
+        return _apply_message_options(qs, self.request.GET, self.request.user)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         from django.urls import reverse
@@ -582,7 +650,7 @@ class ChannelDetailView(ListView):
         context_data["forwards_only"] = bool(self.request.GET.get("forwards_only"))
         self_ref = self.request.GET.get("self_ref", "include")
         context_data["self_ref"] = self_ref
-        context_data.update(_message_options_context(self.request.GET))
+        context_data.update(_message_options_context(self.request.GET, self.request.user))
         # Extend original_query so pagination links preserve tab, self_ref, and forwards_only.
         extra = ""
         if tab == "received":

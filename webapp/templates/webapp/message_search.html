@@ -12,7 +12,7 @@
         type="search"
         name="q"
         value="{{ query }}"
-        placeholder="Search messages…"
+        placeholder="{% if CAN_VIEW_TAGS %}Search messages — tag:name narrows to a tag{% else %}Search messages…{% endif %}"
         class="search-input"
         aria-label="Search messages"
         autofocus
@@ -21,12 +21,12 @@
     </div>
     {% include "webapp/message_options.html" %}
   </form>
-  {% if query %}
+  {% if query or any_tag or selected_tags %}
   <p class="search-summary">
-    {% if page_obj.paginator.count %}
-      {{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }} for <strong>{{ query }}</strong>
-    {% else %}
-      No results for <strong>{{ query }}</strong>
+    {% if page_obj.paginator.count %}{{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }}{% else %}No results{% endif %}
+    {% if query %} for <strong>{{ query }}</strong>{% endif %}
+    {% if any_tag %} with any tag{% elif selected_tags %} tagged
+      {% for tag in selected_tags %}<span class="post-tag{% if tag.is_color_dark %} is-dark{% endif %}" style="--tag-color: {{ tag.color }};">{{ tag.name }}</span>{% if not forloop.last %} or {% endif %}{% endfor %}
     {% endif %}
   </p>
   {% endif %}
@@ -52,5 +52,6 @@
   });
 </script>
 <script src="{% vstatic 'webapp/js/post_replies.js' %}"></script>
+{% if CAN_EDIT_TAGS %}<script src="{% vstatic 'webapp/js/post_tags.js' %}"></script>{% endif %}
 {% endblock extra_scripts %}
 

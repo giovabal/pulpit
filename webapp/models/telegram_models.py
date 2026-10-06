@@ -421,6 +421,14 @@ class Message(TelegramBaseModel):
             # per-row whole-channel scan. Without it — and without fresh planner
             # statistics — the home page degrades into a multi-minute query.
             models.Index(fields=["channel", "grouped_id", "telegram_id"], name="webapp_msg_album_sib_idx"),
+            # Serves message-tag propagation (webapp.models.tag_models.resolve_origin_messages):
+            # the shares of a post from a private, unresolved channel are found by its raw
+            # origin id. Partial, so it covers only messages forwarded from such channels.
+            models.Index(
+                fields=["forwarded_from_private", "fwd_from_channel_post"],
+                condition=Q(forwarded_from_private__isnull=False),
+                name="webapp_msg_fwd_private_idx",
+            ),
         ]
 
     def __str__(self) -> str:
