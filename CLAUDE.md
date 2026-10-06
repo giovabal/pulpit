@@ -112,7 +112,7 @@ Only messages dated **within a channel's in-target label periods** contribute â€
 
 ### Code style
 
-- Python 3.12 (the `numpy<2` pin, kept for graph-tool ABI compatibility, has no wheels for 3.13+), line length 120, double quotes (see `ruff.toml`)
+- Python 3.12â€“3.14 (`setup.sh` prefers the interpreter that can import the system graph-tool; numpy has no upper bound so a `--system-site-packages` venv keeps the numpy graph-tool was compiled against), line length 120, double quotes (see `ruff.toml`)
 - `ruff` for linting and formatting
 
 ### Configuration

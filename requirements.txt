@@ -26,7 +26,8 @@ openpyxl==3.1.5
 umap-learn==0.5.12
 pandas==3.0.5
 networkx==3.6.1
-# numpy is otherwise a transitive dependency (pandas/scipy/networkx), but is pinned below 2.0 for
-# ABI compatibility with apt/conda graph-tool builds compiled against numpy 1.x (see the graph-tool
-# note above): a 1.x-compiled extension cannot load under numpy 2.x. Floor 1.26 = pandas 3.0's minimum.
-numpy>=1.26,<2
+# numpy is otherwise a transitive dependency (pandas/scipy/networkx). It deliberately has no upper
+# bound: a --system-site-packages venv must keep the system numpy that graph-tool was compiled against
+# (1.x on Ubuntu 24.04, 2.x on 26.04), and a floor the system copy already meets lets pip leave it in
+# place instead of shadowing it with a different ABI. Floor 1.26 = pandas 3.0's minimum.
+numpy>=1.26

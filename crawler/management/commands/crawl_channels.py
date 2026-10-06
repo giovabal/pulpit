@@ -217,6 +217,14 @@ _ABOUT_REF_RE = re.compile(r"t\.me/((?:\w|(?:%[\da-fA-F]{2}))+)")
 # Path fragment identifying coroutines whose code lives inside the Telethon
 # package — used by the unraisable-hook filter to scope what it silences.
 _TELETHON_PKG_PATH = f"{os.sep}telethon{os.sep}"
+# Python 3.14+ no longer hands the finalised coroutine to the hook (``object`` is None): it survives
+# only as its repr in ``err_msg`` ("Exception ignored while closing generator <coroutine object
+# Connection._recv_loop at 0x…>"), so the filter falls back to the qualnames of the Telethon loops
+# that produce the noise.
+_COROUTINE_REPR_RE = re.compile(r"<coroutine object (\S+) at 0x")
+_TELETHON_LOOP_QUALNAMES = frozenset(
+    {"Connection._recv_loop", "Connection._send_loop", "MTProtoSender._recv_loop", "MTProtoSender._send_loop"}
+)
 
 
 def _make_telethon_unraisable_filter(previous_hook: Any) -> Any:
@@ -240,7 +248,11 @@ def _make_telethon_unraisable_filter(previous_hook: Any) -> Any:
     def _hook(unraisable: Any) -> None:
         obj = unraisable.object
         code = getattr(obj, "cr_code", None) or getattr(obj, "ag_code", None) or getattr(obj, "gi_code", None)
-        from_telethon = code is not None and _TELETHON_PKG_PATH in getattr(code, "co_filename", "")
+        if code is not None:
+            from_telethon = _TELETHON_PKG_PATH in getattr(code, "co_filename", "")
+        else:
+            match = _COROUTINE_REPR_RE.search(unraisable.err_msg or "")
+            from_telethon = match is not None and match.group(1) in _TELETHON_LOOP_QUALNAMES
         exc = unraisable.exc_value
         is_generator_exit_noise = isinstance(exc, GeneratorExit) or (
             isinstance(exc, RuntimeError) and "GeneratorExit" in str(exc)
