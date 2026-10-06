@@ -48,6 +48,10 @@ class LabelsView(StaffRequiredMixin, TemplateView):
         return ctx
 
 
+class MessageTagsView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/tags.html"
+
+
 class SourcesView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/sources.html"
 

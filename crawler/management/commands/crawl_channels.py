@@ -1678,6 +1678,23 @@ class Command(BaseCommand):
         except Exception as exc:  # pragma: no cover - housekeeping must not break a crawl
             self.stdout.write(self.style.WARNING(f"Query-planner stats refresh skipped: {exc}"))
 
+    def _sync_message_tags(self) -> None:
+        """Extend every message tag to the shares of its post crawled in this run.
+
+        A tag put on a post reaches the original and every share of it
+        (``webapp.models.tag_models``); shares stored after the tagging are linked
+        here. Never allowed to fail the crawl: the next run catches up.
+        """
+        from webapp.models.tag_models import sync_tag_members
+
+        try:
+            added = sync_tag_members()
+        except Exception as exc:  # pragma: no cover - housekeeping must not break a crawl
+            self.stdout.write(self.style.WARNING(f"Message-tag sync skipped: {exc}"))
+            return
+        if added:
+            self.stdout.write(f"Message tags: {added} newly crawled message(s) share a tagged post.")
+
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
@@ -2184,6 +2201,8 @@ class Command(BaseCommand):
                     cited_channels,
                     "Refreshing citation degree for {total} referenced channels",
                 )
+
+        self._sync_message_tags()
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
 

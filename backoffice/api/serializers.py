@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.db import transaction
 
 from events.models import Event, EventType
 from webapp.models import (
@@ -9,9 +10,13 @@ from webapp.models import (
     Label,
     LabelGroup,
     LabelParent,
+    Message,
+    MessageTag,
+    MessageTagging,
     Project,
     SearchTerm,
 )
+from webapp.models.tag_models import message_origin, normalize_tag_name, tag_key, tag_post
 
 from rest_framework import serializers
 
@@ -454,4 +459,99 @@ class UserSerializer(serializers.ModelSerializer):
         if password:
             instance.set_password(password)
         instance.save()
+        return instance
+
+
+class MessageTagSerializer(serializers.ModelSerializer):
+    message_count = serializers.IntegerField(read_only=True)
+    is_dark = serializers.BooleanField(source="is_color_dark", read_only=True)
+
+    class Meta:
+        model = MessageTag
+        fields = ["id", "name", "color", "description", "message_count", "is_dark"]
+
+    def validate_name(self, value):
+        name = normalize_tag_name(value)
+        if not name:
+            raise serializers.ValidationError("A tag needs a name.")
+        clash = MessageTag.objects.filter(key=tag_key(name))
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError(f"A tag named “{clash.first().name}” already exists.")
+        return name
+
+
+class MessageTaggingSerializer(serializers.ModelSerializer):
+    """A tag on a post — the original and every share of it.
+
+    Create with ``message`` (the original or any share) plus either ``tag_id`` or
+    ``tag_name`` — a name that matches no tag (case-insensitively) creates it on
+    the fly with the next free palette colour. Only ``note`` changes on update;
+    the note belongs to the post, so every message carrying the tag shows it.
+    ``member_count`` is the number of stored messages carrying the tagging.
+    """
+
+    message = serializers.PrimaryKeyRelatedField(
+        queryset=Message.objects.select_related("channel", "forwarded_from"), required=False
+    )
+    tag = MessageTagSerializer(read_only=True)
+    tag_id = serializers.PrimaryKeyRelatedField(
+        source="tag", queryset=MessageTag.objects.all(), write_only=True, required=False
+    )
+    tag_name = serializers.CharField(write_only=True, required=False, max_length=64)
+    tagged_by = serializers.CharField(source="tagged_by.username", read_only=True, default="")
+    tagged_at = serializers.DateTimeField(read_only=True)
+    member_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MessageTagging
+        fields = ["id", "message", "tag", "tag_id", "tag_name", "note", "tagged_by", "tagged_at", "member_count"]
+        # The one-tagging-per-post rule is checked in validate(): DRF's generated
+        # UniqueTogetherValidator would demand the origin fields from the client.
+        validators = []
+
+    def get_member_count(self, obj):
+        count = getattr(obj, "member_count", None)
+        return obj.members.count() if count is None else count
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            return {"note": attrs.get("note", self.instance.note)}
+        if "message" not in attrs:
+            raise serializers.ValidationError({"message": "This field is required."})
+        name = normalize_tag_name(attrs.pop("tag_name", ""))
+        if "tag" not in attrs:
+            if not name:
+                raise serializers.ValidationError({"tag_name": "Give a tag_id or a tag_name."})
+            attrs["tag"] = MessageTag.objects.filter(key=tag_key(name)).first() or MessageTag(name=name)
+        tag = attrs["tag"]
+        channel_tid, post_tid = message_origin(attrs["message"])
+        if (
+            tag.pk is not None
+            and MessageTagging.objects.filter(
+                tag=tag, origin_channel_tid=channel_tid, origin_post_tid=post_tid
+            ).exists()
+        ):
+            raise serializers.ValidationError(
+                {"tag": f"This post already carries “{tag.name}” — on this message, its original or a share."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        tag = validated_data["tag"]
+        user = self.context["request"].user
+        with transaction.atomic():
+            if tag.pk is None:
+                tag.save()
+            return tag_post(
+                validated_data["message"],
+                tag,
+                note=validated_data.get("note", ""),
+                tagged_by=user if user.is_authenticated else None,
+            )
+
+    def update(self, instance, validated_data):
+        instance.note = validated_data["note"]
+        instance.save(update_fields=["note", "_updated"])
         return instance

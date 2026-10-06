@@ -888,3 +888,182 @@ class MaintenanceCheckUpdatesApiTests(_ApiTestCase):
         body = resp.json()
         self.assertIsNone(body["latest"])
         self.assertFalse(body["update_available"])
+
+
+# ---------------------------------------------------------------------------
+# backoffice/api — MessageTagViewSet / MessageTaggingViewSet
+# ---------------------------------------------------------------------------
+
+
+@override_settings(WEB_ACCESS="ALL")
+class MessageTagApiTests(_ApiTestCase):
+    TAGS = "/manage/api/message-tags/"
+    TAGGINGS = "/manage/api/message-taggings/"
+
+    def setUp(self):
+        self.channel = make_channel(telegram_id=1, title="c")
+        self.m1 = Message.objects.create(telegram_id=1, channel=self.channel)
+        self.m2 = Message.objects.create(telegram_id=2, channel=self.channel)
+
+    def _tag(self, message, **body):
+        return self.jpost(self.TAGGINGS, {"message": message.pk, **body})
+
+    def test_tagging_by_a_new_name_creates_the_tag_with_a_palette_colour(self):
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import TAG_PALETTE
+
+        staff = User.objects.create_user("s@x.co", password="x", is_staff=True)
+        self.client.force_login(staff)
+        resp = self._tag(self.m1, tag_name="  Key   event ", note="why")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()
+        self.assertEqual(data["tag"]["name"], "Key event")
+        self.assertEqual(data["tag"]["color"], TAG_PALETTE[0])
+        self.assertEqual(data["note"], "why")
+        self.assertEqual(data["tagged_by"], "s@x.co")
+        self.assertEqual(MessageTag.objects.count(), 1)
+
+    def test_existing_name_is_reused_case_insensitively(self):
+        from webapp.models import MessageTag
+
+        self._tag(self.m1, tag_name="Война")
+        resp = self._tag(self.m2, tag_name="ВОЙНА")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(MessageTag.objects.count(), 1)
+        self.assertEqual(resp.json()["tagged_by"], "")  # anonymous under WEB_ACCESS=ALL
+
+    def test_tagging_by_id(self):
+        from webapp.models import MessageTag
+
+        tag = MessageTag.objects.create(name="x")
+        resp = self._tag(self.m1, tag_id=tag.pk)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["tag"]["id"], tag.pk)
+
+    def test_same_tag_twice_on_a_message_is_rejected(self):
+        self._tag(self.m1, tag_name="dup")
+        resp = self._tag(self.m1, tag_name="DUP")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("already carries", resp.json()["tag"][0])
+
+    def test_blank_name_is_rejected(self):
+        resp = self._tag(self.m1, tag_name="   ")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_update_changes_only_the_note(self):
+        created = self._tag(self.m1, tag_name="a").json()
+        resp = self.jpatch(f"{self.TAGGINGS}{created['id']}/", {"note": "later", "message": self.m2.pk})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["note"], "later")
+        self.assertEqual(resp.json()["message"], self.m1.pk)
+
+    def test_list_filters_by_message_and_delete_removes(self):
+        created = self._tag(self.m1, tag_name="a").json()
+        self._tag(self.m2, tag_name="b")
+        rows = self.jget(f"{self.TAGGINGS}?message={self.m1.pk}").json()["results"]
+        self.assertEqual([r["tag"]["name"] for r in rows], ["a"])
+        self.assertEqual(self.jget(f"{self.TAGGINGS}?message=abc").status_code, 400)
+        self.assertEqual(self.jdelete(f"{self.TAGGINGS}{created['id']}/").status_code, 204)
+        self.assertEqual(self.jget(f"{self.TAGGINGS}?message={self.m1.pk}").json()["results"], [])
+
+    def test_tag_list_counts_messages_and_rename_clash_is_rejected(self):
+        self._tag(self.m1, tag_name="a")
+        self._tag(self.m2, tag_name="a")
+        b = self._tag(self.m2, tag_name="b").json()["tag"]
+        rows = {r["name"]: r["message_count"] for r in self.jget(self.TAGS).json()["results"]}
+        self.assertEqual(rows, {"a": 2, "b": 1})
+        resp = self.jpatch(f"{self.TAGS}{b['id']}/", {"name": "A"})
+        self.assertEqual(resp.status_code, 400)
+        resp = self.jpatch(f"{self.TAGS}{b['id']}/", {"name": "B", "color": "#123456"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["color"], "#123456")
+
+    def test_next_color_skips_used_colours(self):
+        from webapp.models.tag_models import TAG_PALETTE
+
+        self._tag(self.m1, tag_name="a")
+        self.assertEqual(self.jget(f"{self.TAGS}next-color/").json(), {"color": TAG_PALETTE[1]})
+
+    def test_merge_moves_messages_and_deletes_the_source(self):
+        from webapp.models import MessageTag
+
+        a = self._tag(self.m1, tag_name="a").json()["tag"]
+        b = self._tag(self.m2, tag_name="b").json()["tag"]
+        resp = self.jpost(f"{self.TAGS}{a['id']}/merge/", {"into": b["id"]})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["moved"], 1)
+        self.assertEqual(resp.json()["tag"]["message_count"], 2)
+        self.assertFalse(MessageTag.objects.filter(pk=a["id"]).exists())
+
+    def test_merge_rejects_self_and_bad_targets(self):
+        a = self._tag(self.m1, tag_name="a").json()["tag"]
+        for into in (a["id"], 99999, "x", True, None):
+            resp = self.jpost(f"{self.TAGS}{a['id']}/merge/", {"into": into})
+            self.assertEqual(resp.status_code, 400, into)
+
+    @override_settings(WEB_ACCESS="OPEN")
+    def test_open_mode_non_staff_cannot_tag(self):
+        self.client.force_login(User.objects.create_user("r@x.co", password="x"))
+        self.assertEqual(self._tag(self.m1, tag_name="a").status_code, 403)
+
+
+@override_settings(WEB_ACCESS="ALL")
+class MessageTagSharesApiTests(_ApiTestCase):
+    """Tagging through the API reaches the original and every share of the post."""
+
+    TAGGINGS = "/manage/api/message-taggings/"
+
+    def setUp(self):
+        self.origin = make_channel(telegram_id=100, title="origin")
+        sharer = make_channel(telegram_id=200, title="sharer")
+        self.original = Message.objects.create(telegram_id=5, channel=self.origin)
+        self.share = Message.objects.create(
+            telegram_id=1, channel=sharer, forwarded_from=self.origin, fwd_from_channel_post=5
+        )
+        self.other = Message.objects.create(telegram_id=2, channel=sharer)
+
+    def test_tagging_a_share_reports_the_whole_post(self):
+        resp = self.jpost(self.TAGGINGS, {"message": self.share.pk, "tag_name": "watch"})
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["member_count"], 2)
+        self.assertEqual(resp.json()["message"], self.share.pk)
+
+    def test_the_same_post_cannot_take_a_tag_twice(self):
+        self.jpost(self.TAGGINGS, {"message": self.original.pk, "tag_name": "watch"})
+        resp = self.jpost(self.TAGGINGS, {"message": self.share.pk, "tag_name": "WATCH"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("already carries", resp.json()["tag"][0])
+
+    def test_listing_a_share_shows_tags_put_on_its_original_even_before_a_sync(self):
+        self.jpost(self.TAGGINGS, {"message": self.original.pk, "tag_name": "watch"})
+        late = Message.objects.create(
+            telegram_id=3, channel=self.other.channel, forwarded_from=self.origin, fwd_from_channel_post=5
+        )
+        for message in (self.share, late):
+            rows = self.jget(f"{self.TAGGINGS}?message={message.pk}").json()["results"]
+            self.assertEqual([r["tag"]["name"] for r in rows], ["watch"])
+        self.assertEqual(self.jget(f"{self.TAGGINGS}?message={self.other.pk}").json()["results"], [])
+        self.assertEqual(self.jget(f"{self.TAGGINGS}?message=999999").json()["results"], [])
+
+    def test_for_messages_returns_each_messages_chips(self):
+        self.jpost(self.TAGGINGS, {"message": self.share.pk, "tag_name": "watch", "note": "n"})
+        ids = f"{self.original.pk},{self.share.pk},{self.other.pk}"
+        data = self.jget(f"{self.TAGGINGS}for-messages/?ids={ids}").json()
+        self.assertEqual([t["tag"]["name"] for t in data[str(self.original.pk)]], ["watch"])
+        self.assertEqual(data[str(self.share.pk)][0]["note"], "n")
+        self.assertEqual(data[str(self.share.pk)][0]["member_count"], 2)
+        self.assertEqual(data[str(self.other.pk)], [])
+        self.assertEqual(self.jget(f"{self.TAGGINGS}for-messages/?ids=1,x").status_code, 400)
+
+    def test_deleting_from_a_share_untags_the_original(self):
+        created = self.jpost(self.TAGGINGS, {"message": self.share.pk, "tag_name": "watch"}).json()
+        self.assertEqual(self.jdelete(f"{self.TAGGINGS}{created['id']}/").status_code, 204)
+        self.assertEqual(self.jget(f"{self.TAGGINGS}?message={self.original.pk}").json()["results"], [])
+
+
+class MessageTagsPageTests(TestCase):
+    @override_settings(WEB_ACCESS="ALL")
+    def test_tags_page_renders(self):
+        resp = self.client.get(reverse("backoffice:tags"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "backoffice/js/tags.js")

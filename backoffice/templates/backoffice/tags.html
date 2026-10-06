@@ -1,0 +1,50 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% load vstatic %}
+
+{% block bo_heading %}Message tags{% endblock bo_heading %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Message tags</h2>
+    <button class="bo-btn" id="tag-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add tag</button>
+  </div>
+  <p class="text-muted small">
+    Informal, shared bookmarks for messages: tag a message from the
+    <i class="bi bi-tag" aria-hidden="true"></i> button on any post card, then find it again through
+    the tag filter in a message list's <em>Options</em> menu or by typing <code>tag:name</code> in a search box.
+    Tags never affect the analysis. New tags get the next free palette colour; change it here.
+    Merge folds a tag's messages into another tag and deletes it.
+  </p>
+  <form class="bo-add-form d-none" id="tag-add-form" autocomplete="off">
+    <input class="bo-input bo-input--color" type="color" name="color" value="#1f77b4" aria-label="Tag colour">
+    <input class="bo-input" name="name" placeholder="Name" maxlength="64" required aria-label="Tag name">
+    <input class="bo-input bo-input--wide" name="description" placeholder="Description (optional)" aria-label="Tag description">
+    <button type="submit" class="bo-btn">Save</button>
+    <button type="button" class="bo-btn bo-btn--ghost" id="tag-add-cancel">Cancel</button>
+  </form>
+  <table class="bo-table" id="tag-table">
+    <caption class="sr-only">Message tags</caption>
+    <thead>
+      <tr>
+        <th scope="col">Colour</th>
+        <th scope="col">Name</th>
+        <th scope="col">Description</th>
+        <th class="bo-th--num" scope="col">Messages</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody id="tag-tbody">
+      <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>window.MESSAGE_SEARCH_URL = "{% url 'message-search' %}";</script>
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/tags.js' %}"></script>
+{% endblock extra_scripts %}

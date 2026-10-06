@@ -17,6 +17,10 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'labels' %} active{% endif %}">
       <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Labels
     </a>
+    <a href="{% url 'backoffice:tags' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'tags' %} active{% endif %}">
+      <i class="bi bi-tags me-1" aria-hidden="true"></i>Tags
+    </a>
     <a href="{% url 'backoffice:sources' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'sources' %} active{% endif %}">
       <i class="bi bi-collection me-1" aria-hidden="true"></i>Sources

@@ -20,6 +20,8 @@ from .views import (
     LabelGroupViewSet,
     LabelParentViewSet,
     LabelViewSet,
+    MessageTaggingViewSet,
+    MessageTagViewSet,
     ProjectView,
     SearchTermViewSet,
     UserViewSet,
@@ -39,6 +41,8 @@ router.register("event-types", EventTypeViewSet, basename="api-event-types")
 router.register("events", EventViewSet, basename="api-events")
 router.register("users", UserViewSet, basename="api-users")
 router.register("vacancies", ChannelVacancyViewSet, basename="api-vacancies")
+router.register("message-tags", MessageTagViewSet, basename="api-message-tags")
+router.register("message-taggings", MessageTaggingViewSet, basename="api-message-taggings")
 
 urlpatterns = [
     *router.urls,

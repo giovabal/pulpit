@@ -13,6 +13,8 @@ from .models import (
     LabelGroup,
     Message,
     MessagePicture,
+    MessageTag,
+    MessageTagging,
     Poll,
     PollAnswer,
     ProfilePicture,
@@ -218,6 +220,33 @@ class LabelAdmin(admin.ModelAdmin):
     list_editable = ["color", "is_in_target"]
     list_filter = ("group", "is_in_target")
     search_fields = ("name",)
+
+
+class MessageTaggingInline(admin.TabularInline):
+    # Tag posts from the post cards: a tagging needs its post's Telegram origin and
+    # member links (webapp.models.tag_models.tag_post), which a bare admin row lacks.
+    model = MessageTagging
+    extra = 0
+    fields = ("message", "origin_channel_tid", "origin_post_tid", "note", "tagged_by")
+    readonly_fields = ("message", "origin_channel_tid", "origin_post_tid", "tagged_by")
+
+    def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(MessageTag)
+class MessageTagAdmin(admin.ModelAdmin):
+    list_display = ("name", "color", "message_count")
+    list_editable = ["color"]
+    search_fields = ("name",)
+    inlines = [MessageTaggingInline]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return super().get_queryset(request).annotate(_message_count=Count("taggings__members__message", distinct=True))
+
+    @admin.display(description="Messages", ordering="_message_count")
+    def message_count(self, obj: MessageTag) -> int:
+        return obj._message_count  # type: ignore[attr-defined]
 
 
 @admin.register(Project)
