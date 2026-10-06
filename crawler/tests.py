@@ -2941,8 +2941,13 @@ class TelethonUnraisableFilterTests(TestCase):
         return types.SimpleNamespace(cr_code=code)
 
     @staticmethod
-    def _unraisable(obj: Any, exc: BaseException) -> Any:
-        return types.SimpleNamespace(object=obj, exc_value=exc, exc_type=type(exc))
+    def _unraisable(obj: Any, exc: BaseException, err_msg: str | None = None) -> Any:
+        return types.SimpleNamespace(object=obj, exc_value=exc, exc_type=type(exc), err_msg=err_msg)
+
+    @staticmethod
+    def _closing_msg(qualname: str) -> str:
+        """Python 3.14's ``err_msg`` for a coroutine finalised with ``object=None``."""
+        return f"Exception ignored while closing generator <coroutine object {qualname} at 0x7d5ad8e8e4d0>"
 
     def setUp(self) -> None:
         self.forwarded: list = []
@@ -2976,11 +2981,32 @@ class TelethonUnraisableFilterTests(TestCase):
         self.hook(u)
         self.assertEqual(self.forwarded, [u])
 
+    def test_py314_telethon_loop_named_in_err_msg_is_swallowed(self) -> None:
+        # Python 3.14+: no coroutine object, only its repr in err_msg.
+        for qualname in ("Connection._recv_loop", "MTProtoSender._send_loop"):
+            self.hook(
+                self._unraisable(None, RuntimeError("coroutine ignored GeneratorExit"), self._closing_msg(qualname))
+            )
+        self.assertEqual(self.forwarded, [])
+
+    def test_py314_other_coroutine_named_in_err_msg_is_forwarded(self) -> None:
+        u = self._unraisable(
+            None, RuntimeError("coroutine ignored GeneratorExit"), self._closing_msg("ChannelCrawler._recv_loop")
+        )
+        self.hook(u)
+        self.assertEqual(self.forwarded, [u])
+
+    def test_py314_telethon_loop_real_error_is_forwarded(self) -> None:
+        u = self._unraisable(None, ValueError("genuine bug"), self._closing_msg("Connection._recv_loop"))
+        self.hook(u)
+        self.assertEqual(self.forwarded, [u])
+
     def test_real_finalisation_is_swallowed_without_touching_stderr(self) -> None:
-        """End-to-end: a coroutine whose code physically lives under a
-        ``…/telethon/…`` path, GC-finalised while suspended inside an
-        ``await`` in its ``finally`` (Telethon's exact shape), is swallowed
-        with nothing written to stderr."""
+        """End-to-end: a ``Connection._recv_loop`` coroutine whose code
+        physically lives under a ``…/telethon/…`` path, GC-finalised while
+        suspended inside an ``await`` in its ``finally`` (Telethon's exact
+        shape), is swallowed with nothing written to stderr — by code path on
+        Python < 3.14, by the qualname in ``err_msg`` on 3.14+."""
         import contextlib
         import gc
         import importlib.util
@@ -2996,11 +3022,12 @@ class TelethonUnraisableFilterTests(TestCase):
                     "class _suspend:\n"
                     "    def __await__(self):\n"
                     "        yield\n"
-                    "async def _recv_loop():\n"
-                    "    try:\n"
-                    "        await _suspend()\n"
-                    "    finally:\n"
-                    "        await _suspend()\n"
+                    "class Connection:\n"
+                    "    async def _recv_loop(self):\n"
+                    "        try:\n"
+                    "            await _suspend()\n"
+                    "        finally:\n"
+                    "            await _suspend()\n"
                 )
             spec = importlib.util.spec_from_file_location("telethon._unraisable_probe", mod_path)
             module = importlib.util.module_from_spec(spec)
@@ -3012,7 +3039,7 @@ class TelethonUnraisableFilterTests(TestCase):
             stderr_buffer = io.StringIO()
             try:
                 with contextlib.redirect_stderr(stderr_buffer):
-                    coro = module._recv_loop()
+                    coro = module.Connection()._recv_loop()
                     coro.send(None)  # suspend inside the try
                     del coro
                     gc.collect()

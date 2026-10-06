@@ -4,22 +4,27 @@
 
 set -e
 
-# Require Python 3.12. Newer interpreters are intentionally excluded: the numpy<2 pin
-# (kept for ABI compatibility with apt/conda graph-tool builds, see requirements.txt)
-# has no wheels for Python 3.13+, so those interpreters cannot install this project.
+# Require Python 3.12, 3.13 or 3.14. graph-tool (needed only for the SBM community strategies) is not
+# pip-installable: apt/conda ship it compiled for one interpreter — python3.12 on Ubuntu 24.04,
+# python3.14 on 26.04 — so prefer the supported interpreter that can import it, and otherwise the
+# newest one installed.
 PY=""
-for candidate in python3.12 python3 python; do
+GRAPH_TOOL_PY=""
+for candidate in python3.14 python3.13 python3.12 python3 python; do
     bin=$(command -v "$candidate" 2>/dev/null) || continue
     version=$("$bin" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null) || continue
     case "$version" in
-        3.12)
-            PY="$bin"
-            break
+        3.12 | 3.13 | 3.14)
+            [ -z "$PY" ] && PY="$bin"
+            if [ -z "$GRAPH_TOOL_PY" ] && "$bin" -c "import graph_tool" >/dev/null 2>&1; then
+                GRAPH_TOOL_PY="$bin"
+            fi
             ;;
     esac
 done
+[ -n "$GRAPH_TOOL_PY" ] && PY="$GRAPH_TOOL_PY"
 if [ -z "$PY" ]; then
-    echo "Error: Python 3.12 is required but was not found." >&2
+    echo "Error: Python 3.12, 3.13 or 3.14 is required but was not found." >&2
     echo "Download it from https://www.python.org/downloads/" >&2
     exit 1
 fi
@@ -40,10 +45,11 @@ fi
 # --system-site-packages so it is importable inside the venv; other setups get a fully isolated one.
 VENV_DIR=".venv"
 
-# A venv built with a different interpreter cannot be reused (e.g. an older 3.14 venv from before this
-# 3.12 pin): the numpy<2 requirement has no wheels for 3.13+, so pip would fall back to building numpy
-# from source and fail with a confusing "Cannot compile Python.h" error deep in the install. Detect a
-# version mismatch up front and recreate the venv from scratch with the interpreter selected above.
+# A venv built with a different interpreter cannot be reused: its packages are compiled for that
+# interpreter, and with --system-site-packages it would keep borrowing system packages built for
+# another one (after an OS upgrade moves python3 to a new version, numpy/SciPy/Pillow/graph-tool all
+# fail to import). Detect a version mismatch up front and recreate the venv from scratch with the
+# interpreter selected above.
 if [ -d "$VENV_DIR" ]; then
     required_version=$("$PY" -c "import sys; print('%d.%d' % sys.version_info[:2])")
     existing_version=$("$VENV_DIR/bin/python" -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>/dev/null || true)
@@ -60,9 +66,6 @@ if [ ! -d "$VENV_DIR" ]; then
         echo "Detected system graph-tool — creating the venv with --system-site-packages so it is importable (needed for the SBM community strategies)."
     fi
     "$PY" -m venv $VENV_OPTS "$VENV_DIR"
-elif "$PY" -c "import graph_tool" >/dev/null 2>&1 && grep -q "include-system-site-packages = false" "$VENV_DIR/pyvenv.cfg" 2>/dev/null; then
-    echo "Warning: system graph-tool is installed, but the existing $VENV_DIR was created without --system-site-packages, so graph_tool is not importable there (the SBM strategies will fail)." >&2
-    echo "         Recreate it (rm -rf $VENV_DIR && ./setup.sh) or set 'include-system-site-packages = true' in $VENV_DIR/pyvenv.cfg." >&2
 fi
 
 # Use the venv interpreter directly (POSIX-portable; avoids the bash-only `source`,
@@ -72,6 +75,17 @@ VENV_PY="$VENV_DIR/bin/python"
 # Upgrade pip and install requirements
 "$VENV_PY" -m pip install --upgrade pip
 "$VENV_PY" -m pip install -r requirements.txt -r requirements_dev.txt
+
+# The system graph-tool must still import inside the venv after the install — otherwise the SBM
+# strategies fail at the first run. Say why here instead.
+if "$PY" -c "import graph_tool" >/dev/null 2>&1 && ! "$VENV_PY" -c "import graph_tool" >/dev/null 2>&1; then
+    echo "Warning: system graph-tool is installed but does not import inside $VENV_DIR, so the SBM strategies will fail." >&2
+    if grep -q "include-system-site-packages = false" "$VENV_DIR/pyvenv.cfg" 2>/dev/null; then
+        echo "         $VENV_DIR was created without --system-site-packages. Recreate it (rm -rf $VENV_DIR && sh setup.sh) or set 'include-system-site-packages = true' in $VENV_DIR/pyvenv.cfg." >&2
+    else
+        echo "         A package has likely installed its own numpy into $VENV_DIR over the system one graph-tool was compiled against — '$VENV_PY -m pip show numpy' should report a Location outside $VENV_DIR." >&2
+    fi
+fi
 
 # Bootstrap configuration/.env from configuration/env.example if not present
 mkdir -p configuration
