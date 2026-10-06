@@ -1538,6 +1538,18 @@ body {
   margin: .5rem 0;
 }
 
+.msg-options-note {
+  max-width: 15rem;
+  margin: 0;
+  font-size: .72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.post-details-muted {
+  color: var(--muted);
+}
+
 .msg-options-hint {
   font-weight: normal;
   text-transform: none;

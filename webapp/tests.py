@@ -2565,3 +2565,108 @@ class PictureLightboxTests(TestCase):
         for url in urls:
             self.assertIn(f'<a href="{url}" class="post-image-link" data-lightbox="post-{head.pk}">', html)
         self.assertIn("webapp/js/post_lightbox.js", html)
+
+
+class UniqueMessagesTests(TestCase):
+    """``unique=1``: one message per post — the original when listed, else the earliest listed share."""
+
+    def setUp(self) -> None:
+        org = make_label("Org")
+        self.a = make_channel(telegram_id=100, title="A", label=org)
+        self.b = make_channel(telegram_id=200, title="B", label=org)
+        self.c = make_channel(telegram_id=300, title="C", label=org)
+        self.outside = make_channel(telegram_id=400, title="outside", label=make_label("Out", is_in_target=False))
+
+        def msg(channel, tid, day, **kw):
+            return Message.objects.create(
+                telegram_id=tid, channel=channel, date=datetime.datetime(2026, 1, day, tzinfo=datetime.UTC), **kw
+            )
+
+        # A post of in-target A, shared by B and C: only the original survives.
+        self.original = msg(self.a, 1, 1)
+        self.share_b = msg(self.b, 1, 2, forwarded_from=self.a, fwd_from_channel_post=1)
+        self.share_c = msg(self.c, 1, 3, forwarded_from=self.a, fwd_from_channel_post=1)
+        # A post of an out-of-target channel, shared twice: the earliest share survives.
+        self.outside_post = msg(self.outside, 9, 1)
+        self.late_share = msg(self.b, 2, 6, forwarded_from=self.outside, fwd_from_channel_post=9)
+        self.early_share = msg(self.c, 2, 4, forwarded_from=self.outside, fwd_from_channel_post=9)
+        # Shares of a private channel's post: the earliest survives.
+        self.private_late = msg(self.b, 3, 8, forwarded_from_private=999, fwd_from_channel_post=5)
+        self.private_early = msg(self.c, 3, 7, forwarded_from_private=999, fwd_from_channel_post=5)
+        # A forward without an origin post id is a post of its own; so is a plain post.
+        self.no_post_id = msg(self.b, 4, 9, forwarded_from=self.outside)
+        self.plain = msg(self.c, 4, 9)
+
+    def _listed(self, query: str) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel__in=Channel.objects.in_target())
+        return set(_apply_message_options(qs, QueryDict(query)).values_list("pk", flat=True))
+
+    def test_unique_keeps_one_message_per_post(self) -> None:
+        self.assertEqual(
+            self._listed("unique=1"),
+            {
+                self.original.pk,
+                self.early_share.pk,
+                self.private_early.pk,
+                self.no_post_id.pk,
+                self.plain.pk,
+            },
+        )
+
+    def test_without_unique_every_share_is_listed(self) -> None:
+        self.assertIn(self.share_b.pk, self._listed(""))
+        self.assertIn(self.late_share.pk, self._listed(""))
+
+    def test_unique_chooses_among_what_the_other_options_kept(self) -> None:
+        # With the original filtered out by date, the earliest share left stands for the post.
+        listed = self._listed("unique=1&date_from=2026-01-02")
+        self.assertIn(self.share_b.pk, listed)
+        self.assertNotIn(self.share_c.pk, listed)
+
+    def test_post_copies_counts_the_folded_messages(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel__in=Channel.objects.in_target())
+        copies = dict(_apply_message_options(qs, QueryDict("unique=1")).values_list("pk", "post_copies"))
+        self.assertEqual(copies[self.original.pk], 3)
+        self.assertEqual(copies[self.early_share.pk], 2)
+        self.assertEqual(copies[self.plain.pk], 1)
+
+    def test_unique_marks_options_active_and_survives_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict("unique=1"))
+        self.assertTrue(ctx["unique"])
+        self.assertTrue(ctx["options_active"])
+        self.assertIn("unique=1", ctx["original_query"])
+
+    def test_search_page_renders_unique_list_with_copy_counts(self) -> None:
+        resp = self.client.get(reverse("message-search") + "?unique=1")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["page_obj"].paginator.count, 5)
+        self.assertContains(resp, "appears 3 times in this list")
+
+
+class SourcePostDateTests(TestCase):
+    def test_details_show_when_the_source_post_was_published(self) -> None:
+        origin = make_channel(telegram_id=1, title="origin", label=make_label("Org"))
+        sharer = make_channel(telegram_id=2, title="sharer", label=make_label("Org2"))
+        Message.objects.create(
+            telegram_id=7,
+            channel=sharer,
+            date=datetime.datetime(2026, 3, 2, 15, 0, tzinfo=datetime.UTC),
+            forwarded_from=origin,
+            fwd_from_channel_post=42,
+            fwd_from_date=datetime.datetime(2026, 3, 1, 9, 30, tzinfo=datetime.UTC),
+        )
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": sharer.pk})).content.decode()
+        self.assertIn('<time datetime="2026-03-01T', html)
+        self.assertIn("before this share", html)

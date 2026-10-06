@@ -81,6 +81,17 @@
         </label>
       </div>
 
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
+        <div class="msg-options-label">Shares</div>
+        <label class="msg-options-item">
+          <input type="checkbox" name="unique" value="1" class="msg-opt-input"
+                 {% if unique %}checked{% endif %}> Unique — one message per post
+        </label>
+        <p class="msg-options-note">Hides shares: a post shows as its original when listed, else as its earliest share.</p>
+      </div>
+
       {% if CAN_VIEW_TAGS and all_tags %}
       <div class="msg-options-divider"></div>
 
