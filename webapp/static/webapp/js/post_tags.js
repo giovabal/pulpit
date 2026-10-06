@@ -3,9 +3,11 @@
    The tag button and panel are rendered only for users who may edit tags
    (CAN_EDIT_TAGS); everyone who may see tags gets the read-only chip row. The
    editor talks to the backoffice API — /manage/api/message-taggings/ for one
-   post's tags, /manage/api/message-tags/ for the shared tag list offered as
-   name suggestions — and rebuilds chip rows with the same markup the template
-   renders. A tag belongs to the post (its original and every share), so other
+   post's tags, /manage/api/message-tags/ for the shared tag list — and rebuilds
+   chip rows with the same markup the template renders. The tag field is an
+   ARIA combobox: it lists the existing tags and filters them as you type; a
+   name matching an existing tag (ignoring case) reuses it, any other creates a
+   new tag (the server makes the final match, by webapp.models.tag_models.tag_key). A tag belongs to the post (its original and every share), so other
    cards on the page may be the same post: after each change every chip row on
    the page is refreshed in one call (message-taggings/for-messages/). */
 (function() {
@@ -14,9 +16,10 @@
     var API_TAGS = '/manage/api/message-tags/';
     var API_TAGGINGS = '/manage/api/message-taggings/';
     var MANAGE_URL = '/manage/tags/';
-    var DATALIST_ID = 'message-tag-names';
 
-    var tagNamesPromise = null;
+    var allTags = [];
+    var tagsPromise = null;
+    var combos = [];
 
     function errorText(data, r) {
         if (data && data.detail) return data.detail;
@@ -41,26 +44,219 @@
         });
     }
 
-    // The shared tag list, offered as <datalist> suggestions in every panel.
-    // Fetched once per page; refreshed after a tag is created on the fly.
-    function loadTagNames(refresh) {
-        if (!tagNamesPromise || refresh) {
-            tagNamesPromise = api(API_TAGS + '?limit=1000').then(function(data) {
-                var list = document.getElementById(DATALIST_ID);
-                if (!list) {
-                    list = document.createElement('datalist');
-                    list.id = DATALIST_ID;
-                    document.body.appendChild(list);
-                }
-                list.innerHTML = '';
-                data.results.forEach(function(t) {
-                    var opt = document.createElement('option');
-                    opt.value = t.name;
-                    list.appendChild(opt);
-                });
-            }).catch(function() { tagNamesPromise = null; });
+    // Close enough to the server's tag_key (NFKC, collapsed whitespace, case-folded)
+    // for the field's hints; the server decides the actual match.
+    function tagKey(name) {
+        return String(name || '').normalize('NFKC').trim().split(/\s+/).join(' ').toLowerCase();
+    }
+
+    // The shared tag list behind every editor's combobox. Fetched once per page;
+    // refreshed after a tag is created on the fly.
+    function loadTags(refresh) {
+        if (!tagsPromise || refresh) {
+            tagsPromise = api(API_TAGS + '?limit=1000').then(function(data) {
+                allTags = data.results;
+                combos.forEach(function(combo) { combo.refresh(); });
+            }).catch(function() { tagsPromise = null; });
         }
-        return tagNamesPromise;
+        return tagsPromise;
+    }
+
+    function swatch(color) {
+        var dot = document.createElement('span');
+        dot.className = 'tag-swatch';
+        dot.style.background = color;
+        dot.setAttribute('aria-hidden', 'true');
+        return dot;
+    }
+
+    /* The tag field: lists the existing tags (minus those already on the post),
+       filters them as you type, and offers to create a tag when the text matches
+       none. Picking an option fills the field; Enter on the option already in the
+       field (or with the list closed) submits the form. ``onState`` hears
+       'empty' | 'existing' | 'new' | 'present' (already on this post). */
+    function createTagCombo(postPk, onState) {
+        var listId = 'ptc-' + postPk;
+        var input = document.createElement('input');
+        input.className = 'form-control form-control-sm';
+        input.maxLength = 64;
+        input.required = true;
+        input.autocomplete = 'off';
+        input.placeholder = 'Tag — pick one or type a new name';
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-expanded', 'false');
+        input.setAttribute('aria-controls', listId);
+        input.setAttribute('aria-label', 'Tag: pick one or type a new name');
+
+        var listbox = document.createElement('ul');
+        listbox.className = 'tag-combo-list list-unstyled';
+        listbox.id = listId;
+        listbox.setAttribute('role', 'listbox');
+        listbox.setAttribute('aria-label', 'Tags');
+        listbox.hidden = true;
+        // Keep focus in the field when the list (or its scrollbar) is clicked.
+        listbox.addEventListener('mousedown', function(e) { e.preventDefault(); });
+
+        var options = [];
+        var active = -1;
+        var present = {};
+
+        function exactMatch() {
+            var key = tagKey(input.value);
+            if (!key) return null;
+            return allTags.find(function(t) { return tagKey(t.name) === key; }) || null;
+        }
+
+        function state() {
+            if (!input.value.trim()) return 'empty';
+            var exact = exactMatch();
+            if (!exact) return 'new';
+            return present[tagKey(exact.name)] ? 'present' : 'existing';
+        }
+
+        function info(text) {
+            var li = document.createElement('li');
+            li.className = 'tag-combo-info';
+            li.textContent = text;
+            listbox.appendChild(li);
+        }
+
+        function render() {
+            var query = tagKey(input.value);
+            var exact = exactMatch();
+            var matches = allTags.filter(function(t) {
+                var key = tagKey(t.name);
+                return !present[key] && (!query || key.indexOf(query) !== -1);
+            });
+            // Names starting with the query first, then the other matches (each alphabetical).
+            matches.sort(function(a, b) {
+                var pa = tagKey(a.name).indexOf(query) === 0 ? 0 : 1;
+                var pb = tagKey(b.name).indexOf(query) === 0 ? 0 : 1;
+                return pa - pb || a.name.localeCompare(b.name);
+            });
+            options = matches.map(function(t) { return { name: t.name, tag: t }; });
+            if (query && !exact) options.push({ name: input.value.trim(), tag: null });
+
+            listbox.innerHTML = '';
+            if (exact && present[tagKey(exact.name)]) info('“' + exact.name + '” is already on this post.');
+            options.forEach(function(option, i) {
+                var li = document.createElement('li');
+                li.id = listId + '-' + i;
+                li.className = 'tag-combo-option' + (option.tag ? '' : ' is-create');
+                li.setAttribute('role', 'option');
+                if (option.tag) {
+                    li.appendChild(swatch(option.tag.color));
+                    li.appendChild(document.createTextNode(option.tag.name));
+                    var count = document.createElement('span');
+                    count.className = 'tag-combo-count';
+                    count.textContent = option.tag.message_count;
+                    count.title = option.tag.message_count + ' message(s)';
+                    li.appendChild(count);
+                } else {
+                    li.innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
+                    li.appendChild(document.createTextNode('Create tag “' + option.name + '”'));
+                }
+                li.addEventListener('click', function() { pick(i); });
+                option.el = li;
+                listbox.appendChild(li);
+            });
+            if (!options.length && !listbox.childNodes.length) {
+                info(allTags.length ? 'No other tags.' : 'No tags yet — type a name to create one.');
+            }
+            // Prefer reusing a tag: the exact match, else the first match, else "create".
+            active = options.length ? 0 : -1;
+            options.forEach(function(option, i) { if (option.tag && option.tag === exact) active = i; });
+            if (!query) active = -1;
+            highlight();
+            onState(state());
+        }
+
+        function highlight() {
+            options.forEach(function(option, i) {
+                option.el.classList.toggle('is-active', i === active);
+                option.el.setAttribute('aria-selected', i === active ? 'true' : 'false');
+            });
+            if (active >= 0) {
+                input.setAttribute('aria-activedescendant', options[active].el.id);
+                options[active].el.scrollIntoView({ block: 'nearest' });
+            } else {
+                input.removeAttribute('aria-activedescendant');
+            }
+        }
+
+        function open() {
+            if (!listbox.hidden) return;
+            listbox.hidden = false;
+            input.setAttribute('aria-expanded', 'true');
+            render();
+        }
+
+        function close() {
+            listbox.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+            input.removeAttribute('aria-activedescendant');
+        }
+
+        function pick(i) {
+            input.value = options[i].name;
+            close();
+            onState(state());
+        }
+
+        input.addEventListener('focus', open);
+        input.addEventListener('click', open);
+        input.addEventListener('blur', close);
+        input.addEventListener('input', function() {
+            if (listbox.hidden) open();
+            else render();
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (listbox.hidden) {
+                    open();
+                    return;
+                }
+                if (!options.length) return;
+                if (e.key === 'ArrowDown') active = (active + 1) % options.length;
+                else active = active <= 0 ? options.length - 1 : active - 1;
+                highlight();
+            } else if (e.key === 'Enter' && !listbox.hidden && active >= 0) {
+                // Enter on an option other than what the field holds picks it; on the
+                // one already typed it falls through and submits the form.
+                if (tagKey(options[active].name) !== tagKey(input.value)) {
+                    e.preventDefault();
+                    pick(active);
+                } else {
+                    close();
+                }
+            } else if (e.key === 'Escape' && !listbox.hidden) {
+                e.preventDefault();
+                close();
+            }
+        });
+
+        var combo = {
+            input: input,
+            listbox: listbox,
+            // The tags already on this post leave the list.
+            setPresent: function(taggings) {
+                present = {};
+                taggings.forEach(function(t) { present[tagKey(t.tag.name)] = true; });
+                combo.refresh();
+            },
+            refresh: function() {
+                if (!listbox.hidden) render();
+                else onState(state());
+            },
+            clear: function() {
+                input.value = '';
+                combo.refresh();
+            },
+        };
+        combos.push(combo);
+        return combo;
     }
 
     function chipTitle(tagging) {
@@ -126,18 +322,18 @@
         var form = document.createElement('form');
         form.className = 'post-tags-form';
         form.autocomplete = 'off';
-        var nameIn = document.createElement('input');
-        nameIn.className = 'form-control form-control-sm';
-        nameIn.setAttribute('list', DATALIST_ID);
-        nameIn.maxLength = 64;
-        nameIn.required = true;
-        nameIn.placeholder = 'Tag — pick or type a new one';
-        nameIn.setAttribute('aria-label', 'Tag name');
+        var addBtn = document.createElement('button');
+        var combo = createTagCombo(postPk, function(state) {
+            // The button says whether Add reuses a tag or creates one.
+            addBtn.textContent = state === 'new' ? 'Create & add' : 'Add';
+            addBtn.disabled = state === 'present';
+            addBtn.title = state === 'present' ? 'This post already carries that tag' : '';
+        });
+        var nameIn = combo.input;
         var noteIn = document.createElement('input');
         noteIn.className = 'form-control form-control-sm';
         noteIn.placeholder = 'Note (optional)';
         noteIn.setAttribute('aria-label', 'Note');
-        var addBtn = document.createElement('button');
         addBtn.type = 'submit';
         addBtn.className = 'btn btn-sm btn-primary';
         addBtn.textContent = 'Add';
@@ -166,6 +362,7 @@
         foot.appendChild(manage);
 
         inner.appendChild(form);
+        inner.appendChild(combo.listbox);
         inner.appendChild(hint);
         inner.appendChild(list);
         inner.appendChild(foot);
@@ -177,6 +374,7 @@
         }
 
         function sync() {
+            combo.setPresent(taggings);
             renderList();
             renderChips(postPk, taggings);
             refreshAllChips();
@@ -244,8 +442,9 @@
                     taggings.sort(function(a, b) { return a.tag.name.localeCompare(b.tag.name); });
                     sync();
                     form.reset();
+                    combo.clear();
                     say('Tagged “' + created.tag.name + '”' + reachText(created, 'on') + '.');
-                    loadTagNames(true);
+                    loadTags(true);
                 })
                 .catch(function(err) { say(err.message, true); })
                 .then(function() {
@@ -256,7 +455,7 @@
 
         function load() {
             say('Loading…');
-            loadTagNames(false);
+            loadTags(false);
             return api(API_TAGGINGS + '?message=' + postPk + '&limit=1000')
                 .then(function(data) {
                     taggings = data.results;

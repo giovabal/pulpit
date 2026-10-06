@@ -2346,6 +2346,51 @@ a.post-tag.is-dark:hover {
   min-width: 0;
 }
 
+/* Tag combobox (post_tags.js): an in-flow list under the input row, not a
+   floating dropdown, so the card's overflow: hidden can't clip it. */
+.tag-combo-list {
+  max-height: 14rem;
+  margin: 0;
+  padding: .25rem 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.tag-combo-option {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .3rem .65rem;
+  font-size: .8rem;
+  cursor: pointer;
+}
+
+.tag-combo-option.is-active,
+.tag-combo-option:hover {
+  background: var(--hover);
+}
+
+.tag-combo-option.is-create {
+  color: var(--accent);
+}
+
+.tag-combo-count {
+  margin-left: auto;
+  padding-left: .75rem;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  color: var(--muted);
+}
+
+.tag-combo-info {
+  padding: .3rem .65rem;
+  font-size: .75rem;
+  color: var(--muted);
+}
+
 .post-tags-hint {
   margin: 0;
   font-size: .72rem;
