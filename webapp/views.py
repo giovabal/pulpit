@@ -8,8 +8,26 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet, Subquery, Sum
-from django.db.models.functions import Coalesce
+from django.db.models import (
+    BigIntegerField,
+    Case,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    Max,
+    Min,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Subquery,
+    Sum,
+    Value,
+    When,
+    Window,
+)
+from django.db.models.functions import Coalesce, RowNumber
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -225,6 +243,58 @@ def _apply_tag_filter(qs: QuerySet, params: Any, user: Any) -> QuerySet:
     return qs
 
 
+# ---- unique: one message per post -----------------------------------------
+
+# A message's post, in SQL (webapp.models.tag_models.message_origin in Python): a
+# forward with a known origin belongs to the origin's post — Telegram's header
+# names the first publication even for a re-share — and anything else is a post of
+# its own. The leading "kind" keeps Channel pks apart from the raw Telegram ids of
+# private, unresolved channels.
+_RESOLVED_SHARE = Q(forwarded_from__isnull=False, fwd_from_channel_post__isnull=False)
+_PRIVATE_SHARE = Q(
+    forwarded_from__isnull=True, forwarded_from_private__isnull=False, fwd_from_channel_post__isnull=False
+)
+
+
+def _post_partition() -> list:
+    return [
+        Case(When(_PRIVATE_SHARE, then=Value(1)), default=Value(0), output_field=IntegerField()),
+        Case(
+            When(_RESOLVED_SHARE, then=F("forwarded_from_id")),
+            When(_PRIVATE_SHARE, then=F("forwarded_from_private")),
+            default=F("channel_id"),
+            output_field=BigIntegerField(),
+        ),
+        Case(
+            When(_RESOLVED_SHARE | _PRIVATE_SHARE, then=F("fwd_from_channel_post")),
+            default=F("telegram_id"),
+            output_field=BigIntegerField(),
+        ),
+    ]
+
+
+def _one_message_per_post(qs: QuerySet) -> QuerySet:
+    """Keep each post once: its original when the list holds it, else its earliest share.
+
+    One ROW_NUMBER() pass over the already-filtered list — within a post the
+    original ranks first, then the shares by date — instead of a per-row search
+    for an earlier copy (there is no index to make that cheap on the message
+    table). ``post_copies`` counts the post's messages in the list.
+    """
+    partition = _post_partition()
+    is_share = Case(
+        When(_RESOLVED_SHARE | _PRIVATE_SHARE, then=Value(1)), default=Value(0), output_field=IntegerField()
+    )
+    return qs.annotate(
+        post_rank=Window(
+            RowNumber(),
+            partition_by=partition,
+            order_by=[is_share.asc(), F("date").asc(nulls_last=True), F("pk").asc()],
+        ),
+        post_copies=Window(Count("pk"), partition_by=partition),
+    ).filter(post_rank=1)
+
+
 def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> QuerySet:
     text = _message_query(params, user)[0]
     if text:
@@ -256,7 +326,11 @@ def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> Query
     # after Telegram unpins it — pinning is the editorial signal of interest.
     if params.get("pinned"):
         qs = qs.filter(has_been_pinned=True)
-    return _exclude_album_tails(qs)
+    qs = _exclude_album_tails(qs)
+    if params.get("unique"):
+        # Last, so the copies it chooses between are the ones the other options kept.
+        qs = _one_message_per_post(qs)
+    return qs
 
 
 def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
@@ -270,6 +344,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
     if lost not in _LOST_MODES:
         lost = "exclude"
     pinned = bool(params.get("pinned"))
+    unique = bool(params.get("unique"))
     any_tag, tag_ids = _selected_tags(params, user)
     options_active = (
         sort != _DEFAULT_SORT
@@ -278,6 +353,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         or set(selected) != set(_CONTENT_TYPES)
         or lost != "exclude"
         or pinned
+        or unique
         or any_tag
         or bool(tag_ids)
     )
@@ -297,6 +373,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         extra["lost"] = lost
     if pinned:
         extra["pinned"] = "1"
+    if unique:
+        extra["unique"] = "1"
     if any_tag or tag_ids:
         extra["tag"] = ([_ANY_TAG] if any_tag else []) + tag_ids
     original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
@@ -312,6 +390,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "all_types": _CONTENT_TYPES,
         "lost": lost,
         "pinned": pinned,
+        "unique": unique,
         "all_tags": all_tags,
         "any_tag": any_tag,
         "selected_tag_ids": tag_ids,
