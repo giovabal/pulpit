@@ -1691,11 +1691,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Query-planner stats refresh skipped: {exc}"))
 
     def _sync_message_tags(self) -> None:
-        """Extend every message tag to the shares of its post crawled in this run.
+        """Catch up message tags for anything the per-message linking missed.
 
         A tag put on a post reaches the original and every share of it
-        (``webapp.models.tag_models``); shares stored after the tagging are linked
-        here. Never allowed to fail the crawl: the next run catches up.
+        (``webapp.models.tag_models``). The crawler links each message to its
+        post's tags as it stores it; this end-of-crawl pass is the safety net,
+        for a post tagged in the web UI while the crawler was storing its shares.
+        Never allowed to fail the crawl: the next run catches up.
         """
         from webapp.models.tag_models import sync_tag_members
 
@@ -1705,7 +1707,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Message-tag sync skipped: {exc}"))
             return
         if added:
-            self.stdout.write(f"Message tags: {added} newly crawled message(s) share a tagged post.")
+            self.stdout.write(f"Message tags: linked {added} more message(s) to their post's tags.")
 
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
