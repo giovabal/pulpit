@@ -2227,7 +2227,9 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.msg.pending_forward_telegram_id = channel_id
         self.msg.save(update_fields=["pending_forward_telegram_id"])
 
-    def _make_tg_message(self, msg_id: int, fwd_channel_id: int | None = None) -> MagicMock:
+    def _make_tg_message(
+        self, msg_id: int, fwd_channel_id: int | None = None, channel_post: int | None = None
+    ) -> MagicMock:
         """Build a minimal Telethon message mock safe to pass to get_message()."""
         tm = MagicMock()
         tm.id = msg_id
@@ -2253,7 +2255,7 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         tm.media = None
         if fwd_channel_id is not None:
             tm.fwd_from.from_id.channel_id = fwd_channel_id
-            tm.fwd_from.channel_post = None
+            tm.fwd_from.channel_post = channel_post
             tm.fwd_from.from_name = None
             tm.fwd_from.date = None
         else:
@@ -2296,6 +2298,59 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.msg.refresh_from_db()
         self.assertIsNone(self.msg.pending_forward_telegram_id)
         self.assertEqual(self.msg.forwarded_from, fwd_channel)
+
+    # -- get_message gives a stored message its post's tags --
+
+    def _tags_of(self, telegram_id: int) -> list[str]:
+        msg = Message.objects.get(channel=self.source_channel, telegram_id=telegram_id)
+        return sorted(msg.tag_links.values_list("tagging__tag__name", flat=True))
+
+    def test_stored_share_of_a_tagged_post_takes_its_tags(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        origin = make_channel(telegram_id=7777, label=self.org)
+        tag_post(Message.objects.create(telegram_id=5, channel=origin), MessageTag.objects.create(name="watch"))
+
+        self.crawler.get_message(self.source_channel, self._make_tg_message(200, fwd_channel_id=7777, channel_post=5))
+        self.assertEqual(self._tags_of(200), ["watch"])
+        # A re-fetch of the same message adds nothing.
+        self.crawler.get_message(self.source_channel, self._make_tg_message(200, fwd_channel_id=7777, channel_post=5))
+        self.assertEqual(self._tags_of(200), ["watch"])
+
+    def test_share_is_linked_before_its_source_channel_is_resolved(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import message_origin, tag_post
+
+        # Tag a share whose source (9999) is still pending; its post is keyed by that id.
+        self.crawler.get_message(self.source_channel, self._make_tg_message(201, fwd_channel_id=9999, channel_post=5))
+        first = Message.objects.select_related("channel").get(channel=self.source_channel, telegram_id=201)
+        self.assertEqual(message_origin(first), (9999, 5))
+        tag_post(first, MessageTag.objects.create(name="watch"))
+
+        self.crawler.get_message(self.source_channel, self._make_tg_message(202, fwd_channel_id=9999, channel_post=5))
+        self.assertEqual(self._tags_of(202), ["watch"])
+
+    def test_stored_original_of_a_tagged_share_takes_its_tags(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        sharer = make_channel(telegram_id=4444, label=self.org)
+        share = Message.objects.create(
+            telegram_id=3, channel=sharer, forwarded_from=self.source_channel, fwd_from_channel_post=50
+        )
+        tag_post(share, MessageTag.objects.create(name="watch"))
+
+        self.crawler.get_message(self.source_channel, self._make_tg_message(50))
+        self.assertEqual(self._tags_of(50), ["watch"])
+
+    def test_unrelated_message_takes_no_tags(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        tag_post(self.msg, MessageTag.objects.create(name="watch"))
+        self.crawler.get_message(self.source_channel, self._make_tg_message(203, fwd_channel_id=7777, channel_post=6))
+        self.assertEqual(self._tags_of(203), [])
 
     # -- _resolve_pending_forwards reads from DB --
 

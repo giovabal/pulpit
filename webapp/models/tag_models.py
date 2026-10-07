@@ -129,7 +129,10 @@ def message_origin(message: Message) -> tuple[int, int]:
 
     Telegram's forward header names the first publication even when a share is
     itself re-shared, so a post and every forward of it resolve to one origin.
-    A forward whose origin post id is unknown counts as a post of its own.
+    A forward whose origin post id is unknown counts as a post of its own. The
+    origin channel is the resolved ``forwarded_from``, else the raw id of a
+    private channel, else the id still awaiting resolution mid-crawl — the same
+    id the crawler reads from the forward header (``crawler.channel_crawler``).
     Reads ``channel`` and ``forwarded_from``: select them with the message.
     """
     if message.fwd_from_channel_post is not None:
@@ -137,6 +140,8 @@ def message_origin(message: Message) -> tuple[int, int]:
             return message.forwarded_from.telegram_id, message.fwd_from_channel_post
         if message.forwarded_from_private is not None:
             return message.forwarded_from_private, message.fwd_from_channel_post
+        if message.pending_forward_telegram_id is not None:
+            return message.pending_forward_telegram_id, message.fwd_from_channel_post
     return message.channel.telegram_id, message.telegram_id
 
 
@@ -189,12 +194,34 @@ def resolve_origin_messages(origins: Iterable[tuple[int, int]]) -> dict[tuple[in
     return found
 
 
+def link_stored_message(message_pk: int, origin: tuple[int, int]) -> int:
+    """Give a just-stored message the tags of its post; returns links added.
+
+    The crawler calls this for every message it stores, so a share (or an
+    original) fetched after its post was tagged carries the tag at once. One
+    indexed lookup on the small taggings table; idempotent on re-fetches.
+    """
+    tagging_ids = list(
+        MessageTagging.objects.filter(origin_channel_tid=origin[0], origin_post_tid=origin[1]).values_list(
+            "pk", flat=True
+        )
+    )
+    if tagging_ids:
+        TaggedMessage.objects.bulk_create(
+            [TaggedMessage(tagging_id=pk, message_id=message_pk) for pk in tagging_ids], ignore_conflicts=True
+        )
+    return len(tagging_ids)
+
+
 def sync_tag_members(taggings: Iterable["MessageTagging"] | None = None) -> int:
     """Attach every stored message that is, or shares, a tagged post; returns links added.
 
-    Runs when a post is tagged and at the end of every crawl, so a share crawled
-    after the tagging inherits the tag too. Never removes links: a message only
-    leaves a tag when the tagging itself is deleted (or the message is).
+    Runs when a post is tagged, and at the end of every crawl as the safety net
+    behind ``link_stored_message`` (which links each message as it is stored):
+    it catches a post tagged in the web UI while the crawler was storing its
+    shares, and messages stored by any other path. Never removes links: a
+    message only leaves a tag when the tagging itself is deleted (or the
+    message is).
     """
     taggings = list(MessageTagging.objects.all() if taggings is None else taggings)
     if not taggings:

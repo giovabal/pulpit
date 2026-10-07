@@ -22,6 +22,7 @@ from webapp.models import (
     Poll,
     PollAnswer,
 )
+from webapp.models.tag_models import link_stored_message
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
@@ -698,6 +699,20 @@ class ChannelCrawler:
             q |= sub
         return q
 
+    @staticmethod
+    def _post_origin(channel: Channel, telegram_message: Any) -> tuple[int, int]:
+        """The Telegram ``(channel id, post id)`` of the post a message is or shares.
+
+        ``webapp.models.tag_models.message_origin`` read straight from the forward
+        header, so it is known before the source channel is resolved.
+        """
+        fwd = telegram_message.fwd_from
+        source = getattr(getattr(fwd, "from_id", None), "channel_id", None) if fwd else None
+        post = getattr(fwd, "channel_post", None) if fwd else None
+        if isinstance(source, int) and isinstance(post, int):
+            return source, post
+        return channel.telegram_id, telegram_message.id
+
     def get_message(self, channel: Channel, telegram_message: Any) -> tuple[bool, int]:
         """Store *telegram_message* and return ``(stored, downloaded_images)``."""
         if isinstance(telegram_message, MessageService):
@@ -785,6 +800,8 @@ class ChannelCrawler:
         message.save()
         _save_reactions(message.pk, telegram_message)
         _save_poll(message.pk, telegram_message)
+        # A share of a tagged post — or a tagged share's original — takes the post's tags now.
+        link_stored_message(message.pk, self._post_origin(channel, telegram_message))
         return True, downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:
