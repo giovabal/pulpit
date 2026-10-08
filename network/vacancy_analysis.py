@@ -8,7 +8,8 @@ import math
 from collections import defaultdict
 from typing import Any, Callable
 
-from django.db.models import Count, Max, Min, Q
+from django.conf import settings
+from django.db.models import Count, F, Max, Min, Q
 from django.utils import timezone
 
 from network.utils import channel_cutoff_q
@@ -42,8 +43,35 @@ MEASURE_LABELS: dict[str, str] = {
 # measure-token → score pairs.
 EXTRAS_KEY = "_extras"
 
+# Factory cap on the candidates scored per vacancy (mirrors ``[vacancy].max_candidates``
+# in webapp_engine/config/defaults.py). The cap is also the Benjamini-Hochberg family
+# size, so the q-values depend on it — see :func:`configured_max_candidates`.
+DEFAULT_MAX_CANDIDATES = 30
+
+# Self-forwards (a channel re-posting its own content) are excluded from every
+# forward-based query below — ``.exclude(forwarded_from=F("channel"))`` — matching
+# the graph (``include_self_references=False``) and ``_network_content_metrics``: a
+# re-post of one's own post is not amplification, so it must not make a vacancy its
+# own orphan, an orphan its own adopter, or a channel its own source/amplifier.
+
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
+
+
+def configured_max_candidates() -> int:
+    """The candidate cap the interactive card and the export share by default.
+
+    ``[vacancy].max_candidates`` from ``.operations-structural``
+    (``settings.SA_VACANCY_MAX_CANDIDATES`` — the value the Operations panel pre-fills
+    for ``--vacancy-max-candidates``), else :data:`DEFAULT_MAX_CANDIDATES`. The cap is
+    the BH family size of every q-value, so card and export only agree when they use
+    the same one.
+    """
+    try:
+        value = int(getattr(settings, "SA_VACANCY_MAX_CANDIDATES", DEFAULT_MAX_CANDIDATES))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_CANDIDATES
+    return value if value > 0 else DEFAULT_MAX_CANDIDATES
 
 
 def _shift_months(d: datetime.date, n: int) -> datetime.date:
@@ -66,7 +94,8 @@ def orphaned_amplifier_pks(
     that forwarded from ``channel`` within the before-window
     ``[closure_date - months_before, closure_date)``, counted period-aware
     (``channel_cutoff_q``) over alive messages — so all three surfaces agree by
-    construction rather than by replicating the query.
+    construction rather than by replicating the query. The vacancy's own
+    self-forwards are excluded: re-posting itself does not make it its own orphan.
     """
     before_start = datetime.datetime.combine(
         _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
@@ -81,8 +110,45 @@ def orphaned_amplifier_pks(
             date__lt=closure_dt,
         )
         .filter(channel_cutoff_q())
+        .exclude(forwarded_from=F("channel"))
         .values_list("channel_id", flat=True)
         .distinct()
+    )
+
+
+def candidate_rows(
+    vacancy_pk: int,
+    orphaned_pks: set[int],
+    closure_dt: datetime.datetime,
+    after_end: datetime.datetime,
+    max_candidates: int,
+) -> list[dict[str, Any]]:
+    """A vacancy's replacement candidates, ranked and capped — the single selection
+    shared by the interactive card and the structural-analysis export.
+
+    In-target channels the orphaned amplifiers forwarded from in the after-window
+    ``[closure_dt, after_end]`` (alive, period-aware), excluding the vacancy itself and
+    self-forwards — an orphan re-posting its own content is not adopting itself, so
+    it cannot enter the list on its own re-posts. Ranked by distinct orphaned
+    forwarders (``amplifier_count``), ties by pk, cut at ``max_candidates``. Each row
+    is ``{"forwarded_from", "amplifier_count", "last_forwarded"}``. The cap is the BH
+    family size downstream, so the same cap must be used wherever q-values are
+    compared.
+    """
+    return list(
+        Message.objects.alive()
+        .filter(
+            channel__in=orphaned_pks,
+            forwarded_from__in=Channel.objects.in_target(),
+            date__gte=closure_dt,
+            date__lte=after_end,
+        )
+        .filter(channel_cutoff_q())
+        .exclude(forwarded_from=vacancy_pk)
+        .exclude(forwarded_from=F("channel"))
+        .values("forwarded_from")
+        .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
+        .order_by("-amplifier_count", "forwarded_from")[:max_candidates]
     )
 
 
@@ -186,6 +252,7 @@ def _scores_abc(
                 date__lte=after_end,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("channel_id", "forwarded_from_id")
             .distinct()
         )
@@ -207,6 +274,7 @@ def _scores_abc(
                 date__lt=closure_dt,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("channel_id", "forwarded_from_id")
             .distinct()
         )
@@ -232,6 +300,7 @@ def _scores_abc(
                 date__lte=after_end,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("forwarded_from_id", "channel_id")
             .distinct()
         ):
@@ -245,6 +314,7 @@ def _scores_abc(
             Message.objects.alive()
             .filter(channel=vacancy_pk, forwarded_from__isnull=False, date__gte=before_start, date__lt=closure_dt)
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("forwarded_from_id", "date")
         ):
             vacancy_out_pks.add(fwd_id)
@@ -261,6 +331,7 @@ def _scores_abc(
             Message.objects.alive()
             .filter(channel__in=candidate_pks, forwarded_from__isnull=False, date__gte=closure_dt, date__lte=after_end)
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("channel_id", "forwarded_from_id", "date")
         ):
             cand_out_pks[ch_id].add(fwd_id)
@@ -302,6 +373,7 @@ def _scores_abc(
                 date__lte=after_end,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values("forwarded_from_id", "channel_id")
             .distinct()
         ):
@@ -319,13 +391,16 @@ def _scores_abc(
     src_sig: dict[int, dict[str, float]] = {}
     if amp_test_selected and candidate_pks:
         in_target = Channel.objects.in_target()
-        # Universe: in-target channels that made ≥1 (alive, period-aware) forward from
-        # an in-target channel in the after-window — the pool a candidate's amplifier
-        # set is drawn from. Marked items: the orphans still active in that pool.
+        # Universe: in-target channels that made ≥1 (alive, period-aware, non-self)
+        # forward from an in-target channel in the after-window — the pool a candidate's
+        # amplifier set is drawn from. Marked items: the orphans still active in that pool.
+        # Every candidate amplifier set and every orphan counted in an overlap is in the
+        # pool by construction (same filters), so draws and marks are subsets of it.
         active_amplifiers = (
             Message.objects.alive()
             .filter(channel__in=in_target, forwarded_from__in=in_target, date__gte=closure_dt, date__lte=after_end)
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
         )
         amp_population = active_amplifiers.values("channel_id").distinct().count()
         active_orphans = active_amplifiers.filter(channel__in=orphaned_pks).values("channel_id").distinct().count()
@@ -342,20 +417,26 @@ def _scores_abc(
             amp_sig[cid] = {"p": _round_p(amp_p[cid]), "q": _round_p(q)}
 
     if selected & {"STRUCTURAL_EQUIV", "BROKERAGE"} and candidate_pks and vacancy_out_pks:
-        # Universe: every channel forwarded from by an in-target channel (alive,
-        # period-aware) across the combined before+after span — the common frame the
-        # vacancy's before-window sources and each candidate's after-window sources
-        # are both drawn from. Candidates with no sources at all are not tested
-        # (no data ≠ evidence of independence).
+        # Universe: every channel forwarded from (alive, period-aware, non-self) by an
+        # in-target channel *or by the vacancy itself* across the combined before+after
+        # span — the common frame the vacancy's before-window sources and each
+        # candidate's after-window sources are both drawn from. The vacancy is named
+        # explicitly because a closed vacancy is typically marked lost and so drops out
+        # of ``in_target()`` while its messages stay alive: without it, its own sources
+        # could be missing from the universe while still counted as marked items,
+        # biasing p (up to a degenerate 1.0). With it, marked ⊆ universe and every
+        # candidate's draws ⊆ universe by construction. Candidates with no sources at
+        # all are not tested (no data ≠ evidence of independence).
         src_population = (
             Message.objects.alive()
             .filter(
-                channel__in=Channel.objects.in_target(),
+                Q(channel__in=Channel.objects.in_target()) | Q(channel=vacancy_pk),
                 forwarded_from__isnull=False,
                 date__gte=before_start,
                 date__lte=after_end,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values("forwarded_from_id")
             .distinct()
             .count()
@@ -469,6 +550,9 @@ def _scores_origin(
     authorship from Telegram, so only true forwards register here.
     """
     # The vacancy's content universe: origins it curated (forwarded) in the before-window …
+    # (Self-forwards are deliberately *kept* on this side: a vacancy re-posting its own
+    # post yields origin (vacancy, post) — authored pre-closure content, which belongs
+    # to its universe either way. They are excluded on the candidate side below.)
     universe: set[tuple] = set()
     for fwd_id, post_id, fwd_date in (
         Message.objects.alive()
@@ -518,6 +602,10 @@ def _scores_origin(
     # Each candidate's re-circulated old content: after-window forwards whose origin is
     # dated before the closure. ``fwd_from_date`` is required — an undatable origin
     # cannot be shown to be old, so those rows sit outside both sides of the test.
+    # Self-forwards are excluded: a candidate re-posting its own old post (one the
+    # vacancy once curated) is not continuing the vacancy's stream. A candidate's
+    # forwards of the *vacancy's* posts are not self-forwards (the vacancy is never a
+    # candidate), so the archive-forward count is unaffected.
     cand_origins: dict[int, set[tuple]] = defaultdict(set)
     for ch_id, fwd_id, post_id, fwd_date in (
         Message.objects.alive()
@@ -529,6 +617,7 @@ def _scores_origin(
             fwd_from_date__lt=closure_dt,
         )
         .filter(channel_cutoff_q())
+        .exclude(forwarded_from=F("channel"))
         .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
     ):
         if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
@@ -537,9 +626,10 @@ def _scores_origin(
     # Null calibration, same scheme as the amplifier/source tests: the pool a
     # candidate's old-content set is drawn from is every pre-closure-dated origin any
     # in-target channel still circulated in the after-window; marked items are the
-    # pool origins belonging to the vacancy's universe. Candidates circulating no old
-    # content are not tested (no data ≠ evidence of independence), and an empty
-    # universe leaves nothing to test at all.
+    # pool origins belonging to the vacancy's universe (so marked ⊆ pool), and each
+    # candidate's set is drawn from the pool by construction (same filters, non-self).
+    # Candidates circulating no old content are not tested (no data ≠ evidence of
+    # independence), and an empty universe leaves nothing to test at all.
     origin_sig: dict[int, dict[str, float]] = {}
     if candidate_pks and universe:
         population_keys: set[tuple] = set()
@@ -553,6 +643,7 @@ def _scores_origin(
                 fwd_from_date__lt=closure_dt,
             )
             .filter(channel_cutoff_q())
+            .exclude(forwarded_from=F("channel"))
             .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
         ):
             if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
@@ -622,6 +713,7 @@ def _scores_temporal(
             date__lte=after_end,
         )
         .filter(channel_cutoff_q())
+        .exclude(forwarded_from=F("channel"))
         .values("forwarded_from_id", "channel_id")
         .annotate(first_date=Min("date"))
     )
@@ -686,20 +778,8 @@ def _analyze_vacancy(
     # canonical definition, so the card, the list, and this export agree by construction.
     orphaned_pks = orphaned_amplifier_pks(ch, closure_date, months_before)
 
-    raw_cands = list(
-        Message.objects.alive()
-        .filter(
-            channel__in=orphaned_pks,
-            forwarded_from__in=Channel.objects.in_target(),
-            date__gte=closure_dt,
-            date__lte=after_end,
-        )
-        .filter(channel_cutoff_q())
-        .exclude(forwarded_from=ch)
-        .values("forwarded_from")
-        .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
-        .order_by("-amplifier_count", "forwarded_from")[:max_candidates]
-    )
+    # Candidate selection is likewise shared with the card (same ranking, same cap rule).
+    raw_cands = candidate_rows(ch.pk, orphaned_pks, closure_dt, after_end, max_candidates)
 
     cand_pks = [r["forwarded_from"] for r in raw_cands]
     cand_meta: dict[int, dict] = {r["forwarded_from"]: r for r in raw_cands}
@@ -788,13 +868,18 @@ def compute_vacancy_analysis(
     selected_measures: set[str],
     months_before: int = 12,
     months_after: int = 24,
-    max_candidates: int = 30,
+    max_candidates: int | None = None,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Score replacement candidates for all vacancies.
 
+    ``max_candidates`` defaults to :func:`configured_max_candidates` — the cap the
+    interactive card uses — so card and export q-values agree at the default.
+
     Returns a payload dict suitable for serialisation to vacancy_analysis.json.
     """
+    if max_candidates is None:
+        max_candidates = configured_max_candidates()
     vacancies = list(ChannelVacancy.objects.select_related("channel", "successor").all())
     results: list[dict[str, Any]] = []
 
@@ -816,6 +901,7 @@ def compute_vacancy_analysis(
         "measure_labels": {k: MEASURE_LABELS[k] for k in sorted(selected_measures)},
         "months_before": months_before,
         "months_after": months_after,
+        "max_candidates": max_candidates,
         "vacancies": results,
         "validation": _validation_summary(results, selected_measures),
     }

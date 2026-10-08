@@ -151,10 +151,12 @@ def _patch_html_file(
         )
     if project_title:
         escaped = _html.escape(project_title)
-        content = re.sub(r"<title>[^<]*</title>", f"<title>{escaped}</title>", content)
+        # Function replacements, never a replacement *string*: re.sub would read backslash escapes in the
+        # user-supplied title ("\B" raises, "\1" is a group reference, "\n" silently becomes a newline).
+        content = re.sub(r"<title>[^<]*</title>", lambda _m: f"<title>{escaped}</title>", content)
         content = re.sub(
             r'(<h4 class="modal-title" id="about_modalLabel">)[^<]*(</h4>)',
-            rf"\g<1>{escaped}\g<2>",
+            lambda m: f"{m.group(1)}{escaped}{m.group(2)}",
             content,
         )
     repo_url = getattr(settings, "REPOSITORY_URL", "")
@@ -254,8 +256,15 @@ def _prepare_export_graph(graph: nx.DiGraph, graph_data: GraphData) -> nx.DiGrap
     ``<key>`` per (name, type) pair, so a column holding int on some nodes and float
     on others (e.g. a measure that yields exact 0 for isolated nodes) would produce
     schema-invalid GEXF or duplicate GraphML keys depending on DB row order.
+
+    Graph-level attributes are cut down to scalars: ``build_graph`` always stores the
+    near-copy links as a list on ``graph.graph["near_copies"]`` (empty when the option
+    is off), and ``write_graphml`` rejects any non-scalar data value. Only the copy is
+    pruned — the caller's graph keeps them for the content measures and the audit CSV.
     """
     g = graph.copy()
+    for key in [key for key, value in g.graph.items() if not isinstance(value, (str, int, float, bool))]:
+        del g.graph[key]
     node_by_id = {n["id"]: n for n in graph_data["nodes"]}
     float_keys: set[str] = set()
     for node_id in g.nodes():
@@ -700,10 +709,16 @@ def write_summary_json(
     nodes: int,
     edges: int,
     near_copies: int | None = None,
+    community_resolutions: dict[str, Any] | None = None,
 ) -> None:
     """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
 
     ``near_copies`` — number of copy → origin links the graph was built with (``None`` = option off).
+    ``community_resolutions`` — the CPM resolution γ each CPM-family partition of the full-range
+    graph was computed with, keyed by partition key: a float for a LEIDEN_CPM instance (its explicit
+    γ, or the network density when the token omits it), ``{"<year>": γ}`` for a LEIDEN_TEMPORAL
+    instance (one per year slice). Written as ``{}`` when no such strategy ran; the per-year
+    LEIDEN_CPM values travel in each ``data/timeline.json`` entry instead.
     """
     _OPTION_KEYS = (
         "graph",
@@ -784,6 +799,7 @@ def write_summary_json(
         "nodes": nodes,
         "edges": edges,
         "near_copies": near_copies,
+        "community_resolutions": community_resolutions or {},
         "options": opts,
     }
     os.makedirs(graph_dir, exist_ok=True)

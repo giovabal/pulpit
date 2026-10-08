@@ -30,7 +30,7 @@ from network import (
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
 from network.near_copies import NEAR_COPY_MIN_TOKENS, NEAR_COPY_SHINGLE_SIZE, NEAR_COPY_THRESHOLD
-from network.robustness.disparity_filter import disparity_filter
+from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.tokens import split_tokens
 from network.utils import GraphData
 from webapp import scoring
@@ -369,7 +369,9 @@ class ResolvedOptions:
 
     # Tunable measure / strategy parameters
     diffusion_window: int
-    leiden_cpm_resolution: float
+    # Explicit --leiden-cpm-resolution (or a deprecated preset flag) seeding a bare LEIDEN_CPM's γ;
+    # None = a bare LEIDEN_CPM is auto (the network density).
+    leiden_cpm_resolution: float | None
     community_distribution_threshold: int
 
     # Timeline
@@ -640,10 +642,12 @@ class Command(BaseCommand):
                 "Available: LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LEIDEN_TEMPORAL, LOUVAIN, KCORE, SBM, "
                 "SBM_ASSORTATIVE, CONSENSUS, "
                 "LABELGROUP<id> (the manual partition induced by partition LabelGroup <id>), ALL. "
-                "LEIDEN_CPM takes a keyword resolution and may repeat: LEIDEN_CPM(resolution=0.05). "
+                "LEIDEN_CPM takes a keyword resolution and may repeat: bare LEIDEN_CPM uses the network's "
+                "weighted edge density as γ (groups denser than the network as a whole); "
+                "LEIDEN_CPM(resolution=0.01) sets an explicit γ in --edge-weight-strategy units. "
                 "LEIDEN_TEMPORAL(resolution=…, interslice=…) couples the per-year timeline slices into one "
-                "temporal partition with stable community ids across years (Mucha et al. 2010); requires "
-                "--timeline-step year and is NOT included in ALL. "
+                "temporal partition with stable community ids across years (Mucha et al. 2010; γ omitted = "
+                "each year's own density); requires --timeline-step year and is NOT included in ALL. "
                 "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED, "
                 "weights=POISSON|EXPONENTIAL, refine=MCMC; SBM_ASSORTATIVE (Bayesian planted partition, "
                 "statistically supported cohesive communities) takes refine=MCMC; both require graph-tool "
@@ -815,11 +819,12 @@ class Command(BaseCommand):
             default=None,
             metavar="γ",
             help=(
-                "Default CPM resolution γ for a bare LEIDEN_CPM token. Communities form when their "
-                "internal edge density exceeds γ. Reference points: γ ≈ 0.01 = fewer, larger communities; "
-                "γ ≈ 0.05 = more, smaller communities. "
-                "Default: 0.05. Override per instance with LEIDEN_CPM(resolution=…) and list it more than "
-                "once for a multi-resolution scan."
+                "Explicit CPM resolution γ for a bare LEIDEN_CPM token. Communities form when their "
+                "internal edge density exceeds γ; higher = more, smaller communities. An explicit γ is an "
+                "absolute density in --edge-weight-strategy units (raw tie weights). Default: unset — a "
+                "bare LEIDEN_CPM uses the network's own weighted edge density, so communities are groups "
+                "denser than the network as a whole (Reichardt & Bornholdt 2006). Override per instance "
+                "with LEIDEN_CPM(resolution=…) and list it more than once for a multi-resolution scan."
             ),
         )
         # Deprecated: the two fixed CPM presets collapsed into one parameterised LEIDEN_CPM. These
@@ -1048,7 +1053,11 @@ class Command(BaseCommand):
             type=int,
             default=None,
             metavar="N",
-            help="Maximum replacement candidates scored per vacancy. Default: 30.",
+            help=(
+                "Maximum replacement candidates scored per vacancy — the BH family size of every q-value. "
+                "Default: [vacancy].max_candidates in .operations-structural (30), the cap the "
+                "channel page's Vacancy Analysis card also uses."
+            ),
         )
         # ── Robustness analysis ───────────────────────────────────────────────
         parser.add_argument(
@@ -1414,6 +1423,7 @@ class Command(BaseCommand):
         options: dict,
         temporal_results: "dict[str, tuple] | None" = None,
         year: "int | None" = None,
+        resolutions_out: "dict[str, Any] | None" = None,
     ) -> tuple[dict[str, tuple], "nx.DiGraph | None"]:
         """Run all community detection strategies and apply results to the graph.
 
@@ -1425,10 +1435,16 @@ class Command(BaseCommand):
         labels, not the graph, so the backbone never affects them.
 
         ``temporal_results`` carries the LEIDEN_TEMPORAL precompute
-        (``{instance.key: (per_year_maps, plurality_map, palette)}``, from
+        (``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions)}``, from
         ``_compute_temporal_partitions``); temporal instances are applied by lookup — the
         plurality map on the full-range pass (``year=None``), the year's slice map on a
         per-year pass — never via ``community.detect``.
+
+        ``resolutions_out``, when given, receives the CPM resolution γ each CPM-family partition
+        was computed with, keyed by partition key: a float for LEIDEN_CPM (its explicit γ, or the
+        density of the graph it ran on — the backbone when one is set), and for LEIDEN_TEMPORAL
+        ``{"<year>": γ}`` over every slice on the full-range pass or the year's slice γ on a
+        per-year pass. The caller writes it to ``summary.json`` / the ``timeline.json`` entry.
         """
         strategy_results: dict[str, tuple] = {}
         detection_graph: "nx.DiGraph | None" = None
@@ -1439,10 +1455,18 @@ class Command(BaseCommand):
         if backbone_alpha and communities_strategy:
             detection_graph = disparity_filter(graph, backbone_alpha)
             detect_on = detection_graph
-            self.stdout.write(
-                f"- disparity-filter backbone (α={backbone_alpha:g}) … "
-                f"{detection_graph.number_of_edges()}/{graph.number_of_edges()} edges kept"
-            )
+            if has_uniform_weights(graph):
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"- disparity-filter backbone (α={backbone_alpha:g}) skipped: every edge has the same "
+                        "weight (e.g. --edge-weight-strategy NONE), so communities are detected on the full graph"
+                    )
+                )
+            else:
+                self.stdout.write(
+                    f"- disparity-filter backbone (α={backbone_alpha:g}) … "
+                    f"{detection_graph.number_of_edges()}/{graph.number_of_edges()} edges kept"
+                )
             self.stdout.flush()
         # CONSENSUS aggregates the other strategies' partitions and LEIDEN_TEMPORAL is precomputed
         # over the timeline slices, so both are dispatched outside the direct loop — their position
@@ -1469,7 +1493,15 @@ class Command(BaseCommand):
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
-            self.stdout.write(f"{n_communities} communities")
+            note = ""
+            if instance.name == "LEIDEN_CPM":
+                # Same γ detect() used: explicit, else the density of the graph it ran on.
+                gamma = community.cpm_resolution(instance, detect_on)
+                auto = community.instance_resolution(instance) is None
+                note = f" (γ={gamma:.4g}{', network density' if auto else ''})"
+                if resolutions_out is not None:
+                    resolutions_out[instance.key] = gamma
+            self.stdout.write(f"{n_communities} communities{note}")
             self.stdout.flush()
         for instance in temporal_instances:
             entry = (temporal_results or {}).get(instance.key)
@@ -1480,15 +1512,22 @@ class Command(BaseCommand):
                 # so a missing entry means the precompute was skipped upstream.
                 self.stdout.write(self.style.WARNING("skipped (no temporal precompute available)"))
                 continue
-            per_year_maps, plurality_map, community_palette = entry
+            per_year_maps, plurality_map, community_palette, slice_resolutions = entry
             if year is None:
                 community_map = plurality_map
                 note = f" (plurality across {len(per_year_maps)} slices)"
+                if resolutions_out is not None:
+                    resolutions_out[instance.key] = {str(y): g for y, g in sorted(slice_resolutions.items())}
             else:
                 # A year that exports successfully was built with the same arguments as its
                 # temporal slice, so the map exists; guard anyway rather than KeyError.
                 community_map = per_year_maps.get(year, {})
-                note = "" if year in per_year_maps else " (year missing from temporal slices)"
+                if year in per_year_maps:
+                    note = f" (γ={slice_resolutions[year]:.4g})"
+                    if resolutions_out is not None:
+                        resolutions_out[instance.key] = slice_resolutions[year]
+                else:
+                    note = " (year missing from temporal slices)"
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
@@ -1648,7 +1687,12 @@ class Command(BaseCommand):
 
         self.stdout.write("- degrees, activity and fans")
         measures_labels = measures.apply_base_node_measures(
-            graph_data, graph, channel_dict, start_date=start_date, end_date=end_date
+            graph_data,
+            graph,
+            channel_dict,
+            start_date=start_date,
+            end_date=end_date,
+            environment_depth=environment_depth,
         )
 
         # Ordered community-partition keys present on the nodes, in *selection order* —
@@ -1766,9 +1810,11 @@ class Command(BaseCommand):
         use (so slices and year exports always agree), applies the ``--community-backbone-alpha``
         filter when set (matching what per-year detection would see), and runs
         :func:`community.detect_leiden_temporal` per instance. Returns
-        ``{instance.key: (per_year_maps, plurality_map, palette)}`` for
-        ``_compute_communities`` to apply by lookup. Raises ``CommandError`` when fewer than two
-        years yield a non-empty graph — the coupling needs at least two slices.
+        ``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions)}`` for
+        ``_compute_communities`` to apply by lookup — ``slice_resolutions`` being ``{year: γ}``, the
+        CPM resolution each slice ran with (the explicit γ, or that slice's own network density when
+        the token omits it). Raises ``CommandError`` when fewer than two years yield a non-empty
+        graph — the coupling needs at least two slices.
         """
         year_range = _timeline_year_range(opts.start_date, opts.end_date)
         years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
@@ -1809,19 +1855,27 @@ class Command(BaseCommand):
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
             params = instance.params_dict
+            resolution = community.instance_resolution(instance)
             try:
                 per_year, plurality, palette = community.detect_leiden_temporal(
                     year_graphs,
                     opts.community_palette,
-                    float(params.get("resolution", community.CPM_DEFAULT_RESOLUTION)),
+                    resolution,
                     float(params.get("interslice", community.TEMPORAL_DEFAULT_INTERSLICE)),
                     reverse=opts.community_palette_reversed,
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
-            temporal_results[instance.key] = (per_year, plurality, palette)
+            # The γ each slice ran with — the same helper detect_leiden_temporal resolves them with.
+            slice_resolutions = community.temporal_slice_resolutions(year_graphs, resolution)
+            temporal_results[instance.key] = (per_year, plurality, palette, slice_resolutions)
             n_communities = len({cid for cmap in per_year.values() for cid in cmap.values()})
-            self.stdout.write(f"{n_communities} communities across {len(per_year)} slices")
+            if resolution is None:
+                gammas = ", ".join(f"{y} {g:.4g}" for y, g in sorted(slice_resolutions.items()))
+                note = f"γ = each slice's network density: {gammas}"
+            else:
+                note = f"γ={resolution:.4g}"
+            self.stdout.write(f"{n_communities} communities across {len(per_year)} slices ({note})")
             self.stdout.flush()
         return temporal_results
 
@@ -1971,8 +2025,18 @@ class Command(BaseCommand):
         n_nodes, n_edges = len(graph.nodes), len(graph.edges)
         self.stdout.write(f"{n_nodes} nodes, {n_edges} edges")
 
+        # γ each CPM-family partition of this year ran with — a bare LEIDEN_CPM resolves it from this
+        # year's graph — returned in the timeline.json entry next to the year's node/edge counts.
+        year_resolutions: dict[str, Any] = {}
         strategy_results, detection_graph = self._compute_communities(
-            graph, channel_dict, edge_list, communities_strategy, options, temporal_results=temporal_results, year=year
+            graph,
+            channel_dict,
+            edge_list,
+            communities_strategy,
+            options,
+            temporal_results=temporal_results,
+            year=year,
+            resolutions_out=year_resolutions,
         )
         positions, positions_3d = self._compute_layout(
             graph,
@@ -2102,6 +2166,7 @@ class Command(BaseCommand):
                     include_mentions=interest_include_mentions,
                     window_filter=year_window_filter,
                     interest_score_override=year_score_map,
+                    environment_depth=options.get("environment_depth"),
                 )
                 exporter.write_interest_structural_json(year_int_payload, graph_dir=tmp_dir)
 
@@ -2179,6 +2244,8 @@ class Command(BaseCommand):
             "has_coordination": has_coordination,
             "coordination_nodes": coordination_nodes,
             "coordination_ties": coordination_ties,
+            # {partition key: γ} for the CPM-family strategies (LEIDEN_CPM, LEIDEN_TEMPORAL) of this year.
+            **({"community_resolutions": year_resolutions} if year_resolutions else {}),
             # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
@@ -2209,21 +2276,24 @@ class Command(BaseCommand):
             return v if v is not None else default
 
         raw_community_strategies = _parse_csv(_o("community_strategies", ""))
-        # The deprecated --leiden-coarse/fine-resolution flags still seed the bare-LEIDEN_CPM default
-        # for one release (coarse preferred); prefer --leiden-cpm-resolution or LEIDEN_CPM(resolution=…).
+        # An explicitly given --leiden-cpm-resolution seeds an explicit γ for a bare LEIDEN_CPM, and
+        # so do the deprecated --leiden-coarse/fine-resolution flags for one release (coarse
+        # preferred). With none of them a bare LEIDEN_CPM stays auto: γ = the network density of the
+        # graph it runs on (key ``leiden_cpm``).
         leiden_cpm_resolution = _o("leiden_cpm_resolution", None)
-        if leiden_cpm_resolution is None:
-            leiden_cpm_resolution = options.get("leiden_coarse_resolution") or options.get("leiden_fine_resolution")
-        if leiden_cpm_resolution is None:
-            leiden_cpm_resolution = community.CPM_DEFAULT_RESOLUTION
+        for legacy_flag in ("leiden_coarse_resolution", "leiden_fine_resolution"):
+            if leiden_cpm_resolution is None:
+                leiden_cpm_resolution = options.get(legacy_flag)
         # Parse into ordered StrategyInstance objects (handles ALL, keyword params, duplicate
-        # detection); a bare LEIDEN_CPM inherits the resolved global default above.
+        # detection); a bare LEIDEN_CPM inherits the explicit global γ above, if any.
         try:
             communities_strategy = community.parse_strategies(
                 raw_community_strategies,
-                defaults={
-                    "LEIDEN_CPM": {"resolution": leiden_cpm_resolution},
-                },
+                defaults=(
+                    {"LEIDEN_CPM": {"resolution": float(leiden_cpm_resolution)}}
+                    if leiden_cpm_resolution is not None
+                    else None
+                ),
             )
         except ValueError as exc:
             raise CommandError(f"--community-strategies: {exc}") from exc
@@ -2464,7 +2534,7 @@ class Command(BaseCommand):
             selected_vacancy_measures=selected_vacancy_measures,
             vacancy_months_before=_o("vacancy_months_before", 12),
             vacancy_months_after=_o("vacancy_months_after", 24),
-            vacancy_max_candidates=_o("vacancy_max_candidates", 30),
+            vacancy_max_candidates=_o("vacancy_max_candidates", vacancy_analysis.configured_max_candidates()),
             do_robustness=do_robustness,
             robustness_alpha=_o("robustness_alpha", 0.05),
             robustness_strategies=robustness_strategies,
@@ -2570,8 +2640,17 @@ class Command(BaseCommand):
         if temporal_instances:
             temporal_results = self._compute_temporal_partitions(opts, temporal_instances)
 
+        # γ each CPM-family partition ran with (bare LEIDEN_CPM / LEIDEN_TEMPORAL resolve it from the
+        # graph's density), written to summary.json so the run records the resolution actually used.
+        community_resolutions: dict[str, Any] = {}
         strategy_results, detection_graph = self._compute_communities(
-            graph, channel_dict, edge_list, opts.communities_strategy, options, temporal_results=temporal_results
+            graph,
+            channel_dict,
+            edge_list,
+            opts.communities_strategy,
+            options,
+            temporal_results=temporal_results,
+            resolutions_out=community_resolutions,
         )
         positions, positions_3d = self._compute_layout(
             graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
@@ -2899,6 +2978,7 @@ class Command(BaseCommand):
                 progress=_int_progress,
                 window_filter=global_window_filter or None,
                 interest_score_override=global_score_map,
+                environment_depth=opts.environment_depth,
             )
             os.makedirs(root_target, exist_ok=True)
             exporter.write_interest_structural_json(int_payload, root_target)
@@ -3221,6 +3301,7 @@ class Command(BaseCommand):
             len(graph.nodes),
             len(graph.edges),
             near_copies=near_copy_count,
+            community_resolutions=community_resolutions,
         )
 
         _atomic_publish(root_target, _final_target)

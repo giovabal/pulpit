@@ -68,7 +68,7 @@ python manage.py compute_message_scores --recency-days 90         # rolling base
 python manage.py compute_message_scores --weights "reactions=0.6,forwards=0.3,views=0.1"
 ```
 
-`--recency-days` switches the per-channel baseline from all-time to a rolling window — useful when a channel changed editorial focus and you want recent posts scored against recent peers rather than against a years-old archive. `--weights` overrides the composite blend for ad-hoc experimentation; partial overrides are accepted (missing facets fall back to their defaults) and weights are renormalised to sum to 1.
+`--recency-days` switches the per-channel baseline from all-time to a rolling window — useful when a channel changed editorial focus and you want recent posts scored against recent peers rather than against a years-old archive. Only the baseline moves: every message of the channel, older ones included, is rescored against it, so a channel never mixes scores from different baselines (and a window holding fewer than `--min-sample` messages, default 30, leaves the whole channel unscored). `--weights` overrides the composite blend for ad-hoc experimentation; partial overrides are accepted (missing facets fall back to their defaults) and weights are renormalised to sum to 1.
 
 ### Surfaces
 
@@ -117,6 +117,7 @@ The structural layer encodes a few deliberate exclusions, each documented inline
 
 - **Self-forwards** are excluded. A channel rebroadcasting its own post inflates both C and D without saying anything about reach.
 - **Out-of-target forwarders** are dropped from the C / D calculation (community labels are only defined for in-target nodes per `graph_builder.build_graph`), but their count is emitted as a parallel `forwarder_count_out_of_target` field for transparency. The split lets you tell whether a post broke out of the in-target subset entirely or stayed within it.
+- **What counts as in-target** follows the run, not the channel's whole history. The in-target forwarders, and the origins, are the channels the run analyses: the graph's in-target nodes, plus its environment nodes when `--environment-depth` is set. A forward counts on the in-target side only when it was posted inside its channel's in-target periods, the same rule that decides which forwards become graph edges. A channel that was in target in 2022 and forwards a post in 2023 is an out-of-target forwarder for that post. So is a channel left out by `--filter-labels`, `--channel-types` or `--channel-sources`. A channel that forwarded the same post both inside and outside its periods is counted once, as in-target.
 - **Window filter.** Forwards more than `--interest-window-days` days after the origin post are dropped (default 30, matching `--diffusion-window`). The window excludes anniversary or archival re-shares from the structural-reach figure. Pass `--interest-window-days 0` to disable.
 - **Mentions** (the `Message.references` M2M) are *not* counted toward C or D, even though Pulpit elsewhere treats forwards and mentions symmetrically as edges in the graph. Telegram's `references` is a *message → channel* relation: when a post contains a t.me link to channel B, that creates a Message.references entry for B, not for any specific post of B. The relation doesn't carry message-level identity, so a faithful translation to *who mentioned this specific post* would require separate design. The `--interest-include-mentions` flag is accepted for forward compatibility and emits a warning when set; it is currently a no-op.
 - **Lost messages** (`is_lost=True`) are excluded on both sides of the join.
@@ -209,7 +210,7 @@ The hot layer is interpretable on every channel above the cold-start floor — t
 
 The structural layer adds a third pitfall:
 
-- **A network with few community boundaries.** If `LEIDEN_DIRECTED` produces a small number of large communities, most posts will reach all of them at once and C saturates near the partition count. Try a finer partition (`LEIDEN_CPM(resolution=0.05)` or higher) if the community-strategies list permits.
+- **A network with few community boundaries.** If `LEIDEN_DIRECTED` produces a small number of large communities, most posts will reach all of them at once and C saturates near the partition count. Try a finer partition — `LEIDEN_CPM` at an explicit resolution above the network density it reports (see [Leiden CPM](community-detection.md#leiden-cpm)) — if the community-strategies list permits.
 
 The system as a whole is *not* meant to detect what humans would call *interesting* in the semantic / editorial sense — that requires NLP and content models. It is a *structural* lens: which posts stand out from their channel's engagement baseline, and which posts spread structurally beyond their origin community. The two questions are surprisingly often the right ones, but they are not the only ones, and the doc would lie to claim otherwise.
 

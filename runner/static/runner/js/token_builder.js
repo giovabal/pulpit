@@ -87,6 +87,9 @@
                 if (p.min != null) input.min = p.min;
                 if (p.max != null) input.max = p.max;
                 if (p.step != null) input.step = p.step;
+                // An empty default is an auto-resolved number (e.g. CPM γ = the network density): the
+                // input stays empty — composeToken then omits the parameter — and shows a placeholder.
+                if (p.placeholder) input.placeholder = p.placeholder;
                 input.value = value != null && value !== "" ? value : p.default;
             } else {
                 input = document.createElement("select");
@@ -94,6 +97,7 @@
                 input.value = value != null && value !== "" ? String(value).toUpperCase() : p.default || "";
             }
             input.className = "ops-mparam-input";
+            if (p.hint) input.title = p.hint;
             input.dataset.pname = p.name;
             wrap.appendChild(input);
             return wrap;

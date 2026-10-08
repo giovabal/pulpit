@@ -24,11 +24,11 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
-from network.utils import GraphData
-from webapp.models import Channel, Message
+from network.utils import GraphData, channel_cutoff_q, environment_channels
+from webapp.models import Message
 
 import networkx as nx  # noqa: F401  (kept for type-symmetry with sister modules)
 
@@ -50,6 +50,7 @@ def compute_interest_structural(
     progress: Callable[[str], None] | None = None,
     window_filter: dict[str, Any] | None = None,
     interest_score_override: dict[tuple[int, int], float | None] | None = None,
+    environment_depth: int | None = None,
 ) -> dict[str, Any]:
     """Compute per-message C and D and emit a JSON-serialisable payload.
 
@@ -91,6 +92,18 @@ def compute_interest_structural(
         takes precedence over ``Message.interest_score`` when emitting the
         per-message ``interest_score`` field. Lets the caller substitute a
         windowed hot-layer recompute without persisting it.
+    environment_depth
+        The run's ``--environment-depth``. The *in-target* forwarders and the
+        origins are the run's analysed channels — the ``channel_dict`` nodes
+        that are in target for the window, plus the environment nodes when a
+        depth is set; dead leaves never qualify — and a forward counts on the
+        in-target side only when it passes the period gate
+        (``channel_cutoff_q(environment_depth=…)``), exactly like the forwards
+        that build the graph's edges. Every other forward of an origin —
+        from a channel outside the run's scope (``--filter-labels``,
+        ``--channel-types``, ``--channel-sources``, never labelled) or from
+        an analysed channel outside its in-target periods — counts as
+        out-of-target.
     """
     if include_mentions:
         logger.warning(
@@ -117,21 +130,26 @@ def compute_interest_structural(
         except (TypeError, ValueError):
             continue
 
-    in_target_pks: set[int] = set(Channel.objects.in_target().values_list("pk", flat=True))
+    in_target_pks = _analysed_channel_pks(channel_dict, environment_depth)
+    # A forward is an in-target one when its channel is analysed *and* the message falls
+    # inside that channel's in-target periods (or the channel is an admitted environment
+    # node) — the period chokepoint every graph edge goes through.
+    in_target_forward_q = Q(channel_id__in=in_target_pks) & channel_cutoff_q(environment_depth=environment_depth)
 
     if progress:
         progress("collecting in-target forwarder rows")
     forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
     out_forwarders_by_origin: dict[tuple[int, int], list[tuple[int, datetime.datetime | None]]] = defaultdict(list)
 
-    in_target_qs = Message.objects.alive().filter(
-        channel_id__in=in_target_pks,
-        forwarded_from_id__in=in_target_pks,
-        fwd_from_channel_post__isnull=False,
+    # Self-forwards say nothing about reach: excluded on both sides.
+    origin_qs = (
+        Message.objects.alive()
+        .filter(forwarded_from_id__in=in_target_pks, fwd_from_channel_post__isnull=False)
+        .exclude(channel_id=F("forwarded_from_id"))
     )
     if window_filter:
-        in_target_qs = in_target_qs.filter(**window_filter)
-    in_target_q = in_target_qs.exclude(channel_id=F("forwarded_from_id")).values_list(
+        origin_qs = origin_qs.filter(**window_filter)
+    in_target_q = origin_qs.filter(in_target_forward_q).values_list(
         "channel_id", "forwarded_from_id", "fwd_from_channel_post", "date"
     )
     for fwd_ch, origin_ch, origin_tg_id, fwd_date in in_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
@@ -139,17 +157,11 @@ def compute_interest_structural(
 
     if progress:
         progress("counting out-of-target forwarders")
-    out_target_qs = Message.objects.alive().filter(
-        forwarded_from_id__in=in_target_pks,
-        fwd_from_channel_post__isnull=False,
-    )
-    if window_filter:
-        out_target_qs = out_target_qs.filter(**window_filter)
     # Collected with the same shape as the in-target side (forwarder channel + date)
     # so the consumer can apply the identical reaction window and per-channel dedup —
     # the two columns are rendered as a comparable pair, and counting raw forward
     # *messages* with no window here would systematically inflate the out side.
-    out_target_q = out_target_qs.exclude(channel_id__in=in_target_pks).values_list(
+    out_target_q = origin_qs.exclude(in_target_forward_q).values_list(
         "channel_id", "forwarded_from_id", "fwd_from_channel_post", "date"
     )
     for fwd_ch, origin_ch, origin_tg_id, fwd_date in out_target_q.iterator(chunk_size=_FORWARDER_CHUNK):
@@ -215,8 +227,11 @@ def compute_interest_structural(
             continue
         forwarder_pks = {pk for pk, _ in filtered}
         # Same window + distinct-channel dedup as the in-target side, so the two
-        # columns count the same thing.
-        out_forwarder_pks = {pk for pk, _ in _within_window(out_forwarders_by_origin.get(key, []), origin_date)}
+        # columns count the same thing. An analysed channel that forwarded the post
+        # both inside and outside its in-target periods counts once, as in-target.
+        out_forwarder_pks = {
+            pk for pk, _ in _within_window(out_forwarders_by_origin.get(key, []), origin_date)
+        } - forwarder_pks
         c_value = len({comm_by_pk[pk] for pk in forwarder_pks if pk in comm_by_pk})
         d_value = sum(auth_by_pk.get(pk, 0.0) for pk in forwarder_pks)
         by_message.append(
@@ -261,6 +276,25 @@ def compute_interest_structural(
         "by_message": by_message,
         "by_channel_top": by_channel_top,
     }
+
+
+def _analysed_channel_pks(channel_dict: dict[str, Any], environment_depth: int | None) -> set[int]:
+    """PKs of the run's analysed channels: the graph's in-target nodes plus its environment nodes.
+
+    A node is in target when ``build_graph`` marked it ``environment_depth == 0`` (absent on
+    hand-built node dicts, read as in target); an environment node is one the crawler stamped
+    within ``environment_depth`` hops (``network.utils.environment_channels``). Dead leaves —
+    cited, out-of-target channels whose own messages never pass the period gate — are neither.
+    """
+    pks = {
+        entry["channel"].pk
+        for entry in channel_dict.values()
+        if (entry.get("data") or {}).get("environment_depth", 0) == 0
+    }
+    if environment_depth:
+        node_pks = {entry["channel"].pk for entry in channel_dict.values()}
+        pks |= node_pks & set(environment_channels(environment_depth).values_list("pk", flat=True))
+    return pks
 
 
 def _scope_label(window_filter: dict[str, Any] | None) -> str:

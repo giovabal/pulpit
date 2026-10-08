@@ -140,7 +140,9 @@ function _renderHeaderSummary(payload) {
     var c = payload.config || {};
     var parts = [
         g.n + " nodes / " + g.m + " edges",
-        g.filtered ? "backbone " + g.backbone_n + "/" + g.backbone_m + " edges (α=" + c.alpha + ")" : "no disparity filter",
+        g.filtered ? "backbone " + g.backbone_n + "/" + g.backbone_m + " edges (α=" + c.alpha + ")" :
+        g.filter_skipped === "uniform_weights" ? "disparity filter skipped (uniform edge weights)" :
+        "no disparity filter",
         Object.keys(payload.strategies || {}).length + " strategies",
         c.n_null > 0 ?
         c.n_null + " null simulations (" + (c.null_model || "configuration") + ")" :

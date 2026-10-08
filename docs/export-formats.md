@@ -383,7 +383,7 @@ Both files include all node attributes (channel name, organization, subscriber c
 
 ## summary.json / meta.json — machine-readable metadata
 
-`summary.json` records the name, creation timestamp, node and edge counts (plus `near_copies`, the number of copy → origin links the graph was built with, `null` when that option was off), and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology.
+`summary.json` records the name, creation timestamp, node and edge counts (plus `near_copies`, the number of copy → origin links the graph was built with, `null` when that option was off), and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology. It also records `community_resolutions`: the CPM resolution γ each `LEIDEN_CPM` partition of the full-range graph was computed with (its explicit value, or the network density for a bare token), and for each `LEIDEN_TEMPORAL` partition a `{"<year>": γ}` object over its year slices — `{}` when neither strategy ran. On a timeline export each year's entry in `data/timeline.json` carries the same `community_resolutions` object for that year's partitions (present only when a CPM-family strategy ran). See [Leiden CPM](community-detection.md#leiden-cpm).
 
 `meta.json` records export date, project title, edge direction description, edge weight strategy, date range, total node/edge counts, and configuration flags.
 

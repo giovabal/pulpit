@@ -131,8 +131,9 @@ def message_origin(message: Message) -> tuple[int, int]:
     itself re-shared, so a post and every forward of it resolve to one origin.
     A forward whose origin post id is unknown counts as a post of its own. The
     origin channel is the resolved ``forwarded_from``, else the raw id of a
-    private channel, else the id still awaiting resolution mid-crawl — the same
-    id the crawler reads from the forward header (``crawler.channel_crawler``).
+    private channel, else the id still awaiting resolution (mid-crawl, or left
+    pending across runs when the deferred lookup failed) — the same id the
+    crawler reads from the forward header (``crawler.channel_crawler``).
     Reads ``channel`` and ``forwarded_from``: select them with the message.
     """
     if message.fwd_from_channel_post is not None:
@@ -157,6 +158,10 @@ def resolve_origin_messages(origins: Iterable[tuple[int, int]]) -> dict[tuple[in
     origin is a pair of indexed seeks on ``channel_id`` / ``forwarded_from_id``,
     and shares of a post from a private, unresolved channel come from the partial
     ``webapp_msg_fwd_private_idx`` on ``(forwarded_from_private, fwd_from_channel_post)``.
+    Shares whose source is still awaiting resolution (``pending_forward_telegram_id``
+    — ``message_origin``'s third case, which persists across runs when the deferred
+    lookup keeps failing) come from one pass over the pending rows: they are few
+    and transient, read through the partial ``webapp_msg_fwd_pending_idx``.
     """
     origins = set(origins)
     found: dict[tuple[int, int], set[int]] = defaultdict(set)
@@ -191,6 +196,12 @@ def resolve_origin_messages(origins: Iterable[tuple[int, int]]) -> dict[tuple[in
         for pk, tid, post in private:
             if (tid, post) in wanted:
                 found[(tid, post)].add(pk)
+    pending = Message.objects.filter(
+        pending_forward_telegram_id__isnull=False, fwd_from_channel_post__isnull=False
+    ).values_list("pk", "pending_forward_telegram_id", "fwd_from_channel_post")
+    for pk, tid, post in pending.iterator(chunk_size=2000):
+        if (tid, post) in origins:
+            found[(tid, post)].add(pk)
     return found
 
 
@@ -243,6 +254,8 @@ def sync_tag_members(taggings: Iterable["MessageTagging"] | None = None) -> int:
 def tag_post(message: Message, tag: MessageTag, *, note: str = "", tagged_by: Any = None) -> "MessageTagging":
     """Tag the post ``message`` is or shares — its original and every share — and link the stored ones.
 
+    The tagged message itself is always linked, whatever the origin lookup finds:
+    its chip, the ``?tag=`` lists and the purge exemption all read the links.
     Raises ``IntegrityError`` when the post already carries ``tag`` (check
     ``MessageTagging.objects.filter(tag=…, origin…)`` first).
     """
@@ -255,6 +268,7 @@ def tag_post(message: Message, tag: MessageTag, *, note: str = "", tagged_by: An
         note=note,
         tagged_by=tagged_by,
     )
+    TaggedMessage.objects.create(tagging=tagging, message=message)
     sync_tag_members([tagging])
     return tagging
 

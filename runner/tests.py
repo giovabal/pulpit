@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from runner.views import _build_args
+from runner.views import UnsafeArgumentError, _build_args
 from webapp.models import ChannelSource, SearchTerm
 
 # ---------------------------------------------------------------------------
@@ -339,6 +339,24 @@ class OperationsViewTests(TestCase):
         self.assertIn("structural_analysis", names)
         self.assertIn("compare_analysis", names)
 
+    def test_cpm_chips_default_to_auto_resolution(self):
+        # LEIDEN_CPM / LEIDEN_TEMPORAL have no fixed γ: the chip's resolution input starts empty (the
+        # token builder then omits it → a bare token, γ = network density) and says so.
+        import html
+        import re
+
+        resp = self.client.get(reverse("operations"))
+        page = resp.content.decode()
+        for strategy in ("LEIDEN_CPM", "LEIDEN_TEMPORAL"):
+            with self.subTest(strategy=strategy):
+                match = re.search(r'data-strategy="' + strategy + r'"[^>]*data-params=\'([^\']*)\'', page)
+                self.assertIsNotNone(match)
+                params = {p["name"]: p for p in json.loads(html.unescape(match.group(1)))}
+                self.assertEqual(params["resolution"]["default"], "")
+                self.assertIn("auto", params["resolution"]["placeholder"])
+                self.assertIn("density", params["resolution"]["hint"])
+        self.assertNotIn("around 0.05", page)
+
     def test_tasks_in_workflow_order(self):
         resp = self.client.get(reverse("operations"))
         names = [t["name"] for t in resp.context["tasks"]]
@@ -467,6 +485,54 @@ class RunTaskViewTests(TestCase):
                 {"amount": ""},
             )
         self.assertEqual(resp.status_code, 200)
+
+    def test_run_rejects_option_injection_without_launching(self):
+        # export_name "--pythonpath=<zip>" + dead_leaves_color "--settings=evil" would make the
+        # subprocess's django.setup() import attacker code: refused as a 400, nothing launched.
+        cases = [
+            (
+                "structural_analysis",
+                {"export_name": "--pythonpath=/srv/media/others/1.zip", "dead_leaves_color": "--settings=evil"},
+            ),
+            ("search_channels", {"add_channels": "@fine\n--settings=evil"}),  # lines field
+            ("compare_analysis", {"project_dir": "--settings=evil", "compare_target": "b"}),  # positional
+            ("crawl_channels", {"channel_sources": ["--settings=evil"]}),  # forged checkbox list
+        ]
+        for task, data in cases:
+            with (
+                self.subTest(task=task),
+                patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
+                patch("runner.views.tasks.launch") as launch,
+            ):
+                resp = self.client.post(reverse("operations-run", args=[task]), data)
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn("must not start with '-'", resp.json()["error"])
+                launch.assert_not_called()
+
+    def test_run_rejected_injection_does_not_save_terms(self):
+        with (
+            patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
+            patch("runner.views.tasks.launch"),
+        ):
+            resp = self.client.post(
+                reverse("operations-run", args=["search_channels"]),
+                {"save_terms": "1", "extra_terms": "fine term\n--settings=evil"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(SearchTerm.objects.exists())
+
+    def test_run_accepts_negative_channel_id(self):
+        # A bare negative number (a -100… channel id) is a legitimate leading-dash value.
+        with (
+            patch("runner.views.tasks.get_status", return_value={"status": "idle"}),
+            patch("runner.views.tasks.launch") as launch,
+        ):
+            resp = self.client.post(
+                reverse("operations-run", args=["search_channels"]),
+                {"add_channels": "-1001234567890"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        launch.assert_called_once_with("search_channels", ["--add-channel", "-1001234567890"])
 
     def test_run_rejects_compare_analysis_empty_project_dir(self):
         with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
@@ -648,6 +714,14 @@ class WriteCliCommandViewTests(TestCase):
         self.assertIn("--extra-term 'hello world'", cmd)
         self.assertIn("--extra-term bearbeit", cmd)
 
+    def test_rejects_option_injection(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"export_name": "--settings=evil"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("export_name", resp.json()["error"])
+
     def test_structural_validation_rejects_bad_module_role_basis(self):
         # The community basis travels inside the MODULEROLE token; a basis that names a
         # strategy not in community_strategies is rejected.
@@ -672,6 +746,24 @@ class WriteCliCommandViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIn("--community-strategies", resp.json()["command"])
+
+    def test_structural_accepts_bare_and_auto_cpm(self):
+        # A bare LEIDEN_CPM (γ = network density) rides to the CLI as a bare token; ``resolution=auto``
+        # is the same instance, so listing both is a duplicate.
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["LEIDEN_CPM", "LEIDEN_CPM(resolution=0.05)"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        cmd = resp.json()["command"]
+        self.assertIn("LEIDEN_CPM,LEIDEN_CPM(resolution=0.05)", cmd)
+        self.assertNotIn("--leiden-cpm-resolution", cmd)
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={"community_strategies": ["LEIDEN_CPM", "LEIDEN_CPM(resolution=auto)"]},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Community strategies", resp.json()["error"])
 
     def test_structural_validation_rejects_malformed_strategy_token(self):
         resp = self.client.post(
@@ -1180,6 +1272,51 @@ class BuildArgsCompareAnalysisTests(TestCase):
         # `seo` is bool_explicit so an empty post emits --no-seo. Project dir stays out.
         args = _build_args("compare_analysis", FakePost({"project_dir": ""}))
         self.assertEqual(args, ["--no-seo"])
+
+
+# ---------------------------------------------------------------------------
+# runner/views.py — _build_args: option injection through form values
+# ---------------------------------------------------------------------------
+
+
+class BuildArgsOptionInjectionTests(TestCase):
+    # Django's ManagementUtility honours --settings / --pythonpath from any argv position before
+    # the command's argparse runs, so no form value may become an argv element spelling an option.
+
+    def test_dash_values_refused_in_every_free_text_kind(self) -> None:
+        cases = [
+            ("structural_analysis", {"export_name": "--pythonpath=/srv/media/others/1.zip"}),  # value
+            ("structural_analysis", {"dead_leaves_color": "--settings=evil"}),  # value
+            ("structural_analysis", {"measures": ["--settings=evil"]}),  # csv
+            ("structural_analysis", {"layouts_2d": ["--settings=evil"]}),  # csv_unique
+            ("structural_analysis", {"label_groups": ["--settings=evil"]}),  # community_strategies
+            ("structural_analysis", {"robustness_strategies": ["--settings=evil"]}),  # robustness_strategies
+            ("crawl_channels", {"channel_sources": ["--settings=evil"]}),  # csv (forged checkbox list)
+            ("search_channels", {"extra_terms": "--settings=evil"}),  # extra_terms
+            ("search_channels", {"add_channels": "@fine\n--settings=evil"}),  # lines
+            ("compare_analysis", {"project_dir": "--settings=evil"}),  # positional
+            ("compare_analysis", {"project_dir": "-x"}),  # short-option spelling
+        ]
+        for task, post in cases:
+            with self.subTest(task=task, post=post), self.assertRaises(UnsafeArgumentError) as ctx:
+                _build_args(task, FakePost(post))
+            self.assertIn("must not start with '-'", str(ctx.exception))
+
+    def test_negative_numbers_and_id_ranges_still_pass(self) -> None:
+        args = _build_args("search_channels", FakePost({"add_channels": "-1001234567890"}))
+        self.assertEqual(args, ["--add-channel", "-1001234567890"])
+        args = _build_args("structural_analysis", FakePost({"robustness_seed": "-1", "near_copy_threshold": "-0.5"}))
+        self.assertEqual(args[args.index("--robustness-seed") + 1], "-1")
+        self.assertEqual(args[args.index("--near-copy-threshold") + 1], "-0.5")
+        for ids in ("-30", "-30, 50-80", "-30,50-80"):
+            with self.subTest(ids=ids):
+                args = _build_args("crawl_channels", FakePost({"ids": ids}))
+                self.assertEqual(args[args.index("--ids") + 1], ids)
+
+    def test_dash_inside_a_value_is_harmless(self) -> None:
+        # Only a *leading* dash makes argparse read an element as an option.
+        args = _build_args("structural_analysis", FakePost({"export_name": "run-2026--settings=x"}))
+        self.assertEqual(args[args.index("--name") + 1], "run-2026--settings=x")
 
 
 # ---------------------------------------------------------------------------

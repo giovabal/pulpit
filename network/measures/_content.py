@@ -9,6 +9,7 @@ from network.measures._base import (
     per_channel_forwards_received,
     per_channel_message_counts,
 )
+from network.near_copies import forward_header_q
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
@@ -77,8 +78,12 @@ def apply_content_originality(
 ) -> list[tuple[str, str]]:
     """Add content originality (1 − forwarded_messages / total_messages) to each node. None if no messages.
 
-    With near-copy edges on, a channel's near-copies (text re-posted without the forward header,
-    ``graph.graph["near_copies"]``) count as forwarded messages.
+    A forwarded message is any message carrying a Telegram forward header
+    (:func:`network.near_copies.forward_header_q`) — whether its source resolved to a stored
+    channel, is a private channel, a hidden user, or is still pending resolution — not only the
+    forwards whose ``forwarded_from`` is set. With near-copy edges on, a channel's near-copies
+    (text re-posted without the forward header, ``graph.graph["near_copies"]``) count as
+    forwarded messages too; a near-copy never carries a header, so nothing is counted twice.
     """
     key = "content_originality"
 
@@ -88,7 +93,7 @@ def apply_content_originality(
         channel_pks,
         start_date,
         end_date,
-        extra_q=Q(forwarded_from__isnull=False),
+        extra_q=forward_header_q(),
         environment_depth=environment_depth,
     )
     copies_made, _ = _near_copy_counts(graph)

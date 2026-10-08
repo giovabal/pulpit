@@ -37,7 +37,10 @@ class TokenParam:
 
     ``kind`` is ``"int"``, ``"float"`` or ``"enum"``. ``default`` is used when the token omits the
     parameter (a command may override numeric defaults from a global flag). An empty-string default
-    on an ``enum`` means "auto-resolve at compute time". ``choices`` lists the valid enum values.
+    means "auto-resolve at compute time" — for an ``enum`` (e.g. SBM ``weights``) and for a number
+    alike (e.g. LEIDEN_CPM ``resolution``, the network density when omitted); an auto parameter is
+    left out of the token, the key suffix and the label, and a numeric one also accepts the explicit
+    value ``auto``. ``choices`` lists the valid enum values.
     """
 
     name: str
@@ -81,6 +84,10 @@ def coerce_value(param: TokenParam, raw: str) -> object:
             raise ValueError(f"{param.name}={raw!r} is not a valid choice. Choose from {param.choices}.")
         return val
     if param.kind in ("int", "float"):
+        if param.default == "" and raw.lower() in ("", "auto"):
+            # An auto-resolved number (empty default): ``auto`` — or an empty value — selects the
+            # auto default explicitly, so ``LEIDEN_CPM(resolution=auto)`` is the bare ``LEIDEN_CPM``.
+            return ""
         try:
             num = int(raw) if param.kind == "int" else float(raw)
         except ValueError as exc:

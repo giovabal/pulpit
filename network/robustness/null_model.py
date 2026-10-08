@@ -29,7 +29,10 @@ reciprocated dyads".
 **What both nulls preserve**
     - per-node in- and out-degree (exactly),
     - per-node in- and out-strength (approximately, via IPF),
-    - total number of edges and total edge weight.
+    - total number of edges and total edge weight,
+    - self-loops (``--include-self-references``): held fixed in place, never
+      swapped — a swap can destroy a self-loop but never create one, so letting
+      them into the pool would bleed their weight onto inter-channel ties.
     ``"reciprocal"`` additionally preserves per-node reciprocated degree and
     global reciprocity (exactly).
 
@@ -100,7 +103,12 @@ def rewire_strength_preserving(
        that creates no self-loop or duplicate edge, carrying each edge's weight
        with it. This preserves the exact in- and out-degree sequence while
        randomising *which* pairs are connected. ``n_swaps`` is the number of swap
-       *attempts* and defaults to ``10 · |E|``.
+       *attempts* and defaults to ``10 · |E|``. Self-loops are held fixed (left
+       out of the swap pool): the rule above can destroy a self-loop but never
+       create one, so swapping them would steadily migrate self-citation degree
+       and weight onto inter-channel edges — making the null more connected than
+       the observed graph — and would disagree with the reciprocal null, whose
+       dyad swaps already leave self-loops in place.
     2. **Iterative proportional fitting** (Sinkhorn): alternately rescale every
        node's out-edges to its observed out-strength and in-edges to its observed
        in-strength, for ``_IPF_ITERATIONS`` rounds. Because the degree sequence
@@ -125,8 +133,11 @@ def rewire_strength_preserving(
         n_swaps = 10 * m
 
     # ── Stage 1: degree-preserving edge swaps ─────────────────────────────────
-    edges = list(H.edges())
-    draws = rng.integers(0, m, size=2 * n_swaps)
+    # Self-loops stay put (see docstring); only inter-channel edges are swapped.
+    edges = [(u, v) for u, v in H.edges() if u != v]
+    if len(edges) < 2:
+        return H
+    draws = rng.integers(0, len(edges), size=2 * n_swaps)
     for k in range(n_swaps):
         i, j = int(draws[2 * k]), int(draws[2 * k + 1])
         if i == j:
@@ -176,7 +187,8 @@ def rewire_reciprocity_preserving(
     This holds each node's reciprocated in/out degree fixed on top of its total
     in/out degree, hence global reciprocity is exactly preserved (the
     reciprocal-configuration-model constraint of Squartini & Garlaschelli 2011,
-    realised by rewiring).  ``n_swaps`` defaults to ``10·|E|`` swap *attempts*,
+    realised by rewiring).  Self-loops are held fixed, as in
+    :func:`rewire_strength_preserving`.  ``n_swaps`` defaults to ``10·|E|`` swap *attempts*,
     split across the two classes in proportion to their edge counts.  The input
     graph is never mutated; graphs with fewer than two edges are returned as a
     plain copy.
@@ -191,11 +203,14 @@ def rewire_reciprocity_preserving(
         n_swaps = 10 * m
 
     # Partition the directed edges into reciprocated dyads (each unordered pair
-    # once) and single edges.
+    # once) and single edges.  Self-loops join neither class: they are held fixed,
+    # as in the configuration null.
     dyads: list[tuple] = []
     singles: list[tuple] = []
     seen_dyad: set = set()
     for u, v in H.edges():
+        if u == v:
+            continue
         if H.has_edge(v, u):
             key = (u, v) if u <= v else (v, u)
             if key not in seen_dyad:

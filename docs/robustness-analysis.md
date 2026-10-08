@@ -37,6 +37,8 @@ The filter tests each edge against the null hypothesis that a channel spreads it
 
 Channels with a single edge in a given direction always keep that edge — there is no statistical test to perform on a one-element distribution, and discarding it would needlessly isolate the channel.
 
+**Uniform weights skip the filter.** When every edge carries the same weight — `--edge-weight-strategy NONE`, or a `TOTAL` graph whose ties are all single citations — the test has nothing to measure: each edge of a channel with `k` ties scores α = (1 − 1/k)^(k−1), which is at least 1/e ≈ 0.37 for every `k ≥ 2`, so any α below 0.37 would keep only the edges of single-tie channels and hollow the graph out for purely combinatorial reasons (a 300-node, 2 700-edge uniform graph goes to zero edges at α = 0.05). Pulpit therefore logs a warning and runs on the full graph instead; `robustness.json` records it as `graph.filter_skipped = "uniform_weights"` (with `filtered: false`). The same rule applies to the [community backbone](community-detection.md) (`--community-backbone-alpha`). Pick a weighted strategy (`TOTAL`, `PARTIAL_*`) when you want a backbone.
+
 ---
 
 ## Attack strategies
@@ -242,7 +244,7 @@ A network with `f_c = 0.10` under PageRank attack loses 95% of its connectivity 
 
 A low R from a targeted strategy by itself doesn't say much: maybe the network is just sparse, or just small. The right comparison is *"low compared to what?"* — and the standard answer in network science is a **null model** that preserves some properties of the network and randomises the rest.
 
-Pulpit uses a *directed weighted configuration-model null*: it preserves each channel's in/out **degree** (exactly) and in/out **strength** (via iterative proportional fitting) while randomising the wiring. Concretely, each draw applies Maslov–Sneppen degree-preserving edge swaps and then rescales the weights back onto the observed strength sequence. Each null is therefore a network with the same degree and strength profiles as the real one but a randomised topology — so the comparison isolates higher-order structure (clustering, motifs, weight–topology coupling) rather than the degree/strength sequences the attacks already rank on. The runner draws `--robustness-null` independent samples (default 20) and re-runs every attack strategy on each one, producing K null R values per (strategy, metric).
+Pulpit uses a *directed weighted configuration-model null*: it preserves each channel's in/out **degree** (exactly) and in/out **strength** (via iterative proportional fitting) while randomising the wiring. Concretely, each draw applies Maslov–Sneppen degree-preserving edge swaps and then rescales the weights back onto the observed strength sequence. Self-loops (present only with `--include-self-references`) are held fixed in both nulls: a swap can break a self-citation but never create one, so letting them into the swap pool would gradually migrate their weight onto inter-channel ties and leave the null more connected than the observed network. Each null is therefore a network with the same degree and strength profiles as the real one but a randomised topology — so the comparison isolates higher-order structure (clustering, motifs, weight–topology coupling) rather than the degree/strength sequences the attacks already rank on. The runner draws `--robustness-null` independent samples (default 20) and re-runs every attack strategy on each one, producing K null R values per (strategy, metric).
 
 **Choosing the null (`--robustness-null-model`).** Two nulls are available:
 
@@ -329,7 +331,7 @@ For each **wave year** Y — a calendar year with recorded closures — the repl
 1. takes the **pre-wave** graph `G_{Y-1}` (the network the year before);
 2. removes the channels that closed during Y and were present in `G_{Y-1}` — the **predicted** residual (four sizes, normalised against `G_{Y-1}` exactly as the ban-wave scenarios are);
 3. compares that against the **equal-count random baseline** (remove the same number of channels at random, averaged over `--robustness-runs`);
-4. compares it against the **observed** post-wave structure: the `G_{Y+1}` graph restricted to the pre-wave survivors, normalised against the same `G_{Y-1}` baseline so predicted and observed sit on one scale.
+4. compares it against the **observed** post-wave structure: the `G_{Y+1}` graph restricted to the pre-wave survivors, normalised against the same `G_{Y-1}` baseline so predicted and observed sit on one scale. Because `strength` divides one year's edge weight by another's, it sums the raw tie weights (`weight_raw` — the `--edge-weight-strategy` value before the per-graph ×10/max display rescale): each year graph is rescaled to its *own* heaviest tie, so with the display weights a closed hub that carried `G_{Y-1}`'s heaviest tie would inflate every `G_{Y+1}` weight and fake a "healing".
 
 Read the three numbers in each cell (`predicted / random / observed`) together:
 
@@ -369,7 +371,7 @@ Robustness analysis is most informative on networks that satisfy three condition
 
 1. **More than just isolated dyads.** Very small graphs (fewer than ~30 nodes) produce noisy curves and unstable z-scores because the null sample size is tiny relative to the topology.
 2. **A non-trivial strongly-connected component.** `R_scc` is meaningless if the largest SCC at `q = 0` is a single node. Sparse trees and forests will show `R_scc ≈ 0` regardless of attack strategy. Use `R_wcc` or `R_reach` for those.
-3. **Heterogeneous edge weights.** The disparity filter is most useful when some edges carry much more weight than the per-channel average. Networks with uniform weights collapse the filter into a near no-op (every edge has the same α from both sides).
+3. **Heterogeneous edge weights.** The disparity filter is most useful when some edges carry much more weight than the per-channel average. On networks with perfectly uniform weights the filter is uninformative and is skipped (see [the backbone](#the-backbone-disparity-filter)); nearly uniform weights still leave it close to a degree-only cut.
 
 The analysis is **not** meant to predict actual deplatforming outcomes — that depends on which specific channels get banned, on the moderation rules, on the network's adaptation. It is meant to characterise *structural* vulnerability: which kinds of removals would matter most, and whether the network has identifiable critical channels at all. Two networks of similar size with very different R profiles will react very differently to any given moderation pressure; one with similar profiles will react similarly. That comparative insight is what the analysis delivers.
 

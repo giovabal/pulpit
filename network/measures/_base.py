@@ -145,6 +145,7 @@ def apply_base_node_measures(
     channel_dict: dict[str, Any],
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
+    environment_depth: int | None = None,
 ) -> list[tuple[str, str]]:
     """Populate in/out strength, fans, message count, and activity period on each node.
 
@@ -153,6 +154,11 @@ def apply_base_node_measures(
     over ``weight_raw`` rather than the ×10/max-normalised ``weight`` so the figure
     is portable across exports (the normalised ``weight`` depends on the single
     largest edge in the graph and is not comparable between runs).
+
+    ``environment_depth``: the export's environment depth, passed to the period gate
+    (``channel_cutoff_q``) of both the message count and the activity bounds, so an
+    environment node's Messages / activity period come from the same messages its
+    Amplification and Content originality are computed on.
     """
     measures_labels: list[tuple[str, str]] = [
         ("in_deg", "In-strength"),
@@ -167,9 +173,15 @@ def apply_base_node_measures(
     # network-wide content metrics — all of which run on Message.objects.alive().
     # Counting lost placeholders would inflate the column with un-fetchable rows the
     # ratios never count, so the figures could not be derived from one another.
-    message_counts = per_channel_message_counts(channel_pks, start_date, end_date, alive=True)
+    message_counts = per_channel_message_counts(
+        channel_pks, start_date, end_date, alive=True, environment_depth=environment_depth
+    )
     # Activity bounds need Min/Max aggregates, not the per-channel count shape.
-    msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & channel_cutoff_q()
+    msg_q = (
+        Q(channel_id__in=channel_pks)
+        & make_date_q(start_date, end_date)
+        & channel_cutoff_q(environment_depth=environment_depth)
+    )
     activity_bounds: dict[int, dict] = {
         item["channel_id"]: {"min_date": item["min_date"], "max_date": item["max_date"]}
         for item in Message.objects.filter(msg_q, date__isnull=False)

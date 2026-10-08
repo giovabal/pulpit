@@ -173,7 +173,7 @@ def purge_preview(request: Any) -> Response:
 @api_view(["GET"])
 def orphan_media_preview(request: Any) -> Response:
     """Count files under media scan roots with no row reference, and their total size."""
-    from webapp.management.commands.purge_orphan_media import purge_orphans, scan_roots
+    from webapp.management.commands.purge_orphan_media import RECENT_FILE_GRACE_SECONDS, purge_orphans, scan_roots
 
     existing = [r for r in scan_roots() if r.is_dir()]
     if not existing:
@@ -181,6 +181,7 @@ def orphan_media_preview(request: Any) -> Response:
             {
                 "files": 0,
                 "bytes": 0,
+                "skipped_recent": 0,
                 "supported": False,
                 "detail": "No media scan roots exist on disk — nothing to scan.",
             }
@@ -190,6 +191,10 @@ def orphan_media_preview(request: Any) -> Response:
         {
             "files": report.candidate_files,
             "bytes": report.candidate_bytes,
+            # Unreferenced files left out of ``files`` because they were written within
+            # the grace period — a crawl may be about to save the row that references them.
+            "skipped_recent": report.skipped_recent,
+            "recent_file_grace_seconds": RECENT_FILE_GRACE_SECONDS,
             "supported": True,
         }
     )
@@ -198,7 +203,7 @@ def orphan_media_preview(request: Any) -> Response:
 @api_view(["POST"])
 def orphan_media_run(request: Any) -> Response:
     """Delete orphan media files from disk; tidy up the empty directories left behind."""
-    from webapp.management.commands.purge_orphan_media import purge_orphans, scan_roots
+    from webapp.management.commands.purge_orphan_media import RECENT_FILE_GRACE_SECONDS, purge_orphans, scan_roots
 
     existing = [r for r in scan_roots() if r.is_dir()]
     if not existing:
@@ -216,6 +221,11 @@ def orphan_media_run(request: Any) -> Response:
             "removed_bytes": report.removed_bytes,
             "failed_files": report.failed_files,
             "empty_dirs_removed": report.empty_dirs_removed,
+            # Left on disk on purpose, not failures: written within the grace period
+            # (before or after the scan), or referenced by a row saved since the scan.
+            "skipped_recent": report.skipped_recent,
+            "skipped_referenced": report.skipped_referenced,
+            "recent_file_grace_seconds": RECENT_FILE_GRACE_SECONDS,
             "total_duration_seconds": time.perf_counter() - overall_t,
         }
     )
@@ -231,6 +241,7 @@ def purge_run(request: Any) -> Response:
     """
     from django.core.management.base import CommandError
 
+    from webapp.management.commands.purge_orphan_media import RECENT_FILE_GRACE_SECONDS
     from webapp.management.commands.purge_out_of_target_messages import purge
 
     size_before = _db_size_bytes()
@@ -246,6 +257,10 @@ def purge_run(request: Any) -> Response:
             "deleted_messages": report.deleted_messages,
             "removed_files": report.removed_files,
             "failed_files": report.failed_files,
+            # Media files left on disk on purpose (removed + failed + skipped = candidates):
+            # a row references them again, or they were written within the grace period.
+            "skipped_files": report.skipped_files,
+            "recent_file_grace_seconds": RECENT_FILE_GRACE_SECONDS,
             "size_before_bytes": size_before,
             "size_after_bytes": _db_size_bytes(),
             "total_duration_seconds": time.perf_counter() - overall_t,

@@ -23,8 +23,8 @@ from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
-from crawler.reference_resolver import DEAD_PREFIX, SKIPPABLE_REFERENCES, ReferenceResolver
-from network.utils import channel_cutoff_q
+from crawler.reference_resolver import DEAD_PREFIX, ReferenceResolver, extract_text_references
+from network.utils import channel_cutoff_q, make_date_q
 from webapp.models import (
     Channel,
     ChannelLabel,
@@ -163,6 +163,22 @@ def _recover_db_lock(stdout: Any, style: Any, *, action: str, channel: Any) -> N
         connection.close()
 
 
+def _iter_channels(channels_qs: Any) -> Iterator[Channel]:
+    """Yield the channels of ``channels_qs``, in its order, without holding a cursor open between them.
+
+    The per-channel loops must not stream from ``queryset.iterator()``: on SQLite that is a
+    live chunked cursor, and ``_recover_db_lock`` closes the connection mid-loop, so fetching
+    the next chunk would raise "Cannot operate on a closed database" outside every
+    per-channel guard and abort the whole run. The pks are read up front instead and each
+    channel is loaded just before its turn (as fresh as a chunked row was); one deleted in
+    the meantime is skipped.
+    """
+    for pk in list(channels_qs.values_list("pk", flat=True)):
+        channel = Channel.objects.filter(pk=pk).first()
+        if channel is not None:
+            yield channel
+
+
 @contextmanager
 def per_channel_step(
     stdout: Any,
@@ -209,10 +225,6 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Chunk size for ``pk__in`` clauses over arbitrarily large id sets, kept under SQLite's
 # SQLITE_MAX_VARIABLE_NUMBER (999 on older builds).
 _PK_BATCH = 900
-# \w only — Telegram usernames are [A-Za-z0-9_]; "." / "-" would swallow trailing
-# sentence punctuation and produce permanently-unresolvable references (see
-# Message.get_telegram_references, which uses the same character class).
-_ABOUT_REF_RE = re.compile(r"t\.me/((?:\w|(?:%[\da-fA-F]{2}))+)")
 
 # Path fragment identifying coroutines whose code lives inside the Telethon
 # package — used by the unraisable-hook filter to scope what it silences.
@@ -582,7 +594,10 @@ class Command(BaseCommand):
             "--out-degrees",
             action=BooleanOptionalAction,
             default=None,
-            help="Recompute citation degree for out-of-target channels cited by in-target ones.",
+            help=(
+                "Recompute citation degree for out-of-target channels cited by in-target ones, "
+                "and reset it to 0 for out-of-target channels no longer cited."
+            ),
         )
         # ── Environment ───────────────────────────────────────────────────────
         parser.add_argument(
@@ -883,6 +898,30 @@ class Command(BaseCommand):
                 max_telegram_id=max_telegram_id,
                 status_callback=lambda message, idx=index: printer.status(message, idx),
             )
+
+    def _resolve_pending_forwards_for_channel(
+        self,
+        channel: Channel,
+        crawler: ChannelCrawler,
+        index: int,
+        printer: ProgressPrinter,
+    ) -> None:
+        """Resolve the forward lookups ``get_message`` deferred, without ever aborting the run.
+
+        ``get_channel`` resolves them itself on success; this catches the ones an
+        interrupted channel left pending. A failure here — a lock held by another writer,
+        an unexpected Telegram error — only postpones them: the rows keep
+        ``pending_forward_telegram_id`` and the next ``get_channel`` retries them.
+        """
+        with per_channel_step(
+            self.stdout,
+            self.style,
+            printer,
+            action="resolving forwarded channels",
+            channel=channel,
+            ensure_newline_on_success=False,
+        ):
+            crawler._resolve_pending_forwards(lambda message, idx=index: printer.status(message, idx))
 
     def _retry_lost_for_channel(
         self,
@@ -1441,30 +1480,45 @@ class Command(BaseCommand):
         return start, end
 
     @staticmethod
-    def _environment_candidates(seeds: Any, visited: set[int], opts: CrawlOptions) -> list[Channel]:
+    def _environment_candidates(
+        seeds: Any,
+        visited: set[int],
+        opts: CrawlOptions,
+        window: tuple[datetime.date | None, datetime.date | None] = (None, None),
+    ) -> list[Channel]:
         """Channels cited by ``seeds`` that the crawl has not reached yet, ordered by pk.
 
         ``seeds`` is either the in-scope channel queryset (level 1 — only citations dated
         inside in-target periods count, the graph's own edge chokepoint) or a list of
-        environment channel pks (deeper levels — their stored messages are window-bounded
-        by construction). A citation is a forward (``forwarded_from``) or a ``t.me/``
-        reference in a non-lost message. Leaves out everything in ``visited`` (the scope
-        plus earlier levels), channels ever in target or marked to_inspect (they belong to
-        the scope whatever this run's filters), user accounts, and — unless
-        --retry-lost-and-private — lost/private ones; --channel-types applies as it does to
-        the scope.
+        environment channel pks (deeper levels — only citations dated inside ``window``,
+        the environment window of ``_environment_window``, count: the seeds' stored
+        messages may reach past it, when an earlier run had a wider window or the channel
+        was once to_inspect and stored its whole history). Window bounds are inclusive
+        local dates, the pipeline's ``make_date_q`` semantics; ``(None, None)`` is
+        unbounded. A citation is a forward (``forwarded_from``) or a ``t.me/`` reference in
+        a non-lost message. Leaves out everything in ``visited`` (the scope plus earlier
+        levels), channels ever in target or marked to_inspect (they belong to the scope
+        whatever this run's filters), user accounts, and — unless --retry-lost-and-private
+        — lost/private ones; --channel-types applies as it does to the scope.
         """
         forwards = Message.objects.alive().filter(forwarded_from__isnull=False)
         references = Message.references.through.objects.filter(message__is_lost=False)
         cited: set[int] = set()
         if isinstance(seeds, list):
+            window_start, window_end = window
+            in_window = make_date_q(window_start, window_end)
+            in_window_refs = make_date_q(window_start, window_end, field="message__date")
             for i in range(0, len(seeds), _PK_BATCH):
                 chunk = seeds[i : i + _PK_BATCH]
                 cited.update(
-                    forwards.filter(channel_id__in=chunk).values_list("forwarded_from_id", flat=True).distinct()
+                    forwards.filter(in_window, channel_id__in=chunk)
+                    .values_list("forwarded_from_id", flat=True)
+                    .distinct()
                 )
                 cited.update(
-                    references.filter(message__channel_id__in=chunk).values_list("channel_id", flat=True).distinct()
+                    references.filter(in_window_refs, message__channel_id__in=chunk)
+                    .values_list("channel_id", flat=True)
+                    .distinct()
                 )
         else:
             cited.update(
@@ -1505,13 +1559,16 @@ class Command(BaseCommand):
         """Crawl the out-of-scope channels within ``opts.environment_depth`` citation hops of the scope.
 
         Level 1 is every channel the in-scope channels cite; level k+1 is every channel the
-        level-k channels cite in the messages just stored — so a deeper level can only be
+        level-k channels cite in their in-window messages — so a deeper level can only be
         discovered once the previous one has been crawled. Each channel gets its details and
         profile picture, the messages dated inside the scope's in-target window (see
         ``_environment_window``) with the environment media types, and — when --fix-holes is
-        on — its message holes filled. Reached channels are stamped with the smallest
-        citation distance seen so far (``Channel.environment_depth``), which also keeps their
-        messages across ``purge_out_of_target_messages``.
+        on — its message holes filled. A channel whose crawl went through and which proved a
+        live channel (not lost, private or a user account) is *reached*: it is stamped with
+        the smallest citation distance seen so far (``Channel.environment_depth``), which also
+        keeps its messages across ``purge_out_of_target_messages``, and seeds the next level.
+        A channel that failed (flood wait, error, database lock) is skipped and retried on
+        the next run.
         """
         from webapp.scoring import recompute_channel
 
@@ -1541,16 +1598,19 @@ class Command(BaseCommand):
         crawled = 0
         levels_reached = 0
         for level in range(1, depth + 1):
-            candidates = self._environment_candidates(seeds, visited, opts)
+            candidates = self._environment_candidates(seeds, visited, opts, window)
             if not candidates:
                 self.stdout.write(f"Environment level {level}/{depth}: no new channels.")
                 break
-            levels_reached = level
             visited.update(channel.pk for channel in candidates)
             total = len(candidates)
             printer = ProgressPrinter(self.stdout, total)
             printer.announce(f"\nEnvironment level {level}/{depth}: {total} channel(s)")
+            # The channels this level actually reached: crawled without error and still a
+            # live channel. Only they are stamped, and only their messages seed the next level.
+            reached: list[int] = []
             for index, channel in enumerate(candidates, start=1):
+                crawl_ok = False
                 with per_channel_step(
                     self.stdout, self.style, printer, action="crawling environment channel", channel=channel
                 ):
@@ -1561,20 +1621,46 @@ class Command(BaseCommand):
                         message_window=window,
                         status_callback=lambda message, idx=index, pr=printer: pr.status(message, idx),
                     )
-                # Forward lookups deferred by get_message; get_channel resolves them itself on
-                # success, this catches the ones an interrupted channel left pending.
-                crawler._resolve_pending_forwards(lambda message, idx=index, pr=printer: pr.status(message, idx))
-                Channel.objects.filter(pk=channel.pk).filter(
-                    Q(environment_depth__isnull=True) | Q(environment_depth__gt=level)
-                ).update(environment_depth=level)
+                    crawl_ok = True
+                self._resolve_pending_forwards_for_channel(channel, crawler, index, printer)
+                if crawl_ok and self._stamp_environment_depth(channel, level, printer):
+                    reached.append(channel.pk)
                 try:
                     recompute_channel(channel.pk)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
-                crawled += 1
             printer.newline()
-            seeds = [channel.pk for channel in candidates]
+            crawled += len(reached)
+            if reached:
+                levels_reached = level
+            seeds = reached
         self.stdout.write(f"Environment: {crawled} channel(s) crawled across {levels_reached} level(s).")
+
+    def _stamp_environment_depth(self, channel: Channel, level: int, printer: ProgressPrinter) -> bool:
+        """Record ``level`` as ``channel``'s environment distance after a successful crawl; True if it counts.
+
+        ``get_channel`` returns normally for a channel it finds lost, private or a user
+        account (flagging it so), hence the flags are re-read from the database: such a
+        channel is no environment node — the graph keeps it a dead leaf — and must not
+        raise the deepest registered level either. The smallest distance seen is kept. A
+        lock held by another writer skips the stamp for this channel only (returns False).
+        """
+        counts = False
+        with per_channel_step(
+            self.stdout,
+            self.style,
+            printer,
+            action="recording the environment depth",
+            channel=channel,
+            ensure_newline_on_success=False,
+        ):
+            live = Channel.objects.filter(pk=channel.pk, is_lost=False, is_private=False, is_user_account=False)
+            if live.exists():
+                live.filter(Q(environment_depth__isnull=True) | Q(environment_depth__gt=level)).update(
+                    environment_depth=level
+                )
+                counts = True
+        return counts
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
         """Channels included in this crawl: channels ever in-target, plus to_inspect candidates."""
@@ -1780,7 +1866,7 @@ class Command(BaseCommand):
                     # ── CHANNELS LOOP ──────────────────────────────────────────
                     if get_channels_info or mine_about_texts or fetch_recommended:
                         if get_channels_info:
-                            for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                            for index, channel in enumerate(_iter_channels(channels), start=1):
                                 self._refresh_channel_info_for_channel(channel, crawler, index, printer)
                             printer.newline()
 
@@ -1807,7 +1893,7 @@ class Command(BaseCommand):
                             n_excluded = excluded_by_type.count()
                             if n_excluded:
                                 printer.announce(f"\nUpdating metadata for {n_excluded} type-excluded channel(s)")
-                                for i, meta_ch in enumerate(excluded_by_type.iterator(chunk_size=10), start=1):
+                                for i, meta_ch in enumerate(_iter_channels(excluded_by_type), start=1):
                                     printer.progress(f"Metadata [{i}/{n_excluded}] {meta_ch}")
                                     try:
                                         ch_obj, tg_ch, status = crawler.resolve_channel_or_classify(meta_ch.telegram_id)
@@ -1855,10 +1941,7 @@ class Command(BaseCommand):
                             # not just the crawl-scoped subset — references in GROUP/USER/out-of-scope
                             # channels' descriptions would otherwise be missed.
                             for about_text in Channel.objects.exclude(about="").values_list("about", flat=True):
-                                for m in _ABOUT_REF_RE.finditer(about_text):
-                                    ref = m.group(1).strip().lower()
-                                    if ref and ref not in SKIPPABLE_REFERENCES:
-                                        about_refs.add(ref)
+                                about_refs.update(extract_text_references(about_text))
                             if about_refs:
                                 known_lower = {
                                     u.lower()
@@ -1940,7 +2023,7 @@ class Command(BaseCommand):
                             get_new_messages or do_refresh or fix_holes or retry_lost_messages or fetch_replies
                         )
                         if per_channel_ops:
-                            for index, channel in enumerate(channels.iterator(chunk_size=10), start=1):
+                            for index, channel in enumerate(_iter_channels(channels), start=1):
                                 pre_crawl_max_id = 0
 
                                 if get_new_messages:
@@ -1978,9 +2061,7 @@ class Command(BaseCommand):
                                             )
                                         continue
                                     finally:
-                                        crawler._resolve_pending_forwards(
-                                            lambda message, idx=index: printer.status(message, idx)
-                                        )
+                                        self._resolve_pending_forwards_for_channel(channel, crawler, index, printer)
                                     printer.ensure_newline()
                                     if fetch_replies:
                                         new_min = pre_crawl_max_id + 1 if pre_crawl_max_id > 0 else None
@@ -2214,6 +2295,29 @@ class Command(BaseCommand):
                 self._bulk_update_degrees(
                     cited_channels,
                     "Refreshing citation degree for {total} referenced channels",
+                )
+
+            if out_degrees:
+                # The rest of the out-of-target channels are cited by no in-period message
+                # any more — a channel whose in-target labels were removed, or one whose
+                # citing messages fell out of the periods or were purged — so their degrees
+                # are 0. Reset the ones still showing an earlier value (never-computed NULLs
+                # stay NULL); in-target channels are --in-degrees' to rewrite, cited ones were
+                # just recomputed above.
+                stale_channels = [
+                    ch
+                    for ch in Channel.objects.filter(Q(in_degree__gt=0) | Q(out_degree__gt=0)).only(
+                        "pk", "in_degree", "out_degree"
+                    )
+                    if ch.pk not in in_target_pks and ch.pk not in cited_pks
+                ]
+                for ch in stale_channels:
+                    ch.in_degree = 0
+                    ch.out_degree = 0
+
+                self._bulk_update_degrees(
+                    stale_channels,
+                    "Resetting degrees for {total} channels no longer in target or cited",
                 )
 
         self._sync_message_tags()

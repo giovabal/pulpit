@@ -794,7 +794,55 @@ class MaintenancePurgeApiTests(_ApiTestCase):
         body = resp.json()
         self.assertEqual(body["deleted_messages"], 2)
         self.assertEqual(body["candidate_media_files"], 0)
+        self.assertEqual(body["skipped_files"], 0)
+        self.assertEqual(body["recent_file_grace_seconds"], 3600)
         self.assertEqual(Message.objects.count(), 1)  # only the in-target message remains
+
+    def _purgeable_picture(self, media_root):
+        """Attach an on-disk picture (written just now) to one of the purgeable messages."""
+        from django.core.files.base import ContentFile
+
+        from webapp.models import MessagePicture
+
+        with override_settings(MEDIA_ROOT=media_root):
+            pic = MessagePicture.objects.create(message=Message.objects.get(telegram_id=20), telegram_id=999)
+            pic.picture.save("purgeable.jpg", ContentFile(b"abc"), save=True)
+            return pic.picture.path
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_removes_a_settled_media_file(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as media_root:
+            path = self._purgeable_picture(media_root)
+            settled = mock.patch(
+                "webapp.management.commands.purge_out_of_target_messages.recently_modified", return_value=False
+            )
+            with override_settings(MEDIA_ROOT=media_root), settled:
+                body = self.jpost(_api("maintenance/purge/"), {}).json()
+            self.assertEqual(body["candidate_media_files"], 1)
+            self.assertEqual(body["removed_files"], 1)
+            self.assertEqual(body["skipped_files"], 0)
+            self.assertFalse(os.path.exists(path))
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_reports_a_recently_written_media_file_as_skipped(self):
+        """A file written within the grace period may be mid-download: its message goes, the file
+        stays, and the run reports it as skipped — not removed, not failed."""
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as media_root:
+            path = self._purgeable_picture(media_root)
+            with override_settings(MEDIA_ROOT=media_root):
+                body = self.jpost(_api("maintenance/purge/"), {}).json()
+            self.assertEqual(body["deleted_messages"], 2)
+            self.assertEqual(body["candidate_media_files"], 1)
+            self.assertEqual(body["removed_files"], 0)
+            self.assertEqual(body["failed_files"], 0)
+            self.assertEqual(body["skipped_files"], 1)
+            self.assertTrue(os.path.exists(path))
 
     @override_settings(WEB_ACCESS="ALL")
     def test_run_refuses_when_no_in_target(self):
@@ -810,6 +858,11 @@ class MaintenancePurgeApiTests(_ApiTestCase):
 
 class MaintenanceOrphanMediaApiTests(_ApiTestCase):
     """Endpoints powering the "Purge orphan media files" panel."""
+
+    @staticmethod
+    def _settled_files():
+        """Treat every file as older than the cleanup's recent-file grace period."""
+        return mock.patch("webapp.management.commands.purge_orphan_media.recently_modified", return_value=False)
 
     @override_settings(WEB_ACCESS="ALL")
     def test_preview_reports_unsupported_when_scan_roots_missing(self):
@@ -833,13 +886,73 @@ class MaintenanceOrphanMediaApiTests(_ApiTestCase):
             (Path(media_root) / "channels" / "x").mkdir(parents=True)
             orphan = Path(media_root) / "channels" / "x" / "orphan.jpg"
             orphan.write_bytes(b"abc")
-            with override_settings(MEDIA_ROOT=media_root):
+            # Written just now: lift the recent-file grace period that would otherwise skip it.
+            with override_settings(MEDIA_ROOT=media_root), self._settled_files():
                 resp = self.jget(_api("maintenance/orphan-media-preview/"))
                 self.assertEqual(resp.status_code, 200)
                 body = resp.json()
                 self.assertTrue(body["supported"])
                 self.assertEqual(body["files"], 1)
                 self.assertEqual(body["bytes"], 3)
+                self.assertEqual(body["skipped_recent"], 0)
+                self.assertEqual(body["recent_file_grace_seconds"], 3600)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_fresh_orphan_is_skipped_and_reported(self):
+        """A file written within the grace period may still be gaining its row (mid-download):
+        preview and run both leave it out of the candidates and report it as skipped."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as media_root:
+            (Path(media_root) / "channels" / "x").mkdir(parents=True)
+            fresh = Path(media_root) / "channels" / "x" / "fresh.jpg"
+            fresh.write_bytes(b"abc")
+            with override_settings(MEDIA_ROOT=media_root):
+                preview = self.jget(_api("maintenance/orphan-media-preview/")).json()
+                run = self.jpost(_api("maintenance/orphan-media/"), {}).json()
+            self.assertEqual(preview["files"], 0)
+            self.assertEqual(preview["bytes"], 0)
+            self.assertEqual(preview["skipped_recent"], 1)
+            self.assertEqual(run["candidate_files"], 0)
+            self.assertEqual(run["removed_files"], 0)
+            self.assertEqual(run["failed_files"], 0)
+            self.assertEqual(run["skipped_recent"], 1)
+            self.assertEqual(run["skipped_referenced"], 0)
+            self.assertTrue(fresh.exists())
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_run_reports_file_referenced_since_the_scan(self):
+        """A row saved after the referenced-paths snapshot keeps its file, reported as skipped_referenced."""
+        import tempfile
+        from pathlib import Path
+
+        from webapp.management.commands import purge_orphan_media as orphan_mod
+        from webapp.models import MessagePicture
+
+        channel = make_channel(telegram_id=1, title="c")
+        real_snapshot = orphan_mod.collect_referenced_paths
+
+        def snapshot_then_crawler_saves():
+            referenced = real_snapshot()
+            msg = Message.objects.create(telegram_id=1, channel=channel)
+            MessagePicture.objects.create(message=msg, telegram_id=555, picture="photos/555.jpg")
+            return referenced
+
+        with tempfile.TemporaryDirectory() as media_root:
+            (Path(media_root) / "photos").mkdir()
+            late = Path(media_root) / "photos" / "555.jpg"
+            late.write_bytes(b"downloaded during the scan")
+            snapshot = mock.patch.object(
+                orphan_mod, "collect_referenced_paths", side_effect=snapshot_then_crawler_saves
+            )
+            with override_settings(MEDIA_ROOT=media_root), self._settled_files(), snapshot:
+                body = self.jpost(_api("maintenance/orphan-media/"), {}).json()
+            self.assertEqual(body["candidate_files"], 1)
+            self.assertEqual(body["removed_files"], 0)
+            self.assertEqual(body["skipped_referenced"], 1)
+            self.assertEqual(body["skipped_recent"], 0)
+            self.assertTrue(late.exists())
 
     @override_settings(WEB_ACCESS="ALL")
     def test_run_deletes_orphans(self):
@@ -850,12 +963,14 @@ class MaintenanceOrphanMediaApiTests(_ApiTestCase):
             (Path(media_root) / "channels" / "x").mkdir(parents=True)
             orphan = Path(media_root) / "channels" / "x" / "orphan.jpg"
             orphan.write_bytes(b"abc")
-            with override_settings(MEDIA_ROOT=media_root):
+            with override_settings(MEDIA_ROOT=media_root), self._settled_files():
                 resp = self.jpost(_api("maintenance/orphan-media/"), {})
                 self.assertEqual(resp.status_code, 200)
                 body = resp.json()
                 self.assertEqual(body["removed_files"], 1)
                 self.assertEqual(body["removed_bytes"], 3)
+                self.assertEqual(body["skipped_recent"], 0)
+                self.assertEqual(body["skipped_referenced"], 0)
             self.assertFalse(orphan.exists())
 
 

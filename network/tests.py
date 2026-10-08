@@ -35,6 +35,7 @@ from network.community_stats import (
 )
 from network.coordination import build_nx_graph, compute_coordination
 from network.exporter import (
+    apply_robots_to_graph_html,
     build_coordination_graph_data,
     build_graph_data,
     ensure_graph_root,
@@ -44,7 +45,9 @@ from network.exporter import (
     write_coordination_pages,
     write_coordination_timeline_json,
     write_csv,
+    write_gexf,
     write_graph_files,
+    write_graphml,
     write_near_copies_csv,
 )
 from network.graph_builder import build_graph, resolve_window_label
@@ -329,6 +332,24 @@ class DetectConsensusTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+def _cpm_fixture(seed: int, *, scale: "float | None" = None, raw: bool = True) -> nx.DiGraph:
+    """40-node random digraph with integer tie weights 1–4, shaped like a ``build_graph`` output.
+
+    ``scale`` = None stores the raw tie as ``weight``; otherwise ``weight`` is the per-graph
+    ``10·w/scale`` rescale and the raw tie goes to ``weight_raw`` (omitted when ``raw`` is False).
+    """
+    base = nx.gnp_random_graph(40, 0.1, seed=seed, directed=True)
+    graph = nx.DiGraph()
+    graph.add_nodes_from(str(node) for node in base.nodes())
+    for u, v in base.edges():
+        tie = float(1 + (u * 7 + v * 3) % 4)
+        attrs = {"weight": tie if scale is None else 10 * tie / scale}
+        if raw and scale is not None:
+            attrs["weight_raw"] = tie
+        graph.add_edge(str(u), str(v), **attrs)
+    return graph
+
+
 class DetectLeidenTemporalTests(TestCase):
     """Interslice-coupled temporal detection over synthetic year slices (real leidenalg)."""
 
@@ -391,6 +412,121 @@ class DetectLeidenTemporalTests(TestCase):
         per_year, plurality, _ = detect_leiden_temporal(year_graphs, "SomePalette", 0.3, 0.0)
         if per_year[2020]["x"] != per_year[2021]["x"]:  # decoupled years → genuinely different homes
             self.assertEqual(plurality["x"], per_year[2021]["x"])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_slices_use_raw_tie_weights_not_per_year_rescale(self, _mock: MagicMock) -> None:
+        # build_graph rescales each year's ``weight`` to 10·w/max *of that year*; CPM's γ (and ω) must
+        # see the raw ties, so two years with different maxima are partitioned on one scale.
+        from network.community import detect_leiden_temporal
+
+        def year(seed: int, scale: "float | None", raw: bool = True) -> nx.DiGraph:
+            return _cpm_fixture(seed, scale=scale, raw=raw)
+
+        reference, _, _ = detect_leiden_temporal({2020: year(3, None), 2021: year(5, None)}, "P", 0.2, 0.1)
+        per_year, _, _ = detect_leiden_temporal({2020: year(3, 4.0), 2021: year(5, 40.0)}, "P", 0.2, 0.1)
+        self.assertEqual(per_year, reference)
+        # Sanity: on the rescaled weights alone the partition differs — the bug this guards.
+        rescaled_only, _, _ = detect_leiden_temporal(
+            {2020: year(3, 4.0, raw=False), 2021: year(5, 40.0, raw=False)}, "P", 0.2, 0.1
+        )
+        self.assertNotEqual(rescaled_only, reference)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_explicit_resolution_matches_find_partition_temporal(self, _mock: MagicMock) -> None:
+        # The unrolled multiplex optimisation (one CPMVertexPartition per layer, so each slice can
+        # carry its own γ) must reproduce leidenalg.find_partition_temporal exactly for a single γ.
+        from network.community import detect_leiden_temporal
+        from network.utils import to_undirected_sum
+
+        import igraph as ig
+        import leidenalg
+
+        # Three slices whose (raw) ties live in ``weight`` — what tie_weight_key picks for them.
+        year_graphs = {2020: _cpm_fixture(3), 2021: _cpm_fixture(5), 2022: _cpm_fixture(7)}
+        key = "weight"
+
+        def reference(gamma: float, omega: float) -> set[frozenset]:
+            years = sorted(year_graphs)
+            slices = []
+            for year in years:
+                undirected = to_undirected_sum(year_graphs[year], weight=key)
+                node_ids = sorted(undirected.nodes())
+                index = {node_id: i for i, node_id in enumerate(node_ids)}
+                slice_graph = ig.Graph(n=len(node_ids), directed=False)
+                slice_graph.vs["id"] = node_ids
+                slice_graph.add_edges([(index[u], index[v]) for u, v in undirected.edges()])
+                slice_graph.es["weight"] = [undirected.edges[u, v][key] for u, v in undirected.edges()]
+                slices.append(slice_graph)
+            memberships, _ = leidenalg.find_partition_temporal(
+                slices,
+                leidenalg.CPMVertexPartition,
+                interslice_weight=omega,
+                vertex_id_attr="id",
+                weight_attr="weight",
+                seed=0,
+                resolution_parameter=gamma,
+            )
+            groups: dict[int, set] = {}
+            for year, slice_graph, membership in zip(years, slices, memberships, strict=True):
+                for i, cid in enumerate(membership):
+                    groups.setdefault(cid, set()).add((year, slice_graph.vs[i]["id"]))
+            return {frozenset(group) for group in groups.values()}
+
+        def ours(gamma: float, omega: float) -> set[frozenset]:
+            per_year, _, _ = detect_leiden_temporal(year_graphs, "P", gamma, omega)
+            groups: dict[int, set] = {}
+            for year, community_map in per_year.items():
+                for node_id, cid in community_map.items():
+                    groups.setdefault(cid, set()).add((year, node_id))
+            return {frozenset(group) for group in groups.values()}
+
+        for gamma, omega in ((0.2, 0.1), (0.5, 1.0), (1.0, 0.0)):
+            with self.subTest(gamma=gamma, omega=omega):
+                self.assertEqual(ours(gamma, omega), reference(gamma, omega))
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_auto_resolution_is_each_slice_density(self, _mock: MagicMock) -> None:
+        # resolution=None → every layer's CPM partition carries its own slice's weighted edge density
+        # (the per-slice null of Mucha et al. 2010); the interslice layer stays at resolution 0.
+        from network.community import cpm_density_resolution, detect_leiden_temporal, temporal_slice_resolutions
+
+        import leidenalg
+
+        sparse = _cpm_fixture(3, scale=4.0)
+        dense = nx.DiGraph()
+        dense.add_nodes_from(sparse.nodes())
+        for u, v, data in sparse.edges(data=True):
+            dense.add_edge(u, v, weight=data["weight"], weight_raw=data["weight_raw"] * 3)
+        year_graphs = {2020: sparse, 2021: dense}
+        gammas = temporal_slice_resolutions(year_graphs, None)
+        self.assertEqual(gammas, {2020: cpm_density_resolution(sparse), 2021: cpm_density_resolution(dense)})
+        self.assertAlmostEqual(gammas[2021], 3 * gammas[2020])
+        self.assertEqual(temporal_slice_resolutions(year_graphs, 0.2), {2020: 0.2, 2021: 0.2})
+
+        real_cpm = leidenalg.CPMVertexPartition
+        with patch("network.community.leidenalg.CPMVertexPartition", side_effect=real_cpm) as spy:
+            detect_leiden_temporal(year_graphs, "P", None, 1.0)
+        used = [call.kwargs["resolution_parameter"] for call in spy.call_args_list]
+        self.assertEqual(used, [gammas[2020], gammas[2021], 0])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_auto_resolution_invariant_to_uniform_rescale_at_zero_coupling(self, _mock: MagicMock) -> None:
+        # With ω = 0 the slices decouple, so the per-slice density default makes each year's partition
+        # independent of a uniform rescale of the raw ties (ω itself is absolute, so this holds only
+        # where the coupling does not compete with the ties).
+        from network.community import detect_leiden_temporal
+
+        def scaled(graph: nx.DiGraph, factor: float) -> nx.DiGraph:
+            copy = graph.copy()
+            for _, _, data in copy.edges(data=True):
+                data["weight_raw"] *= factor
+            return copy
+
+        year_graphs = {2020: _cpm_fixture(3, scale=4.0), 2021: _cpm_fixture(5, scale=40.0)}
+        reference, _, _ = detect_leiden_temporal(year_graphs, "P", None, 0.0)
+        rescaled = {year: scaled(graph, 4.0) for year, graph in year_graphs.items()}
+        per_year, _, _ = detect_leiden_temporal(rescaled, "P", None, 0.0)
+        self.assertEqual(per_year, reference)
 
     def test_requires_two_year_slices(self) -> None:
         from network.community import detect_leiden_temporal
@@ -676,6 +812,57 @@ class StrategyParserTests(TestCase):
         self.assertEqual(inst.params_dict["resolution"], 0.02)
         self.assertEqual(inst.key, "leiden_cpm_resolution_0_02")
 
+    def test_bare_cpm_is_auto_density(self) -> None:
+        # No default γ: a bare LEIDEN_CPM is auto (the network density at compute time), so it carries
+        # no suffix — key ``leiden_cpm``, token and label unannotated.
+        from network.community import instance_resolution
+
+        (inst,) = parse_strategies(["LEIDEN_CPM"])
+        self.assertEqual(inst.key, "leiden_cpm")
+        self.assertEqual(inst.token(), "LEIDEN_CPM")
+        self.assertEqual(inst.label, "Leiden CPM")
+        self.assertIsNone(instance_resolution(inst))
+        self.assertEqual(strategy_display_label("leiden_cpm"), "Leiden CPM")
+        self.assertEqual(canonical_strategy_key("leiden_cpm"), "leiden_cpm")
+
+    def test_explicit_auto_equals_bare_and_explicit_gamma_stays_absolute(self) -> None:
+        from network.community import instance_resolution
+
+        (bare,) = parse_strategies(["LEIDEN_CPM"])
+        (auto,) = parse_strategies(["LEIDEN_CPM(resolution=auto)"])
+        (upper,) = parse_strategies(["LEIDEN_CPM(RESOLUTION=AUTO)"])  # the CLI upper-cases tokens
+        (explicit,) = parse_strategies(["LEIDEN_CPM(resolution=0.05)"])
+        self.assertEqual(auto, bare)
+        self.assertEqual(upper, bare)
+        self.assertEqual(auto.key, "leiden_cpm")
+        # ``auto`` also overrides a global default seeded for the bare token.
+        (seeded_auto,) = parse_strategies(
+            ["LEIDEN_CPM(resolution=auto)"], defaults={"LEIDEN_CPM": {"resolution": 0.02}}
+        )
+        self.assertIsNone(instance_resolution(seeded_auto))
+        # An explicit γ still parses as a float and keeps its suffixed key.
+        self.assertEqual(explicit.params_dict["resolution"], 0.05)
+        self.assertEqual(instance_resolution(explicit), 0.05)
+        self.assertEqual(explicit.key, "leiden_cpm_resolution_0_05")
+        # Bare (auto) and explicit instances coexist; bare + auto is a duplicate.
+        self.assertEqual(
+            [i.key for i in parse_strategies(["LEIDEN_CPM", "LEIDEN_CPM(resolution=0.05)"])],
+            ["leiden_cpm", "leiden_cpm_resolution_0_05"],
+        )
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN_CPM", "LEIDEN_CPM(resolution=auto)"])
+
+    def test_auto_only_for_auto_numeric_params(self) -> None:
+        # ``auto`` is accepted only where the parameter has an auto (empty) default.
+        with self.assertRaises(ValueError):
+            parse_strategies(["CONSENSUS(threshold=auto)"])
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN_TEMPORAL(interslice=auto)"])
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN_CPM(resolution=dense)"])
+        with self.assertRaises(ValueError):
+            parse_strategies(["LEIDEN_CPM(resolution=-0.1)"])
+
     def test_canonical_strategy_key(self) -> None:
         self.assertEqual(canonical_strategy_key("leiden_cpm_resolution_0_05"), "leiden_cpm")
         self.assertEqual(canonical_strategy_key("leiden_cpm_resolution_0_01"), "leiden_cpm")
@@ -771,13 +958,19 @@ class StrategyParserTests(TestCase):
             parse_strategies(["LABELPROPAGATION"])
 
     def test_leiden_temporal_token_key_and_label(self) -> None:
-        # Bare token inherits γ=0.05 and ω=1.0; both parameters ride in the key and the label.
+        # Bare token: γ is auto (each slice's density — absent from key/token/label), ω inherits 1.0;
+        # explicit parameters ride in the key and the label.
         insts = parse_strategies(["LEIDEN_TEMPORAL", "LEIDEN_TEMPORAL(resolution=0.01,interslice=0.5)"])
         self.assertEqual(
             [i.key for i in insts],
-            ["leiden_temporal_resolution_0_05_interslice_1_0", "leiden_temporal_resolution_0_01_interslice_0_5"],
+            ["leiden_temporal_interslice_1_0", "leiden_temporal_resolution_0_01_interslice_0_5"],
         )
+        self.assertEqual(insts[0].token(), "LEIDEN_TEMPORAL(interslice=1.0)")
         self.assertEqual(canonical_strategy_key(insts[0].key), "leiden_temporal")
+        self.assertEqual(
+            strategy_display_label("leiden_temporal_interslice_1_0"),
+            "Leiden temporal (interslice=1.0)",
+        )
         self.assertEqual(
             strategy_display_label("leiden_temporal_resolution_0_05_interslice_1_0"),
             "Leiden temporal (resolution=0.05, interslice=1.0)",
@@ -905,6 +1098,37 @@ class DetectSbmValidationTests(TestCase):
 
         with self.assertRaisesRegex(ValueError, "EXPONENTIAL.*positive"):
             detect_sbm(self._graph(0.0), "vaporwave", "FLAT", weights="EXPONENTIAL")
+
+    def test_poisson_reads_raw_counts_not_rescaled_weight(self) -> None:
+        # build_graph rescales ``weight`` to 10·w/max per graph, so TOTAL counts {1, 3, 7, 2}
+        # arrive as {1.43, 4.29, 10, 2.86}; POISSON must validate and fit the integer ``weight_raw``.
+        import importlib.util
+
+        from network.community import detect_sbm
+
+        counts = {("a", "b"): 1, ("b", "c"): 3, ("c", "a"): 7, ("c", "d"): 2, ("d", "e"): 1, ("e", "d"): 4}
+        graph, reference = nx.DiGraph(), nx.DiGraph()
+        for (s, t), count in counts.items():
+            graph.add_edge(s, t, weight=10 * count / 7, weight_raw=float(count))
+            reference.add_edge(s, t, weight=float(count))
+        if importlib.util.find_spec("graph_tool") is None:
+            # Validation runs before the import: the only error left must be the missing package.
+            with self.assertRaisesRegex(ValueError, "requires the 'graph-tool' package"):
+                detect_sbm(graph, "vaporwave", "FLAT", weights="POISSON")
+            return
+        community_map, _, _ = detect_sbm(graph, "vaporwave", "FLAT", weights="POISSON")
+        expected, _, _ = detect_sbm(reference, "vaporwave", "FLAT", weights="POISSON")
+        self.assertEqual(community_map, expected)
+
+    def test_poisson_still_rejects_fractional_raw_weights(self) -> None:
+        # PARTIAL_* raw ties are ratios: rejected whatever the rescaled ``weight`` happens to be.
+        from network.community import detect_sbm
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b", weight=10.0, weight_raw=0.5)
+        graph.add_edge("b", "c", weight=4.0, weight_raw=0.2)
+        with self.assertRaisesRegex(ValueError, r"POISSON.*non-integer weights \(e\.g\. 0\.5\)"):
+            detect_sbm(graph, "vaporwave", "FLAT", weights="POISSON")
 
 
 class DetectSbmAssortativeTests(TestCase):
@@ -1473,6 +1697,29 @@ class ApplyBaseNodeMeasuresTests(TestCase):
         self.assertEqual(node_map[str(self.ch1.pk)]["messages_count"], 1)
         self.assertEqual(node_map[str(self.ch2.pk)]["messages_count"], 0)
 
+    def test_environment_node_counts_its_messages_under_the_depth(self) -> None:
+        # An environment channel holds no in-target period: only the export's environment depth lets
+        # its messages through the period gate — the same gate Amplification / Content originality use.
+        env = Channel.objects.create(telegram_id=3, title="Env", environment_depth=1)
+        for i in range(5):
+            Message.objects.create(
+                telegram_id=10 + i, channel=env, date=datetime.datetime(2023, 3, 1 + i, tzinfo=datetime.UTC)
+            )
+        self.graph.add_node(str(env.pk), data={"pk": str(env.pk)})
+        self.channel_dict[str(env.pk)] = {"channel": env}
+        self.graph_data["nodes"].append({"id": str(env.pk)})
+
+        apply_base_node_measures(self.graph_data, self.graph, self.channel_dict, environment_depth=1)
+        node = self.graph_data["nodes"][-1]
+        self.assertEqual(node["messages_count"], 5)
+        self.assertEqual((node["activity_start"], node["activity_end"]), ("2023-03", "2023-03"))
+        apply_content_originality(self.graph_data, self.graph, self.channel_dict, environment_depth=1)
+        self.assertEqual(node["content_originality"], 1.0)  # same denominator: 5 messages, none forwarded
+
+        apply_base_node_measures(self.graph_data, self.graph, self.channel_dict)  # no depth: gate closed
+        self.assertEqual(node["messages_count"], 0)
+        self.assertEqual(node["activity_period"], "Unknown")
+
 
 # ---------------------------------------------------------------------------
 # exporter.py — apply_pagerank
@@ -1670,6 +1917,90 @@ class WriteGraphFilesTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# exporter.py — write_graphml / write_gexf
+# ---------------------------------------------------------------------------
+
+
+class WriteNetworkFileTests(TestCase):
+    """GraphML/GEXF exports of the graph exactly as ``build_graph`` returns it."""
+
+    def setUp(self) -> None:
+        label = make_label("Org1", color="#FF0000")
+        self.ch1 = make_channel(telegram_id=1, label=label, title="Channel 1")
+        self.ch2 = make_channel(telegram_id=2, label=label, title="Channel 2")
+        Message.objects.create(telegram_id=1, channel=self.ch2, forwarded_from=self.ch1)
+
+    def test_graphml_survives_the_graph_level_near_copy_list(self) -> None:
+        # build_graph always stores graph.graph["near_copies"] as a list (empty with the option off),
+        # which nx.write_graphml rejects as a data value — every --graphml run used to crash.
+        graph, _, _, _ = build_graph()
+        self.assertIsInstance(graph.graph["near_copies"], list)
+        graph_data = build_graph_data(graph, {})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "network.graphml")
+            write_graphml(graph, graph_data, path)
+            written = nx.read_graphml(path)
+        self.assertEqual(set(written.nodes()), {str(self.ch1.pk), str(self.ch2.pk)})
+        self.assertIn((str(self.ch2.pk), str(self.ch1.pk)), written.edges())
+        self.assertNotIn("near_copies", written.graph)
+        self.assertIs(written.graph["near_copies_enabled"], False)  # scalar graph attributes are kept
+        # Only the export copy is pruned: the content measures and the audit CSV still read the list.
+        self.assertEqual(graph.graph["near_copies"], [])
+
+    def test_gexf_survives_the_graph_level_near_copy_list(self) -> None:
+        graph, _, _, _ = build_graph()
+        graph_data = build_graph_data(graph, {})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "network.gexf")
+            write_gexf(graph, graph_data, path)
+            written = nx.read_gexf(path)
+        self.assertEqual(set(written.nodes()), {str(self.ch1.pk), str(self.ch2.pk)})
+        self.assertEqual(graph.graph["near_copies"], [])
+
+
+# ---------------------------------------------------------------------------
+# exporter.py — project title patched into the static map pages
+# ---------------------------------------------------------------------------
+
+
+class PatchHtmlTitleTests(TestCase):
+    # Backslash sequences a replacement *string* would interpret: a bad escape, a group reference,
+    # and a newline escape that used to slip into <title> silently.
+    TITLES = ("Analisi\\Bacino", "A\\1B", "Rete C:\\new")
+
+    def _copy_map_pages(self, target: str) -> None:
+        import shutil
+
+        from django.conf import settings
+
+        for page in ("graph.html", "graph3d.html"):
+            shutil.copy(settings.BASE_DIR / "webapp_engine" / "map" / page, target)
+
+    def test_backslashes_in_the_title_land_literally_in_the_map_pages(self) -> None:
+        import html
+
+        for title in self.TITLES:
+            with self.subTest(title=title), tempfile.TemporaryDirectory() as tmpdir:
+                self._copy_map_pages(tmpdir)
+                apply_robots_to_graph_html(tmpdir, seo=False, project_title=title, include_3d=True)
+                for page in ("graph.html", "graph3d.html"):
+                    with open(os.path.join(tmpdir, page)) as f:
+                        content = f.read()
+                    self.assertIn(f"<title>{html.escape(title)}</title>", content)
+                    self.assertIn(f'<h4 class="modal-title" id="about_modalLabel">{html.escape(title)}</h4>', content)
+
+    def test_backslashes_in_the_title_land_literally_in_the_coordination_pages(self) -> None:
+        for title in self.TITLES:
+            with self.subTest(title=title), tempfile.TemporaryDirectory() as tmpdir:
+                write_coordination_pages(tmpdir, seo=False, project_title=title, node_count=2, tie_count=1)
+                for page in ("coordination.html", "coordination3d.html"):
+                    with open(os.path.join(tmpdir, page)) as f:
+                        content = f.read()
+                    self.assertIn(f"<title>{title} — Coordination</title>", content)
+                    self.assertIn(f'id="about_modalLabel">{title} — Coordination</h4>', content)
+
+
+# ---------------------------------------------------------------------------
 # community.py — detect_leiden
 # ---------------------------------------------------------------------------
 
@@ -1721,6 +2052,156 @@ class DetectLeidenTests(TestCase):
         graph.add_node("iso2")
         community_map, _ = detect_leiden(graph, "SomePalette")
         self.assertEqual(community_map["iso1"], community_map["iso2"])
+
+
+# ---------------------------------------------------------------------------
+# community.py — detect_leiden_cpm
+# ---------------------------------------------------------------------------
+
+
+class DetectLeidenCpmTests(TestCase):
+    """CPM's γ is a density in raw tie-weight units, not in each graph's ×10/max rescale."""
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_partition_independent_of_rescale_maximum(self, _mock: MagicMock) -> None:
+        # Same raw ties, two different per-graph maxima (e.g. one heavy tie elsewhere in one of
+        # them): the γ = 0.2 partition must not move, and must match a graph carrying raw weights only.
+        from network.community import detect_leiden_cpm
+
+        reference, _ = detect_leiden_cpm(_cpm_fixture(3), "P", 0.2)
+        rescaled_small, _ = detect_leiden_cpm(_cpm_fixture(3, scale=4.0), "P", 0.2)
+        rescaled_large, _ = detect_leiden_cpm(_cpm_fixture(3, scale=40.0), "P", 0.2)
+        self.assertEqual(rescaled_small, reference)
+        self.assertEqual(rescaled_large, reference)
+        # Sanity: the rescaled weights alone give different partitions — the bug this guards.
+        small_only, _ = detect_leiden_cpm(_cpm_fixture(3, scale=4.0, raw=False), "P", 0.2)
+        large_only, _ = detect_leiden_cpm(_cpm_fixture(3, scale=40.0, raw=False), "P", 0.2)
+        self.assertNotEqual(small_only, large_only)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_reciprocal_raw_weights_are_summed(self, _mock: MagicMock) -> None:
+        # The W+Wᵀ projection sums ``weight_raw``: a mutual pair with raw ties 0.3 + 0.3 has
+        # density 0.6 and survives γ = 0.5, while either tie alone (0.3) would not.
+        from network.community import detect_leiden_cpm
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b", weight=10.0, weight_raw=0.3)
+        graph.add_edge("b", "a", weight=10.0, weight_raw=0.3)
+        graph.add_edge("c", "d", weight=10.0, weight_raw=0.3)
+        community_map, _ = detect_leiden_cpm(graph, "P", 0.5)
+        self.assertEqual(community_map["a"], community_map["b"])
+        self.assertNotEqual(community_map["c"], community_map["d"])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_bare_token_uses_network_density(self, _mock: MagicMock) -> None:
+        # A bare LEIDEN_CPM runs at γ = the weighted edge density of the graph it is given: the same
+        # partition as an explicit γ equal to that density, reported by cpm_resolution().
+        from network.community import cpm_density_resolution, cpm_resolution, detect, detect_leiden_cpm
+
+        graph = _cpm_fixture(3, scale=4.0)
+        (inst,) = parse_strategies(["LEIDEN_CPM"])
+        density = cpm_density_resolution(graph)
+        self.assertGreater(density, 0.0)
+        self.assertEqual(cpm_resolution(inst, graph), density)
+        auto_map, _ = detect(inst, "P", graph, {})
+        explicit_map, _ = detect_leiden_cpm(graph, "P", density)
+        self.assertEqual(auto_map, explicit_map)
+        self.assertEqual(detect_leiden_cpm(graph, "P")[0], explicit_map)  # resolution=None → density
+        # Sanity: γ matters on this fixture, so the equality above is not vacuous.
+        self.assertNotEqual(detect_leiden_cpm(graph, "P", density * 5)[0], explicit_map)
+
+    def test_density_default_is_rber_at_gamma_one(self) -> None:
+        # CPM at γ = p is Reichardt–Bornholdt with an Erdős–Rényi null at γ_RB = 1 (leidenalg's
+        # RBERVertexPartition): same quality function up to a constant factor, same seeded partition.
+        from network.community import _build_undirected_igraph, _node_id_index, cpm_density_resolution
+
+        import leidenalg
+
+        for seed in (3, 5, 11):
+            with self.subTest(seed=seed):
+                graph = _cpm_fixture(seed, scale=4.0)
+                node_ids, node_id_map = _node_id_index(graph)
+                ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map, weight="weight_raw")
+                cpm = leidenalg.find_partition(
+                    ig_graph,
+                    leidenalg.CPMVertexPartition,
+                    weights=weights,
+                    resolution_parameter=cpm_density_resolution(graph),
+                    seed=0,
+                )
+                rber = leidenalg.find_partition(
+                    ig_graph, leidenalg.RBERVertexPartition, weights=weights, resolution_parameter=1.0, seed=0
+                )
+                self.assertEqual(cpm.membership, rber.membership)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_bare_default_invariant_to_uniform_rescale(self, _mock: MagicMock) -> None:
+        # γ = density scales with the weights, so a uniform ×c rescale of the raw ties leaves the bare
+        # partition unchanged — unlike a fixed γ, whose meaning moves with the weight scale.
+        from network.community import cpm_density_resolution, detect_leiden_cpm
+
+        def rescaled(graph: nx.DiGraph, factor: float) -> nx.DiGraph:
+            copy = graph.copy()
+            for _, _, data in copy.edges(data=True):
+                data["weight_raw"] *= factor
+            return copy
+
+        graph = _cpm_fixture(3, scale=4.0)
+        reference, _ = detect_leiden_cpm(graph, "P", None)
+        for factor in (4.0, 0.25):
+            scaled = rescaled(graph, factor)
+            self.assertAlmostEqual(cpm_density_resolution(scaled), factor * cpm_density_resolution(graph))
+            self.assertEqual(detect_leiden_cpm(scaled, "P", None)[0], reference)
+            # An explicit γ is absolute: the same γ on rescaled weights is a different threshold.
+            self.assertNotEqual(detect_leiden_cpm(scaled, "P", 0.2)[0], detect_leiden_cpm(graph, "P", 0.2)[0])
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_explicit_resolution_unchanged(self, _mock: MagicMock) -> None:
+        from network.community import cpm_resolution, detect, detect_leiden_cpm
+
+        graph = _cpm_fixture(3, scale=4.0)
+        (inst,) = parse_strategies(["LEIDEN_CPM(resolution=0.2)"])
+        self.assertEqual(cpm_resolution(inst, graph), 0.2)
+        self.assertEqual(detect(inst, "P", graph, {})[0], detect_leiden_cpm(graph, "P", 0.2)[0])
+
+
+class CpmDensityResolutionTests(TestCase):
+    """cpm_density_resolution: Σ w over node pairs of the W+Wᵀ projection, self-loops excluded."""
+
+    def test_hand_computed_density(self) -> None:
+        from network.community import cpm_density_resolution
+        from network.utils import to_undirected_sum
+
+        graph = nx.DiGraph()
+        graph.add_nodes_from("abcd")
+        graph.add_edge("a", "b", weight=10.0, weight_raw=0.2)
+        graph.add_edge("b", "a", weight=5.0, weight_raw=0.3)  # mutual: the projection sums 0.2 + 0.3
+        graph.add_edge("b", "c", weight=7.0, weight_raw=0.5)
+        graph.add_edge("c", "c", weight=9.0, weight_raw=0.7)  # self-loop: excluded
+        # n = 4 → 6 node pairs; Σ w (raw, no self-loop) = 0.2 + 0.3 + 0.5 = 1.0 → p = 1/6.
+        self.assertAlmostEqual(cpm_density_resolution(graph), 1.0 / 6)
+        # Same value on the undirected W+Wᵀ projection CPM is actually optimised on.
+        self.assertAlmostEqual(cpm_density_resolution(to_undirected_sum(graph, weight="weight_raw")), 1.0 / 6)
+        # An explicit weight attribute is honoured (here the rescaled display weight).
+        self.assertAlmostEqual(cpm_density_resolution(graph, weight="weight"), 22.0 / 6)
+
+    def test_falls_back_to_weight_without_raw_ties(self) -> None:
+        # Hand-built graphs without weight_raw read ``weight`` (tie_weight_key), and an edge without
+        # any weight counts 1.
+        from network.community import cpm_density_resolution
+
+        graph = nx.DiGraph()
+        graph.add_edge("a", "b", weight=2.0)
+        graph.add_edge("b", "c")
+        self.assertAlmostEqual(cpm_density_resolution(graph), 3.0 / 3)
+
+    def test_fewer_than_two_nodes(self) -> None:
+        from network.community import cpm_density_resolution
+
+        self.assertEqual(cpm_density_resolution(nx.DiGraph()), 0.0)
+        single = nx.DiGraph()
+        single.add_edge("a", "a", weight_raw=1.0)
+        self.assertEqual(cpm_density_resolution(single), 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1935,8 +2416,12 @@ class TemporalPrecomputeTests(TestCase):
         results = cmd._compute_temporal_partitions(opts, temporal_instances)
 
         (key,) = [inst.key for inst in temporal_instances]
-        per_year, plurality, palette = results[key]
+        self.assertEqual(key, "leiden_temporal_interslice_1_0")  # bare token: γ auto, not in the key
+        per_year, plurality, palette, slice_resolutions = results[key]
         self.assertEqual(set(per_year), {2023, 2024})
+        # Auto γ: each slice's own density — positive, one per slice.
+        self.assertEqual(set(slice_resolutions), {2023, 2024})
+        self.assertTrue(all(gamma > 0 for gamma in slice_resolutions.values()))
         pk1, pk2, pk3, pk4 = (str(c.pk) for c in self.channels)
         for pk in (pk1, pk2, pk3, pk4):
             # Same structure both years + identity coupling → stable ids, and the plurality
@@ -1948,6 +2433,24 @@ class TemporalPrecomputeTests(TestCase):
         self.assertNotEqual(per_year[2023][pk1], per_year[2023][pk3])
         for cid in plurality.values():
             self.assertIn(cid, palette)
+
+    def test_precompute_records_explicit_resolution_per_slice(self) -> None:
+        from django.core.management.base import OutputWrapper
+
+        from network.management.commands.structural_analysis import Command
+
+        cmd = Command()
+        out = io.StringIO()
+        cmd.stdout = OutputWrapper(out)
+        parser = cmd.create_parser("manage.py", "structural_analysis")
+        options = vars(
+            parser.parse_args(["--community-strategies", "LEIDEN_TEMPORAL(resolution=0.3)", "--timeline-step", "year"])
+        )
+        opts = cmd._resolve_options(options)
+        results = cmd._compute_temporal_partitions(opts, list(opts.communities_strategy))
+        (entry,) = results.values()
+        self.assertEqual(entry[3], {2023: 0.3, 2024: 0.3})
+        self.assertIn("γ=0.3", out.getvalue())
 
     def test_precompute_fails_with_single_year(self) -> None:
         from django.core.management.base import CommandError, OutputWrapper
@@ -1963,6 +2466,114 @@ class TemporalPrecomputeTests(TestCase):
         temporal_instances = list(opts.communities_strategy)
         with self.assertRaisesRegex(CommandError, "at least two"):
             cmd._compute_temporal_partitions(opts, temporal_instances)
+
+
+class CpmResolutionCommandTests(TestCase):
+    """How structural_analysis resolves, prints and records the CPM resolution γ."""
+
+    def _resolve(self, *argv: str) -> Any:
+        from django.core.management.base import OutputWrapper
+
+        from network.management.commands.structural_analysis import Command
+
+        cmd = Command()
+        cmd.stdout = OutputWrapper(io.StringIO())
+        parser = cmd.create_parser("manage.py", "structural_analysis")
+        return cmd._resolve_options(vars(parser.parse_args(list(argv))))
+
+    def test_bare_cpm_without_flag_is_auto(self) -> None:
+        opts = self._resolve("--community-strategies", "LEIDEN_CPM")
+        self.assertIsNone(opts.leiden_cpm_resolution)
+        self.assertEqual([i.key for i in opts.communities_strategy], ["leiden_cpm"])
+
+    def test_legacy_flags_seed_an_explicit_gamma(self) -> None:
+        cases = (
+            (("--leiden-cpm-resolution", "0.02"), "leiden_cpm_resolution_0_02"),
+            (("--leiden-coarse-resolution", "0.01"), "leiden_cpm_resolution_0_01"),
+            (("--leiden-fine-resolution", "0.03"), "leiden_cpm_resolution_0_03"),
+            # --leiden-cpm-resolution wins over the deprecated presets; coarse over fine.
+            (("--leiden-cpm-resolution", "0.02", "--leiden-coarse-resolution", "0.01"), "leiden_cpm_resolution_0_02"),
+            (("--leiden-coarse-resolution", "0.01", "--leiden-fine-resolution", "0.03"), "leiden_cpm_resolution_0_01"),
+        )
+        for flags, key in cases:
+            with self.subTest(flags=flags):
+                opts = self._resolve("--community-strategies", "LEIDEN_CPM", *flags)
+                self.assertEqual([i.key for i in opts.communities_strategy], [key])
+
+    def test_token_parameters_override_the_flag(self) -> None:
+        opts = self._resolve(
+            "--community-strategies",
+            "LEIDEN_CPM(resolution=0.05),LEIDEN_CPM(resolution=auto)",
+            "--leiden-cpm-resolution",
+            "0.02",
+        )
+        self.assertEqual([i.key for i in opts.communities_strategy], ["leiden_cpm_resolution_0_05", "leiden_cpm"])
+
+    def _tiny_graph(self) -> tuple[nx.DiGraph, dict]:
+        graph = _cpm_fixture(3, scale=4.0)
+        channel_dict = {node: {"data": {}} for node in graph.nodes()}
+        for node in graph.nodes():
+            graph.nodes[node]["data"] = {}
+        return graph, channel_dict
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_compute_communities_records_and_prints_gamma(self, _mock: MagicMock) -> None:
+        from django.core.management.base import OutputWrapper
+
+        from network.community import cpm_density_resolution
+        from network.management.commands.structural_analysis import Command
+
+        graph, channel_dict = self._tiny_graph()
+        strategies = parse_strategies(["LEIDEN_CPM", "LEIDEN_CPM(resolution=0.2)", "LEIDEN_TEMPORAL"])
+        temporal_key = strategies[2].key
+        year_map = dict.fromkeys(graph.nodes(), 1)
+        temporal_results = {
+            temporal_key: ({2023: year_map, 2024: year_map}, year_map, {1: (255, 0, 0)}, {2023: 0.11, 2024: 0.22})
+        }
+        options = {"community_palette": "P", "community_palette_reversed": False, "community_backbone_alpha": 0.0}
+        cmd = Command()
+        out = io.StringIO()
+        cmd.stdout = OutputWrapper(out)
+
+        full_range: dict = {}
+        cmd._compute_communities(
+            graph, channel_dict, [], strategies, options, temporal_results=temporal_results, resolutions_out=full_range
+        )
+        self.assertEqual(
+            full_range,
+            {
+                "leiden_cpm": cpm_density_resolution(graph),
+                "leiden_cpm_resolution_0_2": 0.2,
+                temporal_key: {"2023": 0.11, "2024": 0.22},
+            },
+        )
+        self.assertIn("network density", out.getvalue())
+
+        one_year: dict = {}
+        cmd._compute_communities(
+            graph,
+            channel_dict,
+            [],
+            strategies,
+            options,
+            temporal_results=temporal_results,
+            year=2024,
+            resolutions_out=one_year,
+        )
+        self.assertEqual(one_year[temporal_key], 0.22)
+        self.assertEqual(one_year["leiden_cpm"], cpm_density_resolution(graph))
+
+    def test_summary_json_carries_community_resolutions(self) -> None:
+        from network.exporter import write_summary_json
+
+        resolutions = {"leiden_cpm": 0.0123, "leiden_temporal_interslice_1_0": {"2023": 0.1, "2024": 0.2}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_summary_json(tmpdir, "x", {}, 3, 2, community_resolutions=resolutions)
+            with open(os.path.join(tmpdir, "summary.json")) as f:
+                self.assertEqual(json.load(f)["community_resolutions"], resolutions)
+            write_summary_json(tmpdir, "x", {}, 3, 2)
+            with open(os.path.join(tmpdir, "summary.json")) as f:
+                self.assertEqual(json.load(f)["community_resolutions"], {})
 
 
 def _patch_export_pipeline() -> list:
@@ -2274,6 +2885,81 @@ class ExportNetworkCommandTests(TestCase):
         self.assertEqual(fake_graph.number_of_edges(), 9)  # full graph untouched
         # apply_to_graph still writes onto the FULL graph, not the backbone.
         self.assertIs(mock_apply_to_graph.call_args[0][0], fake_graph)
+
+    @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
+    @patch(f"{_EXPORT_CMD}.tables.write_table_html")
+    @patch(f"{_EXPORT_CMD}.exporter.write_graph_files")
+    @patch(f"{_EXPORT_CMD}.exporter.ensure_graph_root")
+    @patch(f"{_EXPORT_CMD}.exporter.reposition_isolated_nodes")
+    @patch(f"{_EXPORT_CMD}.measures.apply_pagerank")
+    @patch(f"{_EXPORT_CMD}.measures.apply_base_node_measures")
+    @patch(f"{_EXPORT_CMD}.exporter.find_main_component")
+    @patch(f"{_EXPORT_CMD}.exporter.build_graph_data")
+    @patch(f"{_EXPORT_CMD}.layout.forceatlas2_positions")
+    @patch(f"{_EXPORT_CMD}.community.build_communities_payload")
+    @patch(f"{_EXPORT_CMD}.community.apply_edge_colors")
+    @patch(f"{_EXPORT_CMD}.community.apply_to_graph")
+    @patch(f"{_EXPORT_CMD}.community.detect")
+    @patch(f"{_EXPORT_CMD}.graph_builder.build_graph")
+    def test_summary_records_cpm_gamma_of_the_backbone(
+        self,
+        mock_build: MagicMock,
+        mock_detect: MagicMock,
+        mock_apply_to_graph: MagicMock,
+        mock_edge_colors: MagicMock,
+        mock_communities_payload: MagicMock,
+        mock_layout: MagicMock,
+        mock_graph_data: MagicMock,
+        mock_main_comp: MagicMock,
+        mock_measures: MagicMock,
+        mock_pagerank: MagicMock,
+        *_mocks: MagicMock,
+    ) -> None:
+        """A bare LEIDEN_CPM's γ is the density of the graph detection ran on — the backbone when
+        --community-backbone-alpha is set — and summary.json records it next to explicit γ values."""
+        from django.core.management import call_command
+
+        import network.exporter as exporter_module
+        from network.community import cpm_density_resolution
+
+        self._configure_happy_path(
+            mock_build,
+            mock_detect,
+            mock_layout,
+            mock_graph_data,
+            mock_main_comp,
+            mock_measures,
+            mock_pagerank,
+            mock_communities_payload,
+        )
+        fake_graph = nx.DiGraph()
+        for i, source in enumerate(("s1", "s2", "s3")):
+            for j, target in enumerate(("t1", "t2", "t3")):
+                fake_graph.add_edge(source, target, weight=100.0 if i == j else 0.001)
+        channel_dict = {n: {"data": {}} for n in fake_graph.nodes()}
+        fake_qs = MagicMock()
+        fake_qs.filter.return_value = fake_qs
+        fake_qs.count.return_value = 0
+        mock_build.return_value = (fake_graph, channel_dict, [["s1", "t1", 1.0]], fake_qs)
+
+        call_command(
+            "structural_analysis",
+            graph=True,
+            community_strategies="LEIDEN_CPM,LEIDEN_CPM(resolution=0.2)",
+            community_backbone_alpha=0.05,
+            edge_weight_strategy="PARTIAL_REFERENCES",
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+
+        detect_graph = mock_detect.call_args[0][2]
+        resolutions = exporter_module.write_summary_json.call_args.kwargs["community_resolutions"]
+        self.assertEqual(set(resolutions), {"leiden_cpm", "leiden_cpm_resolution_0_2"})
+        self.assertEqual(resolutions["leiden_cpm"], cpm_density_resolution(detect_graph))
+        self.assertAlmostEqual(resolutions["leiden_cpm"], 300.0 / 15)  # 3 kept ties of 100 over 6·5/2 pairs
+        self.assertNotEqual(resolutions["leiden_cpm"], cpm_density_resolution(fake_graph))
+        self.assertEqual(resolutions["leiden_cpm_resolution_0_2"], 0.2)
 
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
@@ -2960,6 +3646,49 @@ class ApplyContentOriginalityTests(TestCase):
         apply_content_originality(graph_data, nx.DiGraph(), channel_dict)
         self.assertIsNone(graph_data["nodes"][0]["content_originality"])
 
+    def _unresolved_forwarder(self) -> Channel:
+        """A channel with one own post and four forwards whose source never resolved to a stored channel."""
+        label = make_label("OrgHeaders", color="#00FFFF")
+        channel = make_channel(telegram_id=30, label=label, title="Unresolved forwards")
+        when = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
+        Message.objects.create(telegram_id=300, channel=channel, date=when, forwarded_from_private=777)
+        Message.objects.create(
+            telegram_id=301, channel=channel, date=when, fwd_from_from_name="A hidden user", fwd_from_date=when
+        )
+        Message.objects.create(telegram_id=302, channel=channel, date=when, fwd_from_date=when)
+        Message.objects.create(telegram_id=303, channel=channel, date=when, pending_forward_telegram_id=888)
+        Message.objects.create(telegram_id=304, channel=channel, date=when, message="own post")
+        return channel
+
+    def test_every_forward_header_counts_as_forwarded(self) -> None:
+        # Private-channel, hidden-user, bare-header and pending-resolution forwards are forwards too,
+        # not only those whose forwarded_from resolved: 4 of 5 messages forwarded → 0.2.
+        channel = self._unresolved_forwarder()
+        channel_dict = {str(channel.pk): {"channel": channel}}
+        graph_data: dict = {"nodes": [{"id": str(channel.pk)}], "edges": []}
+        apply_content_originality(graph_data, nx.DiGraph(), channel_dict)
+        self.assertAlmostEqual(graph_data["nodes"][0]["content_originality"], 0.2)
+
+    def test_network_originality_counts_every_forward_header(self) -> None:
+        from network.community_stats import _network_content_metrics
+
+        channel = self._unresolved_forwarder()
+        metrics = _network_content_metrics(Channel.objects.filter(pk=channel.pk))
+        self.assertAlmostEqual(metrics["network_originality"], 0.2)
+
+    def test_forward_header_q_is_the_complement_of_original_text_q(self) -> None:
+        # The near-copy eligibility and the forwarded numerator split every dated, non-empty message
+        # in two, so a near-copy (always an original) can never also count as a forward.
+        from network.near_copies import forward_header_q, original_text_q
+
+        channel = self._unresolved_forwarder()
+        Message.objects.filter(channel=channel).exclude(message="own post").update(message="some text")
+        messages = Message.objects.filter(channel=channel)
+        forwarded = set(messages.filter(forward_header_q()).values_list("telegram_id", flat=True))
+        original = set(messages.filter(original_text_q()).values_list("telegram_id", flat=True))
+        self.assertEqual(forwarded, {300, 301, 302, 303})
+        self.assertEqual(original, {304})
+
 
 # ---------------------------------------------------------------------------
 # coordination.py — compute_coordination / build_nx_graph
@@ -3468,6 +4197,37 @@ class ComputeCommunityMetricsTests(TestCase):
         # callback called once for "network" and once per strategy
         self.assertGreaterEqual(len(calls), 2)
 
+    def test_modularity_counts_unassigned_nodes_as_singletons(self) -> None:
+        # Two triangles joined by a bridge, plus node "7" — a dead leaf / environment node / unlabelled
+        # channel — that the partition leaves unassigned. networkx rejects such a non-partition; the
+        # headline modularity must not silently become None but count "7" as its own community, in
+        # both the undirected (W+Wᵀ) and the directed variant.
+        from network.utils import to_undirected_sum
+
+        graph = nx.DiGraph()
+        graph.add_edges_from([("1", "2"), ("2", "3"), ("3", "1"), ("4", "5"), ("5", "6"), ("6", "4"), ("3", "4")])
+        graph.add_edge("7", "1")
+        side = {"1": "A", "2": "A", "3": "A", "4": "B", "5": "B", "6": "B"}
+        graph_data: dict = {
+            "nodes": [
+                {"id": nid, "communities": {"leiden": side[nid], "leiden_directed": side[nid]} if nid in side else {}}
+                for nid in graph
+            ],
+            "edges": [],
+        }
+        groups = {"groups": [(1, 3, "A", "#f00"), (2, 3, "B", "#0f0")]}
+        result = compute_community_metrics(
+            graph_data, {"leiden": groups, "leiden_directed": groups}, graph, ["leiden", "leiden_directed"]
+        )
+        completed = [{"1", "2", "3"}, {"4", "5", "6"}, {"7"}]
+        self.assertAlmostEqual(
+            result["strategies"]["leiden"]["modularity"],
+            nx.community.modularity(to_undirected_sum(graph), completed),
+        )
+        self.assertAlmostEqual(
+            result["strategies"]["leiden_directed"]["modularity"], nx.community.modularity(graph, completed)
+        )
+
 
 class ComparePartitionsTests(TestCase):
     """The four-index partition-comparison helper (ARI, AMI, NMI, VI)."""
@@ -3593,9 +4353,43 @@ class DisparityFilterTests(TestCase):
             g.add_edge("A", tgt, weight=1.0)
             for src in range(3):  # 3 extra background sources → target k_in = 4
                 g.add_edge(f"S{tgt}{src}", tgt, weight=1.0)
+        # One unrelated heavier tie: locally uniform around A, but not a globally uniform graph
+        # (on which the filter is skipped — see test_uniform_weights_skip_the_filter).
+        g.add_edge("X", "Y", weight=2.0)
         backbone = disparity_filter(g, alpha=0.05)
         for tgt in ("B", "C", "D", "E"):
             self.assertNotIn(("A", tgt), backbone.edges())
+
+    def test_uniform_weights_skip_the_filter(self) -> None:
+        # With every weight equal α = (1 − 1/k)^(k−1) ≥ 1/e for every k ≥ 2, so α = 0.05 would keep
+        # only degree-1 endpoints' edges — here none at all. The filter carries no information and
+        # returns an unfiltered copy, with a warning.
+        import logging
+
+        from network.robustness import disparity_filter
+
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
+        g = nx.DiGraph()
+        for tgt in ("B", "C", "D", "E"):
+            g.add_edge("A", tgt, weight=10.0, weight_raw=1.0)
+            for src in range(3):
+                g.add_edge(f"S{tgt}{src}", tgt, weight=10.0, weight_raw=1.0)
+        with self.assertLogs("network.robustness.disparity_filter", level="WARNING") as logs:
+            backbone = disparity_filter(g, alpha=0.05)
+        self.assertIn("same weight", logs.output[0])
+        self.assertIsNot(backbone, g)
+        self.assertEqual(set(backbone.edges()), set(g.edges()))
+        self.assertEqual(backbone.edges["A", "B"]["weight_raw"], 1.0)  # attributes carried over
+
+    def test_has_uniform_weights(self) -> None:
+        from network.robustness import has_uniform_weights
+
+        self.assertTrue(has_uniform_weights(self._star(3)))
+        self.assertTrue(has_uniform_weights(self._star(3, weights=[0.1 + 0.2, 0.3, 0.3])))  # float round-off
+        self.assertFalse(has_uniform_weights(self._star(3, weights=[1.0, 1.0, 2.0])))
+        self.assertFalse(has_uniform_weights(self._star(1)))  # a lone edge is kept anyway — nothing to flag
+        self.assertFalse(has_uniform_weights(nx.DiGraph()))
 
     def test_dominant_edge_survives_strict_threshold(self) -> None:
         # Hub A: one dominant edge to B (weight 100), nine background edges of weight 1.
@@ -3665,8 +4459,10 @@ class DisparityFilterTests(TestCase):
             g.add_edge("A", tgt, weight=1.0)
             for src in range(3):
                 g.add_edge(f"S{tgt}{src}", tgt, weight=1.0)
+        g.add_edge("X", "Y", weight=2.0)  # not globally uniform, so the filter actually runs
         backbone = disparity_filter(g, alpha=0.05)
-        self.assertIn("A", backbone.nodes())  # A may be isolated but must be present
+        self.assertEqual(backbone.degree("A"), 0)
+        self.assertIn("A", backbone.nodes())  # A is isolated but must be present
 
     def test_compute_alpha_values_returns_pair_per_edge_in_unit_interval(self) -> None:
         from network.robustness import compute_alpha_values
@@ -4286,6 +5082,22 @@ class RewireStrengthPreservingTests(TestCase):
         h2 = rewire_strength_preserving(nx.DiGraph(), rng=np.random.default_rng(0))
         self.assertEqual(h2.number_of_nodes(), 0)
 
+    def test_self_loops_held_fixed(self) -> None:
+        # --include-self-references: a swap can destroy a self-loop but never create one, so with
+        # self-loops in the pool they would drain away over K swaps (their degree and weight moving
+        # onto inter-channel ties). They must stay put, as in the reciprocal null.
+        from network.robustness import rewire_strength_preserving
+
+        g = self._gnp()
+        loops = [0, 3, 7, 12]
+        for n in loops:
+            g.add_edge(n, n, weight=4.0)
+        h = rewire_strength_preserving(g, n_swaps=20 * g.number_of_edges(), rng=np.random.default_rng(0))
+        self.assertEqual(set(nx.selfloop_edges(h)), {(n, n) for n in loops})
+        self.assertEqual(dict(g.in_degree()), dict(h.in_degree()))
+        self.assertEqual(dict(g.out_degree()), dict(h.out_degree()))
+        self.assertNotEqual(set(g.edges()), set(h.edges()))  # the rest is still rewired
+
 
 class NullDistributionTests(TestCase):
     def test_yields_requested_number_of_graphs(self) -> None:
@@ -4748,7 +5560,24 @@ class RobustnessRunnerTests(TestCase):
         g = self._toy_graph()
         out = run_robustness(g, config=self._fast_cfg(alpha=0.5))
         self.assertTrue(out["graph"]["filtered"])
+        self.assertIsNone(out["graph"]["filter_skipped"])
         self.assertLessEqual(out["graph"]["backbone_m"], g.number_of_edges())
+
+    def test_uniform_weights_skip_backbone_and_record_it(self) -> None:
+        # --edge-weight-strategy NONE: every edge weighs the same, so the disparity test would hollow
+        # the graph out (only degree-1 endpoints' edges survive α = 0.05). The battery runs on the
+        # full graph instead and the payload says why no backbone was extracted.
+        from network.robustness import run_robustness
+
+        g = self._toy_graph(n=30, p=0.3)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = 10.0
+        out = run_robustness(g, config=self._fast_cfg(alpha=0.05, strategies=["pagerank"], alpha_grid=[0.05]))
+        self.assertFalse(out["graph"]["filtered"])
+        self.assertEqual(out["graph"]["filter_skipped"], "uniform_weights")
+        self.assertEqual(out["graph"]["backbone_m"], g.number_of_edges())
+        self.assertEqual(out["alpha_sensitivity"]["rows"][0]["backbone_m"], g.number_of_edges())
+        self.assertGreater(out["strategies"]["pagerank"]["r_wcc"], 0.0)
 
     # -- null model -----------------------------------------------------------
 
@@ -4948,6 +5777,18 @@ class ReciprocalNullTests(TestCase):
         self.assertEqual(recip(g), recip(h))
         self.assertFalse(any(u == v for u, v in h.edges()))
 
+    def test_self_loops_held_fixed(self) -> None:
+        # Self-loops join neither dyad class, so both nulls agree on keeping them in place.
+        from network.robustness.null_model import rewire_reciprocity_preserving
+
+        g = self._mixed_graph()
+        g.add_edge("a", "a", weight=5.0)
+        g.add_edge("h", "h", weight=1.0)
+        h = rewire_reciprocity_preserving(g, rng=np.random.default_rng(1))
+        self.assertEqual(set(nx.selfloop_edges(h)), {("a", "a"), ("h", "h")})
+        self.assertEqual(dict(g.out_degree()), dict(h.out_degree()))
+        self.assertEqual(dict(g.in_degree()), dict(h.in_degree()))
+
     def test_distribution_selects_model(self) -> None:
         from network.robustness.null_model import null_distribution
 
@@ -5018,6 +5859,27 @@ class BanReplayTests(TestCase):
         rows = ban_replay_rows(graphs, {2020: {"h"}}, n_random_runs=3, rng=np.random.default_rng(1))
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["observed_wcc"])
+
+    def test_strength_compares_raw_weights_across_years(self) -> None:
+        # Each year graph rescales ``weight`` to 10·w/max of *that* year. The closed hub h carried
+        # 2019's heaviest tie (raw 9), so 2021's weights are rescaled against a max 9× lighter: on
+        # ``weight`` the identical surviving ties would read as a 9× "healing" (observed 1.64 vs
+        # predicted 0.18). On ``weight_raw`` the unchanged survivors give observed == predicted.
+        from network.robustness import ban_replay_rows
+
+        def mk(raw_edges: dict) -> nx.DiGraph:
+            g = nx.DiGraph()
+            top = max(raw_edges.values())
+            for (u, v), raw in raw_edges.items():
+                g.add_edge(u, v, weight=10 * raw / top, weight_raw=raw)
+            return g
+
+        survivors = {("a", "b"): 1.0, ("b", "c"): 1.0}
+        graphs = {2019: mk({**survivors, ("h", "a"): 9.0}), 2021: mk(survivors)}
+        rows = ban_replay_rows(graphs, {2020: {"h"}}, n_random_runs=3, rng=np.random.default_rng(1))
+        row = rows[0]
+        self.assertAlmostEqual(row["predicted_strength"], 2 / 11)
+        self.assertAlmostEqual(row["observed_strength"], row["predicted_strength"])
 
 
 class AlphaSensitivityTests(TestCase):
@@ -5461,6 +6323,69 @@ class ComputeInterestStructuralWindowTests(TestCase):
         self.assertEqual(payload["forwarder_window_policy"], "forwarder-date")
 
 
+class ComputeInterestStructuralScopeTests(TestCase):
+    """The in-target forwarder set follows the run (graph nodes + label periods), not "ever in target"."""
+
+    def setUp(self) -> None:
+        label = make_label("In target")
+        self.a = make_channel(telegram_id=9101, title="A", label=label)
+        self.b = make_channel(telegram_id=9102, title="B", label=label)
+        # In target only in 2022: a graph node of an open-window run, but its 2023 forward is out of period.
+        self.p = make_channel(
+            telegram_id=9103,
+            title="P",
+            label=label,
+            attribution_start=datetime.date(2022, 1, 1),
+            attribution_end=datetime.date(2022, 12, 31),
+        )
+        # In target, but outside this run's scope (as if dropped by --filter-labels / --channel-types).
+        self.x = make_channel(telegram_id=9104, title="X", label=label)
+        # Environment channel one hop out: a full participant only under --environment-depth.
+        self.e = Channel.objects.create(telegram_id=9105, title="E", environment_depth=1)
+        self.origin = Message.objects.create(
+            telegram_id=1, channel=self.a, date=datetime.datetime(2023, 3, 1, tzinfo=datetime.UTC)
+        )
+        for i, forwarder in enumerate((self.b, self.p, self.x, self.e)):
+            Message.objects.create(
+                telegram_id=100 + i,
+                channel=forwarder,
+                date=datetime.datetime(2023, 3, 2, tzinfo=datetime.UTC),
+                forwarded_from=self.a,
+                fwd_from_channel_post=self.origin.telegram_id,
+            )
+        nodes = {self.a: ("alpha", 0), self.b: ("beta", 0), self.p: ("pi", 0), self.e: ("eps", 1)}
+        self.channel_dict = {
+            str(ch.pk): {"channel": ch, "data": {"communities": {"leiden_directed": comm}, "environment_depth": depth}}
+            for ch, (comm, depth) in nodes.items()
+        }
+        self.graph_data = {"nodes": [{"id": str(ch.pk), "pagerank": 0.25} for ch in nodes], "edges": []}
+
+    def _record(self, **kwargs: Any) -> dict:
+        from network.interest_structural import compute_interest_structural
+
+        payload = compute_interest_structural(
+            self.graph_data, self.channel_dict, community_strategy="LEIDEN_DIRECTED", window_days=0, **kwargs
+        )
+        (record,) = payload["by_message"]
+        self.assertEqual((record["channel_pk"], record["telegram_id"]), (self.a.pk, self.origin.telegram_id))
+        return record
+
+    def test_out_of_period_and_out_of_scope_forwarders_are_out_of_target(self) -> None:
+        record = self._record()
+        # Only B forwarded inside an in-target period of an analysed channel.
+        self.assertEqual(record["forwarder_count_in_target"], 1)
+        self.assertEqual(record["c_cross_community"], 1)
+        self.assertAlmostEqual(record["d_authority_reach"], 0.25)
+        # P (out of period), X (out of the run's scope) and E (environment, no depth) are out of target.
+        self.assertEqual(record["forwarder_count_out_of_target"], 3)
+
+    def test_environment_forwarders_join_under_the_depth(self) -> None:
+        record = self._record(environment_depth=1)
+        self.assertEqual(record["forwarder_count_in_target"], 2)  # B and E
+        self.assertEqual(record["c_cross_community"], 2)
+        self.assertEqual(record["forwarder_count_out_of_target"], 2)  # P and X
+
+
 class ScopeLabelTests(TestCase):
     """_scope_label renders the export window from either ORM filter-key shape."""
 
@@ -5495,7 +6420,7 @@ class ScopeLabelTests(TestCase):
 
 
 class ResolveWindowLabelTests(TestCase):
-    """Representative label = longest in-window duration; tiebreak = earliest start; None bounds clamp."""
+    """Representative label = most in-window days over all its periods; tiebreak = earliest start; None bounds clamp."""
 
     @staticmethod
     def _resolve(periods, window_start, window_end, created=None, data_min=None, data_max=None):
@@ -5527,6 +6452,27 @@ class ResolveWindowLabelTests(TestCase):
 
     def test_no_periods_returns_none(self) -> None:
         self.assertIsNone(self._resolve([], datetime.date(2024, 1, 1), datetime.date(2024, 12, 31)))
+
+    def test_coverage_sums_across_a_labels_periods(self) -> None:
+        # A covers 100 + 115 = 215 days in two periods; B's single period is the longest (150 days).
+        d = datetime.date
+        periods = [
+            (1, "A", "#aaaaaa", d(2023, 1, 1), d(2023, 4, 10)),  # 100 days
+            (2, "B", "#bbbbbb", d(2023, 4, 11), d(2023, 9, 7)),  # 150 days
+            (1, "A", "#aaaaaa", d(2023, 9, 8), d(2023, 12, 31)),  # 115 days
+        ]
+        self.assertEqual(self._resolve(periods, d(2023, 1, 1), d(2023, 12, 31)), (1, "A", "#aaaaaa"))
+
+    def test_overlapping_periods_of_one_label_count_once(self) -> None:
+        # Non-partition groups may hold overlapping periods of one label: A's periods (60 and 69 days)
+        # overlap in February, so A covers Jan 1 – Apr 10 = 100 days, not 129, and B's 110 days win.
+        d = datetime.date
+        periods = [
+            (1, "A", "#aaaaaa", d(2023, 1, 1), d(2023, 3, 1)),
+            (1, "A", "#aaaaaa", d(2023, 2, 1), d(2023, 4, 10)),
+            (2, "B", "#bbbbbb", d(2023, 4, 11), d(2023, 7, 29)),
+        ]
+        self.assertEqual(self._resolve(periods, d(2023, 1, 1), d(2023, 12, 31))[0], 2)
 
 
 @override_settings(TIME_ZONE="UTC")
@@ -5804,6 +6750,137 @@ class EnvironmentCutoffQTests(TestCase):
         env = Channel.objects.create(telegram_id=1, title="Env", environment_depth=1)
         make_channel(telegram_id=3, label=make_label("Org"), title="Monitored", environment_depth=1)
         self.assertEqual(list(environment_channels(1)), [env])
+
+
+@override_settings(TIME_ZONE="UTC")
+class EnvironmentWindowCutoffQTests(TestCase):
+    """Under a depth, environment messages count only inside the environment window.
+
+    The window is the span of every in-target period — earliest start to latest end, the gaps
+    between periods included (the crawler's environment window, not the periods' union), a side
+    open when any period is open on it. TIME_ZONE is pinned so the UTC-midnight boundary fixtures
+    sit on the intended local days (see ChannelCutoffQBoundaryTests).
+    """
+
+    def setUp(self) -> None:
+        self.label = make_label("Org")
+        # Two bounded in-target periods with a gap: the environment window is [2023-03-01, 2023-09-30].
+        self.a = make_channel(
+            telegram_id=1,
+            label=self.label,
+            title="A",
+            attribution_start=datetime.date(2023, 3, 1),
+            attribution_end=datetime.date(2023, 4, 30),
+        )
+        self.b = make_channel(
+            telegram_id=2,
+            label=self.label,
+            title="B",
+            attribution_start=datetime.date(2023, 7, 1),
+            attribution_end=datetime.date(2023, 9, 30),
+        )
+        self.env = Channel.objects.create(telegram_id=3, title="Env", environment_depth=1)
+
+    def _msg(self, telegram_id: int, date: datetime.datetime, channel: Channel | None = None, **kwargs) -> Message:
+        return Message.objects.create(telegram_id=telegram_id, channel=channel or self.env, date=date, **kwargs)
+
+    @staticmethod
+    def _kept(depth: int | None = 1) -> set[int]:
+        return set(
+            Message.objects.filter(channel_cutoff_q(environment_depth=depth)).values_list("telegram_id", flat=True)
+        )
+
+    @staticmethod
+    def _dropped(depth: int | None = 1) -> set[int]:
+        return set(
+            Message.objects.exclude(channel_cutoff_q(environment_depth=depth)).values_list("telegram_id", flat=True)
+        )
+
+    def test_environment_messages_outside_the_span_are_excluded(self) -> None:
+        utc = datetime.timezone.utc
+        self._msg(10, datetime.datetime(2023, 2, 28, 23, 59, tzinfo=utc))  # day before the earliest start → out
+        self._msg(11, datetime.datetime(2023, 3, 1, 0, 0, tzinfo=utc))  # on the earliest start → in
+        self._msg(12, _at(2023, 5, 15))  # in the gap between the periods → in (span, not union)
+        self._msg(13, datetime.datetime(2023, 9, 30, 23, 59, tzinfo=utc))  # on the latest end → in
+        self._msg(14, datetime.datetime(2023, 10, 1, 0, 0, tzinfo=utc))  # day after the latest end → out
+        self.assertEqual(self._kept(), {11, 12, 13})
+        # The negated gate returns exactly the rest.
+        self.assertEqual(self._dropped(), {10, 14})
+
+    @override_settings(TIME_ZONE="Europe/Rome")
+    def test_window_days_are_local_days(self) -> None:
+        # The bounds are the active zone's calendar days — the days the in-target branch's __date
+        # lookups use: 23:30 UTC on the eve of the earliest start is already that day in Rome.
+        from network.utils import make_date_q
+
+        utc = datetime.timezone.utc
+        self._msg(10, datetime.datetime(2023, 2, 28, 22, 30, tzinfo=utc))  # Feb 28, 23:30 in Rome → out
+        self._msg(11, datetime.datetime(2023, 2, 28, 23, 30, tzinfo=utc))  # Mar 1, 00:30 in Rome → in
+        self._msg(12, datetime.datetime(2023, 9, 30, 21, 30, tzinfo=utc))  # Sep 30, 23:30 in Rome (CEST) → in
+        self._msg(13, datetime.datetime(2023, 9, 30, 22, 30, tzinfo=utc))  # Oct 1, 00:30 in Rome → out
+        self.assertEqual(self._kept(), {11, 12})
+        by_day = Message.objects.filter(make_date_q(datetime.date(2023, 3, 1), datetime.date(2023, 9, 30)))
+        self.assertEqual(set(by_day.values_list("telegram_id", flat=True)), {11, 12})
+
+    def test_window_is_read_once_when_the_gate_is_built(self) -> None:
+        from network.utils import environment_window
+
+        self.assertEqual(environment_window(), (datetime.date(2023, 3, 1), datetime.date(2023, 9, 30)))
+        with self.assertNumQueries(1):  # one aggregate; the rest stays inside the message query
+            channel_cutoff_q(environment_depth=1)
+        with self.assertNumQueries(0):
+            channel_cutoff_q()
+
+    def test_open_start_admits_everything_before(self) -> None:
+        make_channel(telegram_id=4, label=self.label, title="C", attribution_end=datetime.date(2023, 1, 31))
+        self._msg(10, _at(2001, 1, 1))
+        self._msg(11, _at(2023, 10, 1))  # the end side stays bounded at the latest end
+        self.assertEqual(self._kept(), {10})
+        self.assertEqual(self._dropped(), {11})
+
+    def test_open_end_admits_everything_after(self) -> None:
+        make_channel(telegram_id=4, label=self.label, title="C", attribution_start=datetime.date(2024, 1, 1))
+        self._msg(10, _at(2023, 2, 1))  # the start side stays bounded at the earliest start
+        self._msg(11, _at(2030, 1, 1))
+        self.assertEqual(self._kept(), {11})
+        self.assertEqual(self._dropped(), {10})
+
+    def test_fully_open_period_admits_every_environment_message(self) -> None:
+        make_channel(telegram_id=4, label=self.label, title="C")
+        self._msg(10, _at(2001, 1, 1))
+        self._msg(11, _at(2030, 1, 1))
+        self.assertEqual(self._kept(), {10, 11})
+
+    def test_no_in_target_period_admits_no_environment_message(self) -> None:
+        # The periods stay, but none is in target any more: out-of-target periods never span the window.
+        self.label.is_in_target = False
+        self.label.save(update_fields=["is_in_target"])
+        self._msg(10, _at(2023, 5, 1))
+        self.assertEqual(self._kept(), set())
+        self.assertEqual(self._dropped(), {10})
+
+    def test_in_target_messages_keep_their_own_periods(self) -> None:
+        # The window widens the environment only: A's gap message (inside the span, outside A's own
+        # period) stays out, with or without a depth.
+        self._msg(20, _at(2023, 4, 1), channel=self.a)
+        self._msg(21, _at(2023, 5, 15), channel=self.a)
+        self._msg(22, _at(2023, 5, 15), channel=self.b)
+        self._msg(23, _at(2023, 8, 1), channel=self.b)
+        self.assertEqual(self._kept(None), {20, 23})
+        self.assertEqual(self._kept(1), {20, 23})
+
+    def test_out_of_window_environment_forward_builds_no_edge(self) -> None:
+        self._msg(30, _at(2023, 3, 15), channel=self.a, forwarded_from=self.env)  # A → Env, in A's period
+        self._msg(31, _at(2023, 5, 15), forwarded_from=self.b)  # Env → B, inside the window
+        self._msg(32, _at(2024, 1, 1), forwarded_from=self.b)  # Env → B, after the window
+        self._msg(33, _at(2022, 12, 1), forwarded_from=self.a)  # Env → A, before the window
+        graph, channel_dict, _, _ = build_graph(environment_depth=1)
+        env, a, b = str(self.env.pk), str(self.a.pk), str(self.b.pk)
+        self.assertIn(env, channel_dict)
+        self.assertIn((a, env), graph.edges())
+        self.assertIn((env, b), graph.edges())
+        self.assertEqual(graph.edges[env, b]["weight_forwards"], 1)  # the 2024 forward does not count
+        self.assertNotIn((env, a), graph.edges())
 
 
 class EnvironmentDepthColoringTests(TestCase):
@@ -6366,6 +7443,17 @@ class NearCopyDetectionTests(TestCase):
             for pair, similarity in fast.items():
                 self.assertAlmostEqual(similarity, brute[pair])
 
+    def test_join_keeps_pairs_exactly_at_the_threshold(self) -> None:
+        # In floating point 0.55 * 100 = 55.000…01, 0.56 * 25 = 14.000…02 and 0.81 * 300 = 243.000…03:
+        # a float ceiling shortens the prefix by one and loses the pair whose resemblance is exactly t.
+        for threshold, size, shared in ((0.55, 100, 55), (0.56, 25, 14), (0.81, 300, 243)):
+            whole = {f"s{i:03d}" for i in range(size)}
+            subset = {f"s{i:03d}" for i in range(shared)}
+            self.assertEqual(
+                _similar_pairs({1: whole, 2: subset}, threshold), {(1, 2): shared / size}, (threshold, size)
+            )
+            self.assertEqual(_similar_pairs({1: subset, 2: whole}, threshold), {(1, 2): shared / size})
+
 
 class BuildGraphNearCopyTests(TestCase):
     def setUp(self) -> None:
@@ -6398,6 +7486,21 @@ class BuildGraphNearCopyTests(TestCase):
         self.assertEqual(channel_dict[str(self.origin.pk)]["data"]["citing_messages"], 1)  # the forward only
         row = next(edge for edge in edge_list if edge[0] == str(self.copier.pk))
         self.assertEqual(row[5], 1.0)
+
+    def test_graphml_and_gexf_exports_carry_copy_weights_but_not_the_link_list(self) -> None:
+        graph, _, _, _ = build_graph(include_near_copies=True)
+        graph_data = build_graph_data(graph, {})
+        copier, origin = str(self.copier.pk), str(self.origin.pk)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graphml_path = os.path.join(tmpdir, "network.graphml")
+            gexf_path = os.path.join(tmpdir, "network.gexf")
+            write_graphml(graph, graph_data, graphml_path)
+            write_gexf(graph, graph_data, gexf_path)
+            written = nx.read_graphml(graphml_path)
+            self.assertEqual(nx.read_gexf(gexf_path).number_of_edges(), graph.number_of_edges())
+        self.assertEqual(written.edges[copier, origin]["weight_copies"], 1.0)
+        self.assertNotIn("near_copies", written.graph)
+        self.assertEqual(len(graph.graph["near_copies"]), 1)  # the caller's graph keeps its links
 
     def test_total_strategy_sums_copies_with_forwards_and_mentions(self) -> None:
         graph, _, _, _ = build_graph(include_near_copies=True, edge_weight_strategy="TOTAL")

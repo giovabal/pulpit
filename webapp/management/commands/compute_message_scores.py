@@ -61,7 +61,10 @@ class Command(BaseCommand):
             type=int,
             default=MIN_SAMPLE,
             metavar="N",
-            help=f"Skip channels with fewer than N alive messages. Default: {MIN_SAMPLE}.",
+            help=(
+                f"Leave a channel unscored (NULL) when its baseline holds fewer than N alive messages. "
+                f"Default: {MIN_SAMPLE}."
+            ),
         )
         parser.add_argument(
             "--recency-days",
@@ -69,8 +72,8 @@ class Command(BaseCommand):
             default=None,
             metavar="N",
             help=(
-                "Use only messages from the last N days for the per-channel baseline. "
-                "Omit to use the full message history."
+                "Use only messages from the last N days for the per-channel baseline (mean / stddev); "
+                "every alive message is still rescored against it. Omit to use the full message history."
             ),
         )
         parser.add_argument(

@@ -143,13 +143,18 @@ def resolve_window_label(
     data_min: datetime.date | None,
     data_max: datetime.date | None,
 ) -> tuple[int, str, str] | None:
-    """Pick the label whose period covers the most days inside the window.
+    """Pick the label whose periods together cover the most days inside the window.
 
     ``periods`` are the channel's label periods in one group (in-target only for
-    the primary group, all labels otherwise). Tiebreak: the period that starts
-    earliest. ``None`` bounds are clamped — a period start falls back to channel
-    creation / earliest activity / window start; a period end to the window end /
-    latest activity / today; an open analysis window to the channel's data range.
+    the primary group, all labels otherwise). A label's coverage is the number of
+    distinct in-window days its periods cover, summed across all of them — a label
+    held Jan–Apr and again Sep–Dec beats one held May–Aug in between — and days
+    where two periods of the same label overlap (possible in a non-partition group,
+    or through two child labels of one container label) count once. Tiebreak: the
+    label whose earliest overlapping period starts first, then the label met first.
+    ``None`` bounds are clamped — a period start falls back to channel creation /
+    earliest activity / window start; a period end to the window end / latest
+    activity / today; an open analysis window to the channel's data range.
     Returns ``(label_id, label_name, label_color)`` or ``None`` when no period
     overlaps the window.
     """
@@ -159,18 +164,37 @@ def resolve_window_label(
     w_hi = window_end or data_max or today
     if w_hi < w_lo:
         w_hi = w_lo
-    best_key: tuple[int, int] | None = None
-    best_label: tuple[int, str, str] | None = None
+    # Per label, in first-seen order: its in-window intervals and its earliest (clamped) start.
+    labels: dict[int, tuple[str, str]] = {}
+    intervals: dict[int, list[tuple[datetime.date, datetime.date]]] = {}
+    earliest_start: dict[int, datetime.date] = {}
     for label_id, label_name, label_color, p_start, p_end in periods:
         s = p_start or floor
         e = p_end or w_hi
         lo, hi = max(s, w_lo), min(e, w_hi)
-        days = (hi - lo).days + 1 if hi >= lo else 0
-        if days <= 0:
+        if hi < lo:
             continue
-        key = (days, -s.toordinal())  # most days; tie -> earliest start
+        labels.setdefault(label_id, (label_name, label_color))
+        intervals.setdefault(label_id, []).append((lo, hi))
+        if label_id not in earliest_start or s < earliest_start[label_id]:
+            earliest_start[label_id] = s
+    best_key: tuple[int, int] | None = None
+    best_label: tuple[int, str, str] | None = None
+    for label_id, spans in intervals.items():
+        # Length of the union of the label's inclusive day intervals.
+        days = 0
+        covered_to: datetime.date | None = None
+        for lo, hi in sorted(spans):
+            if covered_to is not None and lo <= covered_to:
+                if hi > covered_to:
+                    days += (hi - covered_to).days
+                    covered_to = hi
+                continue
+            days += (hi - lo).days + 1
+            covered_to = hi
+        key = (days, -earliest_start[label_id].toordinal())  # most days; tie -> earliest start
         if best_key is None or key > best_key:
-            best_key, best_label = key, (label_id, label_name, label_color)
+            best_key, best_label = key, (label_id, *labels[label_id])
     return best_label
 
 

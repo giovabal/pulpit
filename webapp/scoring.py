@@ -30,7 +30,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {"reactions": 0.5, "forwards": 0.3, "views":
 # Channels with fewer than this many alive messages get NULL interest scores
 # (cold-start: per-channel std becomes too noisy to z-score against).
 MIN_SAMPLE: int = 30
-# Recency window for the per-channel baseline. None = all-time.
+# Recency window for the per-channel baseline (every message is still scored against it). None = all-time.
 RECENCY_DAYS: int | None = None
 
 # Message field name backing each facet.
@@ -69,12 +69,17 @@ def score_messages(
     *,
     weights: dict[str, float] = DEFAULT_WEIGHTS,
     min_sample: int = MIN_SAMPLE,
+    baseline_rows: Iterable[tuple[int, int | None, int | None, int | None]] | None = None,
 ) -> dict[int, tuple[float | None, float | None, float | None, float | None]]:
     """Pure scoring core: ``(pk, views, forwards, total_reactions)`` rows in,
     ``{pk: (z_views, z_forwards, z_reactions, interest_score)}`` out.
 
     Does not touch the database. Callers decide whether to persist the result
     (``recompute_channel`` does; the export path keeps it in memory).
+
+    ``baseline_rows`` (same shape) are the sample the per-facet mean / stddev —
+    and the ``min_sample`` floor — are computed on; every row of ``rows`` is
+    then scored against that baseline. Default: ``rows`` themselves.
 
     The composite uses *partial renormalisation*: a message missing one facet
     (e.g. a sticker post Telegram never reports views for) is scored on the
@@ -86,10 +91,11 @@ def score_messages(
     rows = list(rows)
     if not rows:
         return {}
+    baseline = rows if baseline_rows is None else list(baseline_rows)
 
     stats: dict[str, tuple[float, float] | None] = {}
     for facet in _FACET_FIELDS:
-        values = [r[_FACET_IDX[facet]] for r in rows if r[_FACET_IDX[facet]] is not None]
+        values = [r[_FACET_IDX[facet]] for r in baseline if r[_FACET_IDX[facet]] is not None]
         stats[facet] = _facet_stats(values, min_sample)
 
     scored: dict[int, tuple[float | None, float | None, float | None, float | None]] = {}
@@ -129,13 +135,24 @@ def recompute_channel(
 ) -> int:
     """Recompute z-scores and ``interest_score`` for every alive ``Message``
     in *channel_id* and persist them. Returns the number of messages written.
+
+    ``recency_days`` restricts only the per-channel *baseline* (mean / stddev and
+    the ``min_sample`` floor) to messages dated within the last N days; every alive
+    message of the channel is still rescored against it, so the channel never mixes
+    scores computed against different baselines. A window holding fewer than
+    ``min_sample`` messages leaves the whole channel unscored (NULL).
     """
-    qs = Message.objects.alive().filter(channel_id=channel_id)
+    dated_rows = list(
+        Message.objects.alive()
+        .filter(channel_id=channel_id)
+        .values_list("pk", "views", "forwards", "total_reactions", "date")
+    )
+    rows = [row[:4] for row in dated_rows]
+    baseline_rows = None
     if recency_days is not None and recency_days > 0:
         cutoff = timezone.now() - datetime.timedelta(days=recency_days)
-        qs = qs.filter(date__gte=cutoff)
-    rows = list(qs.values_list("pk", "views", "forwards", "total_reactions"))
-    scored = score_messages(rows, weights=weights, min_sample=min_sample)
+        baseline_rows = [row[:4] for row in dated_rows if row[4] is not None and row[4] >= cutoff]
+    scored = score_messages(rows, weights=weights, min_sample=min_sample, baseline_rows=baseline_rows)
     if not scored:
         return 0
 

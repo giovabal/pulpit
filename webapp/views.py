@@ -36,7 +36,15 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.utils import channel_cutoff_q, channel_period_date_q
-from network.vacancy_analysis import EXTRAS_KEY, _scores_abc, _scores_origin, _shift_months, orphaned_amplifier_pks
+from network.vacancy_analysis import (
+    EXTRAS_KEY,
+    _scores_abc,
+    _scores_origin,
+    _shift_months,
+    candidate_rows,
+    configured_max_candidates,
+    orphaned_amplifier_pks,
+)
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -1041,8 +1049,11 @@ class VacancyAnalysisView(View):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid parameters"}, status=400)
         only_after_vacancy = request.GET.get("only_after_vacancy", "1") != "0"
+        # Same candidate cap as the export's default: the cap is the BH family size, so a
+        # different cap would give different q-values for the very same candidates.
+        max_candidates = configured_max_candidates()
 
-        cache_key = f"vacancy_analysis:{pk}:{months_before}:{months_after}:{int(only_after_vacancy)}"
+        cache_key = f"vacancy_analysis:{pk}:{months_before}:{months_after}:{int(only_after_vacancy)}:{max_candidates}"
         cached = cache.get(cache_key)
         if cached is not None:
             return JsonResponse(cached)
@@ -1062,20 +1073,8 @@ class VacancyAnalysisView(View):
         orphaned_pks = orphaned_amplifier_pks(ch, closure_date, months_before)
         total_orphaned = len(orphaned_pks)
 
-        raw = list(
-            Message.objects.alive()
-            .filter(
-                channel__in=orphaned_pks,
-                forwarded_from__in=Channel.objects.in_target(),
-                date__gte=closure_dt,
-                date__lte=after_end,
-            )
-            .filter(channel_cutoff_q())
-            .exclude(forwarded_from=ch)
-            .values("forwarded_from")
-            .annotate(amplifier_count=Count("channel", distinct=True), last_forwarded=Max("date"))
-            .order_by("-amplifier_count", "forwarded_from")[:30]
-        )
+        # Candidate selection (ranking, self-forward exclusion, cap) is the export's own.
+        raw = candidate_rows(ch.pk, orphaned_pks, closure_dt, after_end, max_candidates)
 
         cand_ids = [r["forwarded_from"] for r in raw]
         cand_map = {r["forwarded_from"]: r for r in raw}
@@ -1162,6 +1161,7 @@ class VacancyAnalysisView(View):
             "months_before": months_before,
             "months_after": months_after,
             "only_after_vacancy": only_after_vacancy,
+            "max_candidates": max_candidates,
         }
         cache.set(cache_key, payload, self._CACHE_TTL)
         return JsonResponse(payload)

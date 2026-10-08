@@ -24,11 +24,17 @@ from crawler.management.commands.crawl_channels import (
     _make_telethon_unraisable_filter,
 )
 from crawler.management.commands.search_channels import parse_channel_identifier
-from crawler.reference_resolver import ReferenceResolver
+from crawler.reference_resolver import (
+    ReferenceResolver,
+    extract_text_references,
+    reference_from_url,
+)
 from webapp.models import Channel, Message
 from webapp.test_helpers import make_channel, make_label
+from webapp.utils.channel_types import channel_type_filter
 
 from telethon import errors
+from telethon.tl.types import User
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -637,6 +643,36 @@ class ResolveOneTests(TestCase):
         self.assertFalse(failed)
         self.api_client.client.get_entity.assert_not_called()
 
+    def test_user_entity_recorded_as_user_account(self) -> None:
+        # t.me/<bot> resolves to a Telethon User: it must land in the USER bucket, not as a
+        # broadcast "channel" that passes the default --channel-types CHANNEL filter.
+        self.api_client.client.get_entity.return_value = User(id=4242, username="SomeBot", bot=True)
+        result, failed = self.resolver._resolve_one("somebot")
+        self.assertFalse(failed)
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertTrue(result.is_user_account)
+        self.assertFalse(result.broadcast)
+        self.assertEqual(result.channel_type_key, "USER")
+        self.assertEqual(result.username, "SomeBot")
+        self.assertFalse(Channel.objects.filter(channel_type_filter(["CHANNEL"]), telegram_id=4242).exists())
+        # The stored handle short-circuits the next lookup — no second get_entity call.
+        again, _ = self.resolver._resolve_one("somebot")
+        self.assertEqual(again, result)
+        self.api_client.client.get_entity.assert_called_once_with("somebot")
+
+    def test_user_entity_never_overwrites_a_channel_with_the_same_numeric_id(self) -> None:
+        # User and channel ids are separate namespaces that can coincide numerically.
+        channel = make_channel(telegram_id=4242, username="realchan", title="Real channel")
+        self.api_client.client.get_entity.return_value = User(id=4242, username="somebot", bot=True)
+        result, failed = self.resolver._resolve_one("somebot")
+        self.assertIsNone(result)
+        self.assertFalse(failed)
+        channel.refresh_from_db()
+        self.assertFalse(channel.is_user_account)
+        self.assertEqual(channel.username, "realchan")
+        self.assertEqual(Channel.objects.filter(telegram_id=4242).count(), 1)
+
 
 # ---------------------------------------------------------------------------
 # ReferenceResolver.resolve_message_references
@@ -715,6 +751,105 @@ class ResolveMessageReferencesTests(TestCase):
         self.assertEqual(missing, [])
         self.api_client.client.get_entity.assert_not_called()
 
+    def test_entity_url_variants_keep_the_citation(self) -> None:
+        # Query strings, fragments, /s/ previews, scheme / host spellings used to leave
+        # "chan?boost", "chan#x" or "s" as the handle — a permanent failure, edge lost.
+        target = make_channel(telegram_id=5, username="VarChan", label=self.org)
+        for url in (
+            "https://t.me/varchan?boost",
+            "https://t.me/varchan#x",
+            "https://t.me/s/varchan",
+            "https://t.me/s/varchan/77",
+            "http://t.me/varchan",
+            "HTTPS://T.ME/VarChan",
+            "https://telegram.me/varchan",
+            "https://t.me/boost/varchan",
+        ):
+            with self.subTest(url=url):
+                self.message.references.clear()
+                entity = MagicMock()
+                entity.url = url
+                missing = self.resolver.resolve_message_references(self.message, self._make_telegram_message([entity]))
+                self.assertEqual(missing, [])
+                self.assertEqual(list(self.message.references.all()), [target])
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_plain_text_variants_keep_the_citation(self) -> None:
+        target = make_channel(telegram_id=6, username="textchan", label=self.org)
+        for text in (
+            "Seguici su T.me/TextChan",
+            "via http://t.me/textchan.",
+            "telegram.me/textchan",
+            "preview t.me/s/textchan/12",
+        ):
+            with self.subTest(text=text):
+                self.message.references.clear()
+                self.message.message = text
+                self.resolver.resolve_message_references(self.message, self._make_telegram_message())
+                self.assertEqual(list(self.message.references.all()), [target])
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_reserved_paths_are_not_resolved(self) -> None:
+        self.message.message = "t.me/addstickers/pack t.me/c/123/45 t.me/+AbCd t.me/share/url?url=x t.me/s"
+        entity = MagicMock()
+        entity.url = "https://t.me/proxy?server=1.2.3.4"
+        missing = self.resolver.resolve_message_references(self.message, self._make_telegram_message([entity]))
+        self.assertEqual(missing, [])
+        self.api_client.client.get_entity.assert_not_called()
+
+    def test_bot_link_attaches_a_user_account(self) -> None:
+        # The bot reference stays on the message (a USER-inclusive analysis sees it), but the
+        # target is typed USER, so a channel-only analysis filters it out.
+        self.api_client.client.get_entity.return_value = User(id=4343, username="helperbot", bot=True)
+        entity = MagicMock()
+        entity.url = "https://t.me/helperbot?start=abc"
+        self.resolver.resolve_message_references(self.message, self._make_telegram_message([entity]))
+        self.api_client.client.get_entity.assert_called_once_with("helperbot")
+        (bot,) = self.message.references.all()
+        self.assertTrue(bot.is_user_account)
+        self.assertEqual(bot.channel_type_key, "USER")
+
+
+class TmeLinkParsingTests(SimpleTestCase):
+    def test_reference_from_url(self) -> None:
+        cases = {
+            "https://t.me/chan": "chan",
+            "https://t.me/chan?boost": "chan",
+            "https://t.me/chan#x": "chan",
+            "https://t.me/chan/123?single": "chan",
+            "https://t.me/s/chan": "chan",
+            "https://t.me/boost/chan": "chan",
+            "http://t.me/Chan": "chan",
+            "t.me/chan": "chan",
+            "HTTPS://WWW.T.ME/Chan": "chan",
+            "https://telegram.me/chan": "chan",
+            "https://t.me/joinchat/AbC": None,
+            "https://t.me/+AbC": None,
+            "https://t.me/c/123/45": None,
+            "https://t.me/$invoice": None,
+            "https://t.me/boost?c=123": None,
+            "https://t.me/s": None,
+            "https://t.me/": None,
+            "https://example.com/t.me/chan": None,
+            "https://t.me.evil.com/chan": None,
+        }
+        for path in ("share/url?url=x", "iv?url=x", "addstickers/a", "addemoji/a", "addlist/a", "proxy?s=1"):
+            cases[f"https://t.me/{path}"] = None
+        for path in ("socks?s=1", "login/1", "confirmphone?p=1", "setlanguage/it", "addtheme/a", "bg/a", "invoice/a"):
+            cases[f"https://t.me/{path}"] = None
+        for url, expected in cases.items():
+            with self.subTest(url=url):
+                self.assertEqual(reference_from_url(url), expected)
+
+    def test_extract_text_references(self) -> None:
+        text = (
+            "T.me/One, http://t.me/two. telegram.me/three t.me/s/four https://t.me/five?boost "
+            "t.me/joinchat/x t.me/+abc t.me/c/1/2 chat.me/nope t.me/some-channel (t.me/six)"
+        )
+        self.assertEqual(extract_text_references(text), ["one", "two", "three", "four", "five", "some", "six"])
+        self.assertEqual(extract_text_references(""), [])
+        self.assertEqual(extract_text_references(None), [])
+
 
 # ---------------------------------------------------------------------------
 # ReferenceResolver.get_missing_references
@@ -778,6 +913,20 @@ class GetMissingReferencesTests(TestCase):
         msg.refresh_from_db()
         # joinchat is skipped → missing_references cleared (no flood error)
         self.assertEqual(msg.missing_references, "")
+
+    def test_legacy_mangled_references_are_normalised_and_retried(self) -> None:
+        # An older parser stored link paths verbatim; a dead verdict on "chan?boost" was about
+        # the mangled spelling, so the normalised handle is retried even without force_retry,
+        # and the bare /s/ prefix (handle lost) is dropped without an API call.
+        target = make_channel(telegram_id=13, username="legacychan", label=self.org)
+        msg = Message.objects.create(
+            telegram_id=13, channel=self.channel, missing_references="!legacychan?boost|legacychan#x|!s"
+        )
+        self.resolver.get_missing_references()
+        msg.refresh_from_db()
+        self.assertEqual(msg.missing_references, "")
+        self.assertEqual(list(msg.references.all()), [target])
+        self.api_client.client.get_entity.assert_not_called()
 
     def test_multiple_references_processed_in_one_message(self) -> None:
         ch_a = make_channel(telegram_id=10, username="chana", label=self.org)
@@ -2484,6 +2633,103 @@ class ChannelCrawlerPendingForwardsTests(TestCase):
         self.assertEqual(self.api_client.wait.call_count, 2)
 
 
+class GetMessageFirstSaveTests(TestCase):
+    """get_message writes every Telegram-derived field before the steps that can fail on the network.
+
+    A failing media download or reference lookup used to abort the call before the final save,
+    leaving a row without its forward header that the next run (resuming from the newest stored
+    id) never revisited.
+    """
+
+    def setUp(self) -> None:
+        self.media_handler = MagicMock()
+        self.media_handler.download_message_picture.side_effect = ConnectionError("download dropped")
+        self.resolver = MagicMock()
+        self.resolver.resolve_message_references.return_value = ["later"]
+        self.crawler = ChannelCrawler(_make_api_client(), self.media_handler, self.resolver)
+        self.channel = make_channel(telegram_id=1, label=make_label(name="Org", is_in_target=True))
+        self.fwd_date = datetime.datetime(2024, 3, 1, 8, 0, tzinfo=datetime.timezone.utc)
+
+    def _tg_message(self, msg_id: int, fwd_from: Any, text: str = "", entities: list | None = None) -> Any:
+        return types.SimpleNamespace(
+            id=msg_id,
+            peer_id=types.SimpleNamespace(channel_id=self.channel.telegram_id),
+            date=datetime.datetime(2024, 3, 2, 9, 0, tzinfo=datetime.timezone.utc),
+            message=text,
+            entities=entities or [],
+            fwd_from=fwd_from,
+            media=types.SimpleNamespace(photo=types.SimpleNamespace(id=77)),
+            replies=None,
+            reply_to=types.SimpleNamespace(reply_to_msg_id=7),
+            factcheck=None,
+            reactions=None,
+            pinned=False,
+            views=10,
+            forwards=1,
+            edit_date=None,
+        )
+
+    def test_hidden_user_forward_keeps_its_header_when_the_download_fails(self) -> None:
+        from network.near_copies import original_text_q
+
+        hidden = types.SimpleNamespace(from_id=None, from_name="Hidden Author", date=self.fwd_date, channel_post=None)
+        with self.assertRaises(ConnectionError):
+            self.crawler.get_message(self.channel, self._tg_message(10, hidden, text="shared text"))
+
+        msg = Message.objects.get(channel=self.channel, telegram_id=10)
+        self.assertEqual(msg.fwd_from_date, self.fwd_date)
+        self.assertEqual(msg.fwd_from_from_name, "Hidden Author")
+        self.assertEqual(msg.media_type, "photo")
+        self.assertEqual(msg.reply_to_msg_id, 7)
+        self.assertEqual(msg.missing_references, "later")
+        self.assertFalse(Message.objects.filter(original_text_q(), pk=msg.pk).exists())
+
+    def test_channel_forward_keeps_source_and_tags_when_the_download_fails(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        source = make_channel(telegram_id=4242, title="Source")
+        tag_post(Message.objects.create(telegram_id=5, channel=source), MessageTag.objects.create(name="watch"))
+        header = types.SimpleNamespace(
+            from_id=types.SimpleNamespace(channel_id=4242), from_name=None, date=self.fwd_date, channel_post=5
+        )
+        with self.assertRaises(ConnectionError):
+            self.crawler.get_message(self.channel, self._tg_message(11, header))
+
+        msg = Message.objects.get(channel=self.channel, telegram_id=11)
+        self.assertEqual(msg.forwarded_from, source)
+        self.assertEqual(msg.fwd_from_channel_post, 5)
+        self.assertEqual(msg.fwd_from_date, self.fwd_date)
+        self.assertEqual(list(msg.tag_links.values_list("tagging__tag__name", flat=True)), ["watch"])
+
+    def test_unknown_source_is_left_pending_when_the_download_fails(self) -> None:
+        header = types.SimpleNamespace(
+            from_id=types.SimpleNamespace(channel_id=9999), from_name=None, date=self.fwd_date, channel_post=3
+        )
+        with self.assertRaises(ConnectionError):
+            self.crawler.get_message(self.channel, self._tg_message(12, header))
+        self.assertEqual(Message.objects.get(channel=self.channel, telegram_id=12).pending_forward_telegram_id, 9999)
+
+    def test_named_references_survive_a_failing_lookup(self) -> None:
+        self.resolver.resolve_message_references.side_effect = ConnectionError("lookup dropped")
+        link = types.SimpleNamespace(url="https://t.me/Other/12")
+        with self.assertRaises(ConnectionError):
+            self.crawler.get_message(
+                self.channel, self._tg_message(13, None, text="see t.me/somechan", entities=[link])
+            )
+        msg = Message.objects.get(channel=self.channel, telegram_id=13)
+        self.assertEqual(msg.missing_references, "other|somechan")
+        self.media_handler.download_message_picture.assert_not_called()
+
+    def test_resolver_verdict_replaces_the_named_references(self) -> None:
+        self.media_handler.download_message_picture.side_effect = None
+        self.media_handler.download_message_picture.return_value = 1
+        self.resolver.resolve_message_references.return_value = []
+        stored, images = self.crawler.get_message(self.channel, self._tg_message(14, None, text="see t.me/somechan"))
+        self.assertEqual((stored, images), (True, 1))
+        self.assertEqual(Message.objects.get(channel=self.channel, telegram_id=14).missing_references, "")
+
+
 # ---------------------------------------------------------------------------
 # search_channels management command
 # ---------------------------------------------------------------------------
@@ -2913,6 +3159,164 @@ class GetChannelsCommandTests(TestCase):
             mock_media.clean_leftovers.assert_called_once()
 
 
+class DatabaseLockRecoveryTests(TestCase):
+    """A "database is locked" skip drops that one channel, never the rest of the run.
+
+    ``_recover_db_lock`` closes the DB connection; a per-channel loop streaming from a chunked
+    cursor (``iterator(chunk_size=10)``) then crashed fetching its next chunk. Inside a TestCase
+    the real close is a no-op (atomic block, in-memory DB), so the connection is faked to count
+    closes and ``cursor_iter`` fails any cursor left open across one — what SQLite does.
+    """
+
+    def setUp(self) -> None:
+        org = make_label(name="Org", is_in_target=True)
+        # More channels than the old chunk of 10, so a second chunk would have been fetched.
+        self.telegram_ids = list(range(1, 13))
+        for tid in self.telegram_ids:
+            make_channel(telegram_id=tid, label=org, title=f"Ch{tid}")
+        # Channels are crawled newest-first: lock the third one.
+        self.locked_tid = 10
+        self.closes = 0
+
+    def _run(self, configure, **options) -> tuple[MagicMock, str]:
+        from django.core.management import call_command
+        from django.db import ProgrammingError
+        from django.db.models.sql import compiler as sql_compiler
+
+        real_cursor_iter = sql_compiler.cursor_iter
+
+        def cursor_iter(cursor, sentinel, col_count, itersize):
+            opened_at = self.closes
+            for rows in real_cursor_iter(cursor, sentinel, col_count, itersize):
+                if self.closes != opened_at:
+                    raise ProgrammingError("Cannot operate on a closed database.")
+                yield rows
+
+        def close() -> None:
+            self.closes += 1
+
+        fake_connection = MagicMock(in_atomic_block=False)
+        fake_connection.close.side_effect = close
+        out = io.StringIO()
+        with (
+            patch(f"{_GET_CMD}.TelegramClient") as mock_tc,
+            patch(f"{_GET_CMD}.TelegramAPIClient"),
+            patch(f"{_GET_CMD}.ChannelCrawler") as mock_crawler_cls,
+            patch(f"{_GET_CMD}.MediaHandler"),
+            patch(f"{_GET_CMD}.ReferenceResolver"),
+            patch(f"{_GET_CMD}.connection", fake_connection),
+            patch("django.db.models.sql.compiler.cursor_iter", cursor_iter),
+        ):
+            mock_crawler = MagicMock()
+            configure(mock_crawler)
+            mock_crawler_cls.return_value = mock_crawler
+            mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
+            call_command("crawl_channels", channel_types="CHANNEL", stdout=out, stderr=io.StringIO(), **options)
+        return mock_crawler, out.getvalue()
+
+    @staticmethod
+    def _lock_for(telegram_id: int):
+        from django.db import OperationalError
+
+        def side_effect(seed, *args, **kwargs):
+            if seed == telegram_id:
+                raise OperationalError("database is locked")
+            return 0
+
+        return side_effect
+
+    def test_lock_while_crawling_messages_skips_only_that_channel(self) -> None:
+        def configure(crawler: MagicMock) -> None:
+            crawler.get_channel.side_effect = self._lock_for(self.locked_tid)
+
+        crawler, output = self._run(configure, get_new_messages=True)
+        self.assertEqual(self.closes, 1)
+        self.assertEqual([c.args[0] for c in crawler.get_channel.call_args_list], sorted(self.telegram_ids)[::-1])
+        self.assertIn("Database locked by another program while crawling messages", output)
+        self.assertIn("Crawl complete.", output)
+
+    def test_lock_while_updating_channel_info_skips_only_that_channel(self) -> None:
+        def configure(crawler: MagicMock) -> None:
+            crawler.refresh_channel_info.side_effect = self._lock_for(self.locked_tid)
+
+        crawler, output = self._run(configure, get_channels_info=True)
+        self.assertEqual(self.closes, 1)
+        self.assertEqual(len(crawler.refresh_channel_info.call_args_list), len(self.telegram_ids))
+        self.assertIn("Crawl complete.", output)
+
+    def test_lock_while_resolving_pending_forwards_does_not_abort_the_run(self) -> None:
+        from django.db import OperationalError
+
+        def configure(crawler: MagicMock) -> None:
+            crawler._resolve_pending_forwards.side_effect = [OperationalError("database is locked")] + [None] * 20
+
+        crawler, output = self._run(configure, get_new_messages=True)
+        self.assertEqual(len(crawler.get_channel.call_args_list), len(self.telegram_ids))
+        self.assertIn("while resolving forwarded channels", output)
+        self.assertIn("Crawl complete.", output)
+
+
+class DegreeRefreshTests(TestCase):
+    """``--in-degrees`` / ``--out-degrees`` rewrite their channels and reset the ones that left both sets."""
+
+    def setUp(self) -> None:
+        org = make_label(name="Org", is_in_target=True)
+        period = {"attribution_start": datetime.date(2023, 1, 1), "attribution_end": datetime.date(2023, 12, 31)}
+        self.amplifier = make_channel(telegram_id=1, title="Amplifier", label=org, **period)
+        self.source = make_channel(telegram_id=2, title="Source", label=org, **period)
+        self.cited = Channel.objects.create(telegram_id=10, title="Cited")
+        # Stale values from earlier refreshes of channels that no longer qualify:
+        # never cited again, labels removed, cited only outside the in-target period.
+        self.uncited = Channel.objects.create(telegram_id=11, title="Uncited", in_degree=5, out_degree=2)
+        self.unlabelled = Channel.objects.create(telegram_id=12, title="Unlabelled", in_degree=7, out_degree=3)
+        self.out_of_period = Channel.objects.create(telegram_id=13, title="OutOfPeriod", in_degree=4, out_degree=0)
+        self.never_computed = Channel.objects.create(telegram_id=14, title="NeverComputed")
+        for tid, cited, when in (
+            (100, self.cited, _dated(2023, 6, 1)),
+            (101, self.source, _dated(2023, 6, 2)),
+            (102, self.out_of_period, _dated(2022, 6, 1)),
+        ):
+            Message.objects.create(telegram_id=tid, channel=self.amplifier, date=when, forwarded_from=cited)
+
+    def _run(self, **options) -> None:
+        from django.core.management import call_command
+
+        call_command("crawl_channels", stdout=io.StringIO(), stderr=io.StringIO(), **options)
+
+    def _degrees(self, channel: Channel) -> tuple[int | None, int | None]:
+        channel.refresh_from_db()
+        return channel.in_degree, channel.out_degree
+
+    def test_channels_that_left_both_sets_are_reset(self) -> None:
+        self._run(in_degrees=True, out_degrees=True)
+        self.assertEqual(self._degrees(self.amplifier), (0, 1))
+        self.assertEqual(self._degrees(self.source), (1, 0))
+        self.assertEqual(self._degrees(self.cited), (1, 0))
+        self.assertEqual(self._degrees(self.uncited), (0, 0))
+        self.assertEqual(self._degrees(self.unlabelled), (0, 0))
+        self.assertEqual(self._degrees(self.out_of_period), (0, 0))
+        self.assertEqual(self._degrees(self.never_computed), (None, None))
+
+    def test_reset_runs_when_nothing_is_cited(self) -> None:
+        Message.objects.all().delete()
+        self._run(out_degrees=True)
+        self.assertEqual(self._degrees(self.uncited), (0, 0))
+        self.assertEqual(self._degrees(self.out_of_period), (0, 0))
+
+    def test_each_pass_keeps_to_its_own_channels(self) -> None:
+        Channel.objects.filter(pk=self.source.pk).update(in_degree=9, out_degree=9)
+        # --out-degrees owns the out-of-target channels: in-target ones keep their value.
+        self._run(out_degrees=True)
+        self.assertEqual(self._degrees(self.source), (9, 9))
+        self.assertEqual(self._degrees(self.cited), (1, 0))
+        Channel.objects.filter(pk=self.uncited.pk).update(in_degree=5, out_degree=2)
+        # --in-degrees owns the in-target channels: out-of-target ones are left alone.
+        self._run(in_degrees=True)
+        self.assertEqual(self._degrees(self.source), (1, 0))
+        self.assertEqual(self._degrees(self.uncited), (5, 2))
+
+
 class GapCouldBeInTargetTests(TestCase):
     """hole_fixer._gap_could_be_in_target classifies gaps by their bounding stored-message dates."""
 
@@ -2982,6 +3386,66 @@ class SkipOutOfTargetStorageTests(TestCase):
             attribution_end=datetime.date(2024, 3, 31),
         )
         self.assertFalse(self.crawler._skip_out_of_target(ch, types.SimpleNamespace(date=None)))
+
+
+class InTargetPeriodQTests(TestCase):
+    """_in_target_period_q: an always-on in-target period lifts the restriction instead of vanishing from the OR."""
+
+    def setUp(self) -> None:
+        from webapp.test_helpers import attribute, label_group
+
+        self.attribute = attribute
+        self.org = make_label(name="Org", is_in_target=True)
+        self.nation = make_label("Italy", is_in_target=True, group=label_group("Nation", is_primary=False))
+        self.api_client = _make_api_client()
+        self.api_client.wait_time = 0
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+
+    def _always_plus_bounded(self) -> Channel:
+        channel = make_channel(telegram_id=1, label=self.nation)  # in target for all time
+        self.attribute(channel, self.org, datetime.date(2024, 1, 1), datetime.date(2024, 3, 31))
+        return channel
+
+    def test_open_period_beside_a_bounded_one_is_no_restriction(self) -> None:
+        self.assertIsNone(self.crawler._in_target_period_q(self._always_plus_bounded()))
+
+    def test_bounded_periods_still_restrict(self) -> None:
+        channel = make_channel(
+            telegram_id=2,
+            label=self.org,
+            attribution_start=datetime.date(2024, 1, 1),
+            attribution_end=datetime.date(2024, 3, 31),
+        )
+        Message.objects.create(telegram_id=1, channel=channel, date=_dated(2023, 6, 1))
+        Message.objects.create(telegram_id=2, channel=channel, date=_dated(2024, 2, 1))
+        period_q = self.crawler._in_target_period_q(channel)
+        self.assertEqual(
+            list(Message.objects.filter(period_q, channel=channel).values_list("telegram_id", flat=True)), [2]
+        )
+
+    def test_refresh_marks_a_deleted_message_outside_the_bounded_period_lost(self) -> None:
+        channel = self._always_plus_bounded()
+        Message.objects.create(telegram_id=5, channel=channel, date=_dated(2022, 6, 1))  # deleted on Telegram since
+        Message.objects.create(telegram_id=6, channel=channel, date=_dated(2024, 2, 1))
+        still_there = types.SimpleNamespace(
+            id=6,
+            date=_dated(2024, 2, 1),
+            message="still here",
+            media=None,
+            pinned=False,
+            edit_date=None,
+            views=5,
+            forwards=0,
+            replies=None,
+            factcheck=None,
+            reactions=None,
+        )
+        self.api_client.client.iter_messages.return_value = iter([still_there])
+
+        self.crawler.refresh_message_stats(channel, MagicMock())
+
+        self.assertTrue(Message.objects.get(channel=channel, telegram_id=5).is_lost)
+        self.assertFalse(Message.objects.get(channel=channel, telegram_id=6).is_lost)
 
 
 class TelethonUnraisableFilterTests(TestCase):
@@ -3343,6 +3807,26 @@ class EnvironmentCandidatesTests(TestCase):
         found = Command._environment_candidates([self.forwarded.pk, self.referenced.pk], visited, self.opts)
         self.assertEqual(found, [deeper, deeper_ref])
 
+    def test_deeper_level_counts_only_citations_inside_the_window(self) -> None:
+        # The seed stored messages past the window (an earlier, wider run; a to_inspect past).
+        inside = Channel.objects.create(telegram_id=20, title="Inside")
+        after = Channel.objects.create(telegram_id=21, title="After")
+        boundary_ref = Channel.objects.create(telegram_id=22, title="BoundaryRef")
+        before_ref = Channel.objects.create(telegram_id=23, title="BeforeRef")
+        Message.objects.create(telegram_id=200, channel=self.forwarded, date=_dated(2023, 7, 1), forwarded_from=inside)
+        Message.objects.create(telegram_id=201, channel=self.forwarded, date=_dated(2024, 1, 1), forwarded_from=after)
+        last_day = Message.objects.create(telegram_id=202, channel=self.forwarded, date=_dated(2023, 12, 31))
+        last_day.references.add(boundary_ref)  # bounds are inclusive
+        too_early = Message.objects.create(telegram_id=203, channel=self.forwarded, date=_dated(2022, 12, 31))
+        too_early.references.add(before_ref)
+        visited = {self.scope.pk, self.forwarded.pk}
+        window = (datetime.date(2023, 1, 1), datetime.date(2023, 12, 31))
+        found = Command._environment_candidates([self.forwarded.pk], visited, self.opts, window)
+        self.assertEqual(found, [inside, boundary_ref])
+        # An open window side is unbounded.
+        found = Command._environment_candidates([self.forwarded.pk], visited, self.opts, (None, window[1]))
+        self.assertEqual(found, [inside, boundary_ref, before_ref])
+
 
 class EnvironmentSeedScopeTests(TestCase):
     """The environment is seeded by the in-target channels only — to_inspect ones ride along in the scope."""
@@ -3456,6 +3940,8 @@ class GetChannelMessageWindowTests(TestCase):
 
     def test_history_walk_stops_before_window_start(self) -> None:
         Message.objects.create(telegram_id=10, channel=self.channel, date=_dated(2023, 6, 1))
+        self.channel.history_coverage = [["2023-06-01", None]]  # as migration 0066 leaves a crawled channel
+        self.channel.save(update_fields=["history_coverage"])
         self.api_client.client.iter_messages.side_effect = [
             iter([]),  # recent messages above id 10
             iter(
@@ -3476,13 +3962,380 @@ class GetChannelMessageWindowTests(TestCase):
         self.assertFalse(self.crawler._skip_out_of_target(self.channel, inside))
         self.assertTrue(self.crawler._skip_out_of_target(self.channel, outside))
 
-    def test_no_window_walks_from_the_start_and_keeps_everything(self) -> None:
+    def test_to_inspect_without_window_walks_from_the_start_and_keeps_everything(self) -> None:
+        self.channel.to_inspect = True
+        self.channel.save(update_fields=["to_inspect"])
         self.api_client.client.iter_messages.return_value = iter(
             [self._msg(1, _dated(2019, 1, 1)), self._msg(2, _dated(2025, 1, 1))]
         )
         self.crawler.get_channel(500)
         self.assertEqual(self.seen, [1, 2])
         self.assertNotIn("offset_date", self.api_client.client.iter_messages.call_args.kwargs)
+
+    def test_nothing_required_walks_nothing(self) -> None:
+        # No window, no in-target period, not to_inspect: get_message would store nothing.
+        self.crawler.get_channel(500)
+        self.api_client.client.iter_messages.assert_not_called()
+
+
+class CoverageIntervalTests(SimpleTestCase):
+    """``crawler.coverage``: inclusive local-date interval arithmetic, ``None`` = unbounded."""
+
+    D = datetime.date
+
+    def test_normalize_sorts_merges_adjacent_days_and_drops_empty(self) -> None:
+        from crawler.coverage import normalize
+
+        D = self.D
+        self.assertEqual(
+            normalize([(D(2021, 1, 1), None), (D(2020, 1, 11), D(2020, 2, 1)), (D(2020, 1, 5), D(2020, 1, 10))]),
+            [(D(2020, 1, 5), D(2020, 2, 1)), (D(2021, 1, 1), None)],
+        )
+        self.assertEqual(normalize([(D(2022, 1, 2), D(2022, 1, 1))]), [])
+        self.assertEqual(normalize([(None, D(2020, 1, 1)), (D(2019, 1, 1), None)]), [(None, None)])
+
+    def test_subtract_and_intersect(self) -> None:
+        from crawler.coverage import intersect, subtract
+
+        D = self.D
+        required = [(None, None)]
+        covered = [(D(2021, 1, 1), D(2021, 12, 31)), (D(2023, 1, 1), D(2023, 6, 30))]
+        self.assertEqual(
+            subtract(required, covered),
+            [(None, D(2020, 12, 31)), (D(2022, 1, 1), D(2022, 12, 31)), (D(2023, 7, 1), None)],
+        )
+        self.assertEqual(
+            intersect([(D(2021, 6, 1), D(2023, 2, 1))], covered),
+            [(D(2021, 6, 1), D(2021, 12, 31)), (D(2023, 1, 1), D(2023, 2, 1))],
+        )
+
+    def test_json_round_trip_drops_malformed_entries(self) -> None:
+        from crawler.coverage import from_json, to_json
+
+        D = self.D
+        self.assertEqual(
+            to_json([(None, D(2020, 1, 1)), (D(2021, 1, 1), None)]), [[None, "2020-01-01"], ["2021-01-01", None]]
+        )
+        self.assertEqual(
+            from_json([[None, "2020-01-01"], ["garbage", None], [1, 2], "x", [None, None, None]]),
+            [(None, D(2020, 1, 1))],
+        )
+        self.assertEqual(from_json(None), [])
+
+
+class _FakeTelegramHistory:
+    """A channel's Telegram history, served the way Telethon's ``iter_messages`` walks it.
+
+    ``reverse=True`` walks up from ``min_id`` (or from ``offset_date``); otherwise the walk
+    goes down from ``max_id`` (or from ``offset_date``, exclusive). ``fetched`` records the
+    ids each call yielded; ``fail_after`` makes the next call raise after that many messages.
+    """
+
+    def __init__(self, messages: list[tuple[int, datetime.datetime]]) -> None:
+        self.messages = sorted(messages)
+        self.fetched: list[list[int]] = []
+        self.fail_after: int | None = None
+
+    def iter_messages(self, entity, *, wait_time=None, min_id=0, max_id=0, offset_date=None, reverse=False):
+        if reverse:
+            rows = [m for m in self.messages if m[0] > min_id and (offset_date is None or m[1] > offset_date)]
+        else:
+            rows = [
+                m
+                for m in reversed(self.messages)
+                if m[0] > min_id and (not max_id or m[0] < max_id) and (offset_date is None or m[1] < offset_date)
+            ]
+        fetched: list[int] = []
+        self.fetched.append(fetched)
+        fail_after, self.fail_after = self.fail_after, None
+
+        def walk():
+            for count, (msg_id, when) in enumerate(rows):
+                if count == fail_after:
+                    raise ConnectionError("Connection to Telegram lost")
+                fetched.append(msg_id)
+                message = MagicMock()
+                message.id = msg_id
+                message.date = when
+                yield message
+
+        return walk()
+
+
+class GetChannelHistoryCoverageTests(TestCase):
+    """``get_channel`` walks only the required days missing from ``Channel.history_coverage`` — each once.
+
+    No labelling change has to flag anything: an earlier start, an inserted middle period, a
+    later middle end, to_inspect, a wider environment window all show as required days the
+    coverage lacks.
+    """
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = Channel.objects.create(telegram_id=500, title="Crawled")
+        self.telegram = _FakeTelegramHistory(
+            [
+                (1, _dated(2020, 1, 10)),
+                (2, _dated(2020, 6, 10)),
+                (3, _dated(2021, 1, 10)),
+                (4, _dated(2021, 6, 10)),
+                (5, _dated(2022, 1, 10)),
+                (6, _dated(2022, 6, 10)),
+                (7, _dated(2023, 1, 10)),
+                (8, _dated(2023, 6, 10)),
+                (9, _dated(2024, 1, 10)),
+                (10, _dated(2024, 6, 10)),
+            ]
+        )
+        self.api_client = _make_api_client()
+        self.api_client.wait_time = 0
+        self.iter_messages = self.api_client.client.iter_messages
+        self.iter_messages.side_effect = self.telegram.iter_messages
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        # A fresh row per crawl, as crawl_channels hands get_channel a telegram id.
+        self.crawler.resolve_channel_or_classify = MagicMock(
+            side_effect=lambda seed: (Channel.objects.get(telegram_id=seed), MagicMock(), "ok")
+        )
+        self.crawler._resolve_pending_forwards = MagicMock()
+        self.stored: list[int] = []
+
+        def fake_get_message(channel, telegram_message):
+            if self.crawler._skip_out_of_target(channel, telegram_message):
+                return False, 0
+            self.stored.append(telegram_message.id)
+            Message.objects.update_or_create(
+                channel=channel, telegram_id=telegram_message.id, defaults={"date": telegram_message.date}
+            )
+            return True, 0
+
+        self.crawler.get_message = fake_get_message
+        self.today = timezone.localdate().isoformat()
+
+    def _crawl(self, **kwargs) -> list[list[int]]:
+        """Run one crawl; return the ids each Telegram walk of it fetched."""
+        self.iter_messages.reset_mock()
+        self.telegram.fetched = []
+        self.stored = []
+        self.crawler.get_channel(500, update_info=False, **kwargs)
+        return self.telegram.fetched
+
+    def _walk_kwargs(self, index: int) -> dict:
+        return self.iter_messages.call_args_list[index].kwargs
+
+    def _coverage(self) -> list:
+        return Channel.objects.get(pk=self.channel.pk).history_coverage
+
+    def _period(self, start=None, end=None):
+        from webapp.test_helpers import attribute
+
+        return attribute(self.channel, self.org, start, end)
+
+    def test_first_crawl_covers_the_required_days_and_the_next_run_only_walks_up(self) -> None:
+        self._period(datetime.date(2021, 1, 1), datetime.date(2021, 12, 31))
+        self._period(datetime.date(2023, 1, 1))
+        self.assertEqual(self._crawl(), [[3, 4, 5, 6, 7, 8, 9, 10]])
+        self.assertEqual(self.stored, [3, 4, 7, 8, 9, 10])
+        kwargs = self._walk_kwargs(0)
+        self.assertTrue(kwargs["reverse"])
+        self.assertEqual(
+            kwargs["offset_date"], timezone.make_aware(datetime.datetime(2021, 1, 1)) - timedelta(seconds=1)
+        )
+        self.assertEqual(self._coverage(), [["2021-01-01", "2021-12-31"], ["2023-01-01", self.today]])
+        self.assertTrue(Channel.objects.get(pk=self.channel.pk).are_messages_crawled)
+
+        self.assertEqual(self._crawl(), [[]])  # unchanged channel: the walk up only, no history request
+        self.assertEqual(self._walk_kwargs(0)["min_id"], 10)
+
+    def test_walk_up_stops_past_the_last_required_day(self) -> None:
+        self._period(datetime.date(2021, 1, 1), datetime.date(2021, 12, 31))
+        self.assertEqual(self._crawl(), [[3, 4, 5]])
+        self.assertEqual(self._coverage(), [["2021-01-01", "2021-12-31"]])
+        self.assertEqual(self._crawl(), [[5]])  # one page above the newest stored message, never the years after
+
+    def test_earlier_start_walks_down_once_to_the_new_start(self) -> None:
+        period = self._period(datetime.date(2023, 1, 1))
+        self._crawl()
+        period.start = datetime.date(2021, 3, 1)
+        period.save()
+        self.assertEqual(self._crawl(), [[], [6, 5, 4, 3]])  # stops at the first message before the new start
+        self.assertEqual(self.stored, [6, 5, 4])
+        self.assertEqual(self._walk_kwargs(1)["max_id"], 7)  # right below the oldest stored message
+        self.assertEqual(self._coverage(), [["2021-03-01", self.today]])
+        self.assertEqual(self._crawl(), [[]])  # fetched once, not on every run
+
+    def test_inserted_middle_period_is_fetched_from_its_end_down_to_its_start(self) -> None:
+        self._period(datetime.date(2020, 1, 1), datetime.date(2020, 12, 31))
+        self._period(datetime.date(2023, 1, 1))
+        self._crawl()
+        self.assertEqual(self._coverage(), [["2020-01-01", "2020-12-31"], ["2023-01-01", self.today]])
+
+        self._period(datetime.date(2021, 6, 1), datetime.date(2022, 3, 31))
+        self.assertEqual(self._crawl(), [[], [5, 4, 3]])
+        self.assertEqual(self.stored, [5, 4])
+        self.assertEqual(self._walk_kwargs(1)["offset_date"], timezone.make_aware(datetime.datetime(2022, 4, 1)))
+        self.assertEqual(
+            self._coverage(),
+            [["2020-01-01", "2020-12-31"], ["2021-06-01", "2022-03-31"], ["2023-01-01", self.today]],
+        )
+        self.assertEqual(self._crawl(), [[]])
+
+    def test_middle_period_end_moved_later_fetches_the_extension(self) -> None:
+        middle = self._period(datetime.date(2020, 1, 1), datetime.date(2021, 3, 31))
+        self._period(datetime.date(2023, 1, 1))
+        self._crawl()
+        middle.end = datetime.date(2022, 3, 31)
+        middle.save()
+        self.assertEqual(self._crawl(), [[], [5, 4, 3]])
+        self.assertEqual(self.stored, [5, 4])
+        self.assertEqual(self._coverage(), [["2020-01-01", "2022-03-31"], ["2023-01-01", self.today]])
+
+    def test_to_inspect_fetches_the_older_and_middle_history_once(self) -> None:
+        self._period(datetime.date(2021, 1, 1), datetime.date(2021, 12, 31))
+        self._period(datetime.date(2023, 1, 1))
+        self._crawl()
+        Channel.objects.filter(pk=self.channel.pk).update(to_inspect=True)  # no save(), no signal: nothing to flag
+        self.assertEqual(self._crawl(), [[], [6, 5, 4], [2, 1]])
+        self.assertEqual(self.stored, [6, 5, 2, 1])
+        self.assertEqual(self._walk_kwargs(1)["offset_date"], timezone.make_aware(datetime.datetime(2023, 1, 1)))
+        self.assertEqual(self._walk_kwargs(2)["max_id"], 3)
+        self.assertEqual(self._coverage(), [[None, self.today]])
+        self.assertEqual(self._crawl(), [[]])
+
+    def test_environment_window_widened_fetches_the_missing_slice_once(self) -> None:
+        narrow = (datetime.date(2023, 1, 1), datetime.date(2023, 12, 31))
+        wide = (datetime.date(2022, 1, 1), datetime.date(2024, 3, 31))
+        self.assertEqual(self._crawl(message_window=narrow), [[7, 8, 9]])
+        self.assertEqual(self.stored, [7, 8])
+        self.assertEqual(self._coverage(), [["2023-01-01", "2023-12-31"]])
+
+        self.assertEqual(self._crawl(message_window=wide), [[9, 10], [6, 5, 4]])
+        self.assertEqual(self.stored, [9, 6, 5])
+        self.assertEqual(self._walk_kwargs(1)["max_id"], 7)
+        self.assertEqual(self._coverage(), [["2022-01-01", "2024-03-31"]])
+
+        self.assertEqual(self._crawl(message_window=wide), [[10]])
+        # A narrower scope later on: nothing newer than the stored history is required, nothing is missing.
+        self.assertEqual(self._crawl(message_window=narrow), [])
+
+    def test_crawled_channel_from_before_the_coverage_walks_below_its_oldest_message_once(self) -> None:
+        # Migration 0066 leaves a crawled channel covered from its oldest stored message on.
+        for msg_id, when in self.telegram.messages[6:]:
+            Message.objects.create(channel=self.channel, telegram_id=msg_id, date=when)
+        Channel.objects.filter(pk=self.channel.pk).update(history_coverage=[["2023-01-10", None]])
+        self._period(datetime.date(2023, 1, 1))
+        self.assertEqual(self._crawl(), [[], [6]])  # one request: nothing older was missing
+        self.assertEqual(self._walk_kwargs(1)["max_id"], 7)
+        self.assertEqual(self._coverage(), [["2023-01-01", None]])
+
+    def test_interrupted_first_crawl_keeps_the_days_it_finished(self) -> None:
+        self._period(datetime.date(2021, 1, 1))
+        self.telegram.fail_after = 3
+        with self.assertRaises(ConnectionError):
+            self._crawl()
+        self.assertEqual(self.stored, [3, 4, 5])
+        # The last day reached (2022-01-10) may hold more messages: it is not claimed.
+        self.assertEqual(self._coverage(), [["2021-01-01", "2022-01-09"]])
+
+        self.assertEqual(self._crawl(), [[6, 7, 8, 9, 10], [5, 4]])  # only the unfinished day is walked again
+        self.assertEqual(self._walk_kwargs(0)["min_id"], 5)
+        self.assertEqual(self._walk_kwargs(1)["offset_date"], timezone.make_aware(datetime.datetime(2022, 1, 11)))
+        self.assertEqual(self._coverage(), [["2021-01-01", self.today]])
+
+    def test_interrupted_history_walk_keeps_the_days_it_finished(self) -> None:
+        period = self._period(datetime.date(2023, 1, 1))
+        self._crawl()
+        period.start = datetime.date(2021, 1, 1)
+        period.save()
+        # The downward walk breaks off after two messages (2022-06-10, 2022-01-10).
+        original = self.telegram.iter_messages
+
+        def fail_history(entity, **kwargs):
+            if not kwargs.get("reverse"):
+                self.telegram.fail_after = 2
+            return original(entity, **kwargs)
+
+        self.iter_messages.side_effect = fail_history
+        with self.assertRaises(ConnectionError):
+            self._crawl()
+        self.assertEqual(self._coverage(), [["2022-01-11", self.today]])
+
+        self.iter_messages.side_effect = original
+        self.assertEqual(self._crawl(), [[], [5, 4, 3, 2]])
+        self.assertEqual(self._walk_kwargs(1)["offset_date"], timezone.make_aware(datetime.datetime(2022, 1, 11)))
+        self.assertEqual(self._coverage(), [["2021-01-01", self.today]])
+
+    def test_failure_to_record_the_interrupted_walk_does_not_mask_the_error(self) -> None:
+        from django.db import OperationalError
+
+        self._period(datetime.date(2021, 1, 1))
+        self.telegram.fail_after = 2
+        with (
+            patch.object(ChannelCrawler, "_extend_coverage", side_effect=OperationalError("database is locked")),
+            self.assertRaises(ConnectionError),
+        ):
+            self._crawl()
+
+    def test_crawl_end_save_leaves_the_coverage_alone(self) -> None:
+        # A purge trimming the coverage during a crawl is not undone by the crawl's final save.
+        self._period(datetime.date(2023, 1, 1))
+
+        def trim_meanwhile(*args, **kwargs):
+            Channel.objects.filter(pk=self.channel.pk).update(history_coverage=[["2024-01-01", None]])
+
+        self.crawler._resolve_pending_forwards.side_effect = trim_meanwhile
+        self._crawl()
+        self.assertEqual(self._coverage(), [["2024-01-01", None]])
+
+
+class HistoryCoverageMigrationTests(TestCase):
+    """Data migration 0066: a channel holding messages is covered from its oldest one's local date on."""
+
+    @staticmethod
+    def _run() -> None:
+        import importlib
+
+        from django.apps import apps
+
+        importlib.import_module("webapp.migrations.0066_channel_history_coverage_init").init_history_coverage(
+            apps, None
+        )
+
+    @override_settings(TIME_ZONE="Europe/Rome")
+    def test_oldest_stored_message_local_date(self) -> None:
+        crawled = Channel.objects.create(telegram_id=1)
+        # 23:30 UTC on 9 January is already 10 January in Rome.
+        Message.objects.create(
+            channel=crawled, telegram_id=5, date=datetime.datetime(2023, 1, 9, 23, 30, tzinfo=datetime.timezone.utc)
+        )
+        Message.objects.create(channel=crawled, telegram_id=9, date=_dated(2024, 2, 1))
+        empty = Channel.objects.create(telegram_id=2)
+        undated = Channel.objects.create(telegram_id=3)
+        Message.objects.create(channel=undated, telegram_id=1)
+        self._run()
+        coverage = dict(Channel.objects.values_list("telegram_id", "history_coverage"))
+        self.assertEqual(coverage, {crawled.telegram_id: [["2023-01-10", None]], empty.telegram_id: [], 3: []})
+
+
+class PurgeTrimsHistoryCoverageTests(TestCase):
+    """``purge_out_of_target_messages`` drops the days whose messages it deletes from the crawler's coverage."""
+
+    def test_purged_days_leave_the_coverage(self) -> None:
+        from webapp.management.commands.purge_out_of_target_messages import purge
+
+        org = make_label(name="Org", is_in_target=True)
+        narrowed = make_channel(telegram_id=1, label=org, attribution_start=datetime.date(2023, 1, 1))
+        Message.objects.create(channel=narrowed, telegram_id=1, date=_dated(2022, 6, 1))  # out of period
+        Message.objects.create(channel=narrowed, telegram_id=2, date=_dated(2023, 6, 1))
+        dropped = Channel.objects.create(telegram_id=2)  # no in-target period, not a forward source
+        Message.objects.create(channel=dropped, telegram_id=1, date=_dated(2023, 6, 1))
+        environment = Channel.objects.create(telegram_id=3, environment_depth=1)
+        Message.objects.create(channel=environment, telegram_id=1, date=_dated(2019, 6, 1))
+        for channel in (narrowed, dropped, environment):
+            Channel.objects.filter(pk=channel.pk).update(history_coverage=[[None, "2026-01-01"]])
+
+        purge()
+        coverage = dict(Channel.objects.values_list("telegram_id", "history_coverage"))
+        self.assertEqual(coverage, {1: [["2023-01-01", "2026-01-01"]], 2: [], 3: [[None, "2026-01-01"]]})
 
 
 class EnvironmentCommandTests(TestCase):
@@ -3505,7 +4358,7 @@ class EnvironmentCommandTests(TestCase):
             telegram_id=200, channel=self.level1, date=_dated(2023, 7, 1), forwarded_from=self.level2
         )
 
-    def _run(self, **options) -> MagicMock:
+    def _run(self, configure=None, **options) -> MagicMock:
         from django.core.management import call_command
 
         with (
@@ -3516,6 +4369,8 @@ class EnvironmentCommandTests(TestCase):
             patch(f"{_GET_CMD}.ReferenceResolver"),
         ):
             mock_crawler = MagicMock()
+            if configure is not None:
+                configure(mock_crawler)
             mock_crawler_cls.return_value = mock_crawler
             mock_tc.return_value.start.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_tc.return_value.start.return_value.__exit__ = MagicMock(return_value=False)
@@ -3553,6 +4408,77 @@ class EnvironmentCommandTests(TestCase):
         self._run(environment=True)
         self.level1.refresh_from_db()
         self.assertEqual(self.level1.environment_depth, 1)
+
+    def test_deeper_level_ignores_citations_outside_the_window(self) -> None:
+        # Level 1's history from before the window (e.g. stored while it was to_inspect).
+        stale = Channel.objects.create(telegram_id=30, title="CitedBeforeTheWindow")
+        Message.objects.create(telegram_id=201, channel=self.level1, date=_dated(2022, 6, 1), forwarded_from=stale)
+        crawler = self._run(environment=True, environment_depth=2)
+        crawled = [c.args[0] for c in crawler.get_channel.call_args_list]
+        self.assertEqual(crawled, [self.level1.telegram_id, self.level2.telegram_id])
+        stale.refresh_from_db()
+        self.assertIsNone(stale.environment_depth)
+
+    def test_failed_crawl_is_not_stamped_and_seeds_no_deeper_level(self) -> None:
+        def configure(crawler: MagicMock) -> None:
+            crawler.get_channel.side_effect = RuntimeError("Telegram hiccup")
+
+        crawler = self._run(configure, environment=True, environment_depth=2)
+        self.assertEqual([c.args[0] for c in crawler.get_channel.call_args_list], [self.level1.telegram_id])
+        self.level1.refresh_from_db()
+        self.level2.refresh_from_db()
+        self.assertIsNone(self.level1.environment_depth)
+        self.assertIsNone(self.level2.environment_depth)
+
+    @override_settings(IGNORE_FLOODWAIT=True)
+    def test_flood_waited_channel_is_not_stamped(self) -> None:
+        def configure(crawler: MagicMock) -> None:
+            crawler.get_channel.side_effect = _flood_error()
+
+        self._run(configure, environment=True)
+        self.level1.refresh_from_db()
+        self.assertIsNone(self.level1.environment_depth)
+
+    def test_channels_found_lost_private_or_user_accounts_are_not_stamped(self) -> None:
+        private = self.level1
+        lost = Channel.objects.create(telegram_id=11, title="Lost")
+        user = Channel.objects.create(telegram_id=12, title="User")
+        live = Channel.objects.create(telegram_id=13, title="Live")
+        for tid, cited in ((101, lost), (102, user), (103, live)):
+            Message.objects.create(telegram_id=tid, channel=self.scope, date=_dated(2023, 6, 1), forwarded_from=cited)
+        flags = {private.telegram_id: "is_private", lost.telegram_id: "is_lost", user.telegram_id: "is_user_account"}
+
+        def classify(seed, **kwargs):
+            # What get_channel(update_info=True) does for such a channel: flag it and return 0.
+            if seed in flags:
+                Channel.objects.filter(telegram_id=seed).update(**{flags[seed]: True})
+            return 0
+
+        def configure(crawler: MagicMock) -> None:
+            crawler.get_channel.side_effect = classify
+
+        crawler = self._run(configure, environment=True, environment_depth=2)
+        for channel in (private, lost, user, live):
+            channel.refresh_from_db()
+        self.assertEqual([private.environment_depth, lost.environment_depth, user.environment_depth], [None] * 3)
+        self.assertEqual(live.environment_depth, 1)
+        # The private channel's stored citation of level 2 seeds nothing.
+        self.assertNotIn(self.level2.telegram_id, [c.args[0] for c in crawler.get_channel.call_args_list])
+
+    def test_lock_while_resolving_pending_forwards_skips_only_that_step(self) -> None:
+        from django.db import OperationalError
+
+        other = Channel.objects.create(telegram_id=11, title="OtherLevel1")
+        Message.objects.create(telegram_id=101, channel=self.scope, date=_dated(2023, 6, 1), forwarded_from=other)
+
+        def configure(crawler: MagicMock) -> None:
+            crawler._resolve_pending_forwards.side_effect = [OperationalError("database is locked"), None]
+
+        crawler = self._run(configure, environment=True)
+        self.assertEqual(len(crawler.get_channel.call_args_list), 2)
+        self.level1.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((self.level1.environment_depth, other.environment_depth), (1, 1))
 
     def test_environment_media_handler_uses_its_own_toggles(self) -> None:
         self._run(environment=True, download_video=True, environment_download_images=True)

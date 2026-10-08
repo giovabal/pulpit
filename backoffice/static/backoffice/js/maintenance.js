@@ -146,6 +146,20 @@
         return Number(n).toLocaleString();
     }
 
+    // The media cleanups leave alone files written within a grace period (a crawl
+    // may be about to save the row that references them); the API reports its
+    // length as recent_file_grace_seconds. Renders e.g. "the last hour".
+    function fmtGrace(seconds) {
+        var minutes = Math.round((seconds || 3600) / 60);
+        if (minutes === 60) return "the last hour";
+        if (minutes % 60 === 0) return "the last " + minutes / 60 + " hours";
+        return "the last " + minutes + " minutes";
+    }
+
+    function skippedRecentText(n, graceSeconds) {
+        return fmtCount(n) + " skipped: written in " + fmtGrace(graceSeconds) + " (a crawl may be using them)";
+    }
+
     function loadPurgePreview() {
         $purgeMarked.textContent = "…";
         $purgeMsgs.textContent = "…";
@@ -191,6 +205,11 @@
                 ];
                 if (data.failed_files) {
                     parts.push(fmtCount(data.failed_files) + " files could not be removed");
+                }
+                if (data.skipped_files) {
+                    // One count for both reasons; the orphan cleanup below reclaims any left unreferenced.
+                    parts.push(fmtCount(data.skipped_files) + " skipped: referenced again by a message, or written in " +
+                        fmtGrace(data.recent_file_grace_seconds) + " (a crawl may be using them)");
                 }
                 if (data.size_before_bytes !== null && data.size_after_bytes !== null) {
                     parts.push("DB size " + fmtBytes(data.size_before_bytes) + " → " + fmtBytes(data.size_after_bytes));
@@ -242,7 +261,10 @@
                 return;
             }
             $orphanRunBtn.disabled = data.files === 0;
-            if (data.files === 0) $orphanHint.textContent = "Nothing to remove.";
+            var hints = [];
+            if (data.files === 0) hints.push("Nothing to remove");
+            if (data.skipped_recent) hints.push(skippedRecentText(data.skipped_recent, data.recent_file_grace_seconds));
+            $orphanHint.textContent = hints.join(" · ");
         }).catch(function(e) {
             $orphanHint.textContent = "Preview failed: " + e.message;
             showToast("Error: " + e.message, "error");
@@ -268,6 +290,13 @@
                 ];
                 if (data.failed_files) {
                     parts.push(fmtCount(data.failed_files) + " files could not be removed");
+                }
+                if (data.skipped_recent) {
+                    parts.push(skippedRecentText(data.skipped_recent, data.recent_file_grace_seconds));
+                }
+                if (data.skipped_referenced) {
+                    parts.push(fmtCount(data.skipped_referenced) + " skipped: now referenced in the database " +
+                        "(a crawl saved them meanwhile)");
                 }
                 if (data.empty_dirs_removed) {
                     parts.push("cleaned up " + fmtCount(data.empty_dirs_removed) + " empty directories");

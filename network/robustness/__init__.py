@@ -8,7 +8,7 @@ from network.robustness.attacks import (
     removal_order,
     strategy_label,
 )
-from network.robustness.disparity_filter import compute_alpha_values, disparity_filter
+from network.robustness.disparity_filter import compute_alpha_values, disparity_filter, has_uniform_weights
 from network.robustness.metrics import (
     attack_curve,
     component_sizes,
@@ -48,6 +48,7 @@ __all__ = [
     "disparity_filter",
     "efficiency_curve",
     "empirical_p",
+    "has_uniform_weights",
     "modular_robustness_curves",
     "null_distribution",
     "parse_strategy",
