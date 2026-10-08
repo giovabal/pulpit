@@ -63,6 +63,8 @@ from fractions import Fraction
 
 from django.db.models import Q
 
+from network.parameters import FixedParameter
+
 #: Default Jaccard resemblance at or above which two messages are near-copies.
 NEAR_COPY_THRESHOLD = 0.8
 #: Default minimum number of normalised word tokens for a message to be eligible.
@@ -75,10 +77,102 @@ BOILERPLATE_SHARE = 0.2
 BOILERPLATE_MIN_MESSAGES = 5
 #: Minimum shingles a message must keep after boilerplate removal to stay eligible.
 MIN_SHINGLES_AFTER_BOILERPLATE = 3
+#: A shingle must occur in at least this many of a channel's messages to be boilerplate, whatever the share.
+BOILERPLATE_MIN_OCCURRENCES = 2
+#: Unicode normalisation form applied before lower-casing and tokenising.
+UNICODE_NORMALISATION_FORM = "NFKC"
+#: Links removed before tokenising (case-insensitive): URLs, ``t.me`` links, ``www.`` hosts.
+URL_PATTERN = r"https?://\S+|\bt\.me/\S+|\bwww\.\S+"
+#: ``@handles`` and e-mail addresses removed before tokenising.
+HANDLE_PATTERN = r"@\w+|\S+@\S+\.\S+"
+#: What counts as a word token (Unicode word characters).
+TOKEN_PATTERN = r"\w+"
+#: Decimal places the reported similarity of a link is rounded to (detection compares the exact value).
+SIMILARITY_DECIMALS = 4
 
-_URL_RE = re.compile(r"https?://\S+|\bt\.me/\S+|\bwww\.\S+", re.IGNORECASE)
-_HANDLE_RE = re.compile(r"@\w+|\S+@\S+\.\S+")
-_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+_URL_RE = re.compile(URL_PATTERN, re.IGNORECASE)
+_HANDLE_RE = re.compile(HANDLE_PATTERN)
+_TOKEN_RE = re.compile(TOKEN_PATTERN, re.UNICODE)
+
+_SOURCE = "network/near_copies.py"
+
+#: The values fixed in this module that shape near-copy detection (``PARAMETERS.md``). The threshold,
+#: minimum tokens and shingle size are run options (``--near-copy-*``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Boilerplate share",
+        value=BOILERPLATE_SHARE,
+        scope="near_copies",
+        affects="A shingle found in at least this share of a channel's eligible messages is treated as a "
+        "header or signature and removed from that channel's messages before matching.",
+        source=f"{_SOURCE}: BOILERPLATE_SHARE",
+    ),
+    FixedParameter(
+        name="Boilerplate minimum messages",
+        value=BOILERPLATE_MIN_MESSAGES,
+        scope="near_copies",
+        affects="Boilerplate is estimated only for channels with at least this many eligible messages; "
+        "smaller channels keep every shingle.",
+        source=f"{_SOURCE}: BOILERPLATE_MIN_MESSAGES",
+    ),
+    FixedParameter(
+        name="Boilerplate minimum occurrences",
+        value=BOILERPLATE_MIN_OCCURRENCES,
+        scope="near_copies",
+        affects="A shingle must occur in at least this many of a channel's messages to count as boilerplate, "
+        "whatever the boilerplate share.",
+        source=f"{_SOURCE}: BOILERPLATE_MIN_OCCURRENCES",
+        note="So a channel at the minimum-messages floor cannot lose every shingle.",
+    ),
+    FixedParameter(
+        name="Minimum shingles after boilerplate removal",
+        value=MIN_SHINGLES_AFTER_BOILERPLATE,
+        scope="near_copies",
+        affects="Messages left with fewer shingles than this once boilerplate is removed cannot be a copy "
+        "or an origin.",
+        source=f"{_SOURCE}: MIN_SHINGLES_AFTER_BOILERPLATE",
+    ),
+    FixedParameter(
+        name="Unicode normalisation form",
+        value=UNICODE_NORMALISATION_FORM,
+        scope="near_copies",
+        affects="Text is normalised to this form, then lower-cased, before tokenising, so compatibility "
+        "variants of a character (full-width letters, ligatures) compare equal.",
+        source=f"{_SOURCE}: UNICODE_NORMALISATION_FORM",
+    ),
+    FixedParameter(
+        name="Link pattern removed before tokenising",
+        value=URL_PATTERN,
+        scope="near_copies",
+        affects="Text matching this case-insensitive pattern (URLs, t.me links, www. hosts) is removed, so "
+        "a copy that only swaps a link still matches its origin.",
+        source=f"{_SOURCE}: URL_PATTERN",
+    ),
+    FixedParameter(
+        name="Handle / e-mail pattern removed before tokenising",
+        value=HANDLE_PATTERN,
+        scope="near_copies",
+        affects="Text matching this pattern (@handles, e-mail addresses) is removed, so a copy that only "
+        "swaps the signature handle still matches its origin.",
+        source=f"{_SOURCE}: HANDLE_PATTERN",
+    ),
+    FixedParameter(
+        name="Word-token pattern",
+        value=TOKEN_PATTERN,
+        scope="near_copies",
+        affects="Defines a word token; punctuation and emoji fall outside it and drop out of the shingles "
+        "and of the minimum-token count.",
+        source=f"{_SOURCE}: TOKEN_PATTERN",
+    ),
+    FixedParameter(
+        name="Reported similarity decimals",
+        value=SIMILARITY_DECIMALS,
+        scope="near_copies",
+        affects="Decimal places of the similarity reported for each link (near_copies.csv); detection "
+        "compares the exact value against the threshold.",
+        source=f"{_SOURCE}: SIMILARITY_DECIMALS",
+    ),
+)
 
 
 #: Nullable ``Message`` fields any one of which marks a Telegram forward header: the resolved source
@@ -116,7 +210,7 @@ def original_text_q() -> Q:
 
 def normalise_tokens(text: str) -> list[str]:
     """Lower-cased NFKC word tokens with URLs, ``t.me`` links, handles and e-mails removed."""
-    normalised = unicodedata.normalize("NFKC", text).lower()
+    normalised = unicodedata.normalize(UNICODE_NORMALISATION_FORM, text).lower()
     normalised = _URL_RE.sub(" ", normalised)
     normalised = _HANDLE_RE.sub(" ", normalised)
     return _TOKEN_RE.findall(normalised)
@@ -206,7 +300,7 @@ def _strip_boilerplate(docs: dict[int, set[str]], channel_of: dict[int, int]) ->
         for doc_id in doc_ids:
             counts.update(docs[doc_id])
         # At least two occurrences, so a channel at the message floor cannot lose every shingle.
-        floor = max(2, math.ceil(BOILERPLATE_SHARE * len(doc_ids)))
+        floor = max(BOILERPLATE_MIN_OCCURRENCES, math.ceil(BOILERPLATE_SHARE * len(doc_ids)))
         boilerplate = {s for s, c in counts.items() if c >= floor}
         if not boilerplate:
             continue
@@ -291,7 +385,7 @@ def find_near_copies(
             origin_id=origin_id,
             origin_channel_id=channel_of[origin_id],
             origin_date=date_of[origin_id],
-            similarity=round(similarity_of[copy_id], 4),
+            similarity=round(similarity_of[copy_id], SIMILARITY_DECIMALS),
             copy_tokens=tokens_of[copy_id],
             origin_tokens=tokens_of[origin_id],
             cluster_size=cluster_size[find(copy_id)],

@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 from django.db.models import F, Q
 
+from network.parameters import FixedParameter
 from network.utils import channel_cutoff_q, make_date_q
 from webapp.models import Message
 
@@ -40,6 +41,37 @@ import networkx as nx
 
 DEFAULT_WINDOW_SECONDS = 300
 DEFAULT_MIN_EVENTS = 3
+
+# Origin identity: a forward's origin message is its ``forwarded_from`` channel plus the first of
+# these forward-header fields that is set (the original post id, else the original timestamp); a
+# forward carrying neither is skipped. Shared with the vacancy analysis' content-continuity score.
+ORIGIN_IDENTITY_FIELDS: tuple[str, ...] = ("fwd_from_channel_post", "fwd_from_date")
+# Decimal places of the reported coordinated-forward share (``coordination_ratio``).
+RATIO_DECIMALS = 4
+
+_SOURCE = "network/coordination.py"
+
+#: The values fixed in this module that shape the coordination layer (``PARAMETERS.md``). The
+#: co-forwarding window and the minimum shared origins are run options (``--coordination-window`` /
+#: ``--coordination-min-events``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Origin-message identity",
+        value=ORIGIN_IDENTITY_FIELDS,
+        scope="coordination",
+        affects="Two forwards share an origin when they come from the same channel and carry the same value in "
+        "the first of these fields that is set (post id, else original timestamp); forwards with neither "
+        "are skipped, and per channel and origin only the earliest forward counts.",
+        source=f"{_SOURCE}: ORIGIN_IDENTITY_FIELDS",
+    ),
+    FixedParameter(
+        name="Coordinated-forward share decimals",
+        value=RATIO_DECIMALS,
+        scope="coordination",
+        affects="Decimal places the per-channel coordinated-forward share (coordination_ratio) is rounded to.",
+        source=f"{_SOURCE}: RATIO_DECIMALS",
+    ),
+)
 
 # Coordination-specific node measures, in the order the map's "Nodes dimension"
 # selector should offer them (the first entry is the default size key).
@@ -144,19 +176,17 @@ def compute_coordination(
     rows = (
         Message.objects.alive()
         .filter(fwd_q)
-        .values("channel_id", "forwarded_from_id", "fwd_from_channel_post", "fwd_from_date", "date")
+        .values("channel_id", "forwarded_from_id", *ORIGIN_IDENTITY_FIELDS, "date")
         .iterator()
     )
 
     # origin key -> {channel_id: earliest forward time}
     first_forward: dict[tuple, dict[int, datetime.datetime]] = {}
     for row in rows:
-        if row["fwd_from_channel_post"] is not None:
-            origin_key = (row["forwarded_from_id"], "post", row["fwd_from_channel_post"])
-        elif row["fwd_from_date"] is not None:
-            origin_key = (row["forwarded_from_id"], "date", row["fwd_from_date"])
-        else:
+        field = next((f for f in ORIGIN_IDENTITY_FIELDS if row[f] is not None), None)
+        if field is None:
             continue  # origin message unidentifiable
+        origin_key = (row["forwarded_from_id"], field, row[field])
         per_channel = first_forward.setdefault(origin_key, {})
         current = per_channel.get(row["channel_id"])
         if current is None or row["date"] < current:
@@ -204,7 +234,7 @@ def compute_coordination(
         node_scores[str(ch)] = {
             "partners": partners[ch],
             "strength": strength[ch],
-            "ratio": round(coordinated / total, 4) if total else 0.0,
+            "ratio": round(coordinated / total, RATIO_DECIMALS) if total else 0.0,
         }
 
     edges = sorted(((str(a), str(b), n) for (a, b), n in kept.items()), key=lambda e: (int(e[0]), int(e[1])))

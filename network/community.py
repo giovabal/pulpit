@@ -1,11 +1,14 @@
+import math
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from itertools import combinations
 from typing import Any
 
 from django.utils.text import slugify
 
+from network.parameters import FixedParameter
 from network.tokens import TokenInstance, TokenParam, TokenSpec, base_keys_for, canonical_key, parse_tokens
 from network.utils import tie_weight_key, to_undirected_sum
 from webapp.models import Label, LabelGroup
@@ -157,6 +160,10 @@ StrategySpec = TokenSpec
 # token machinery's "auto") resolves at compute time to the weighted edge density of the graph CPM
 # runs on — CPM at the Reichardt–Bornholdt Erdős–Rényi null (see cpm_density_resolution).
 SBM_DEFAULT_MODE = "NESTED"
+#: Edge-covariate model of an SBM token that omits ``weights``: empty = the binary (unweighted) fit.
+SBM_DEFAULT_WEIGHTS = ""
+#: Refinement of an SBM / SBM_ASSORTATIVE token that omits ``refine``: empty = the single point estimate.
+SBM_DEFAULT_REFINE = ""
 CONSENSUS_DEFAULT_THRESHOLD = 0.5
 # leidenalg's own default coupling weight; higher ω = smoother, more persistent communities
 # across years, lower ω = each year re-partitioned nearly independently.
@@ -205,7 +212,7 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             StrategyParam(
                 "weights",
                 "enum",
-                "",
+                SBM_DEFAULT_WEIGHTS,
                 choices=("POISSON", "EXPONENTIAL"),
                 label="Weights",
                 help="Edge-covariate model for a weighted SBM fit (Peixoto 2018). Empty = binary fit on the "
@@ -216,7 +223,7 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             StrategyParam(
                 "refine",
                 "enum",
-                "",
+                SBM_DEFAULT_REFINE,
                 choices=("MCMC",),
                 label="Refine",
                 help="Empty = single minimum-description-length fit. MCMC equilibrates the fit and samples "
@@ -262,7 +269,7 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             StrategyParam(
                 "refine",
                 "enum",
-                "",
+                SBM_DEFAULT_REFINE,
                 choices=("MCMC",),
                 label="Refine",
                 help="Empty = single greedy fit. MCMC equilibrates the fit and samples the posterior, "
@@ -467,6 +474,428 @@ def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> Com
     return community_map
 
 
+# ── Fixed parameters of the detectors ─────────────────────────────────────────
+#
+# Every value below is fixed in the code (not a run option) and is passed explicitly where it is used —
+# library defaults included — so FIXED_PARAMETERS (written to the export's PARAMETERS.md) is read from
+# the very values the detectors run with.
+
+#: Seed of every leidenalg optimisation (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LEIDEN_TEMPORAL, CONSENSUS).
+LEIDEN_SEED = 0
+#: Leiden iterations per optimisation — leidenalg's own default (a negative value would iterate until no
+#: further improvement).
+LEIDEN_N_ITERATIONS = 2
+#: Largest community leidenalg may form, in nodes — leidenalg's own default (0 = no limit).
+LEIDEN_MAX_COMM_SIZE = 0
+#: Modularity resolution γ of LEIDEN, LEIDEN_DIRECTED, LOUVAIN and the CONSENSUS clustering, and of the
+#: modularity community_stats reports. leidenalg's ModularityVertexPartition has no resolution parameter (it
+#: is standard modularity, γ = 1); networkx's Louvain and modularity receive it explicitly.
+MODULARITY_RESOLUTION = 1
+#: Seed of networkx's Louvain, which randomises the node-visit order.
+LOUVAIN_SEED = 0
+#: Minimum modularity gain for Louvain to go on to a further aggregation level — networkx's own default.
+LOUVAIN_THRESHOLD = 1e-07
+#: Maximum number of Louvain aggregation levels — networkx's own default (None = no limit).
+LOUVAIN_MAX_LEVEL = None
+#: Whether the single-graph detectors put every isolated node into one shared community (the first
+#: isolated node's, by id) instead of leaving each as its own singleton community.
+MERGE_ISOLATED_NODES = True
+#: KCORE coreness floor: isolated nodes (coreness 0) are folded into the 1-shell, the outermost community.
+KCORE_MIN_SHELL = 1
+#: Default CPM resolution γ of a LEIDEN_CPM / LEIDEN_TEMPORAL token that omits ``resolution`` (or gives
+#: ``auto``) — the rule :func:`cpm_density_resolution` applies, to the graph (or each year slice) CPM runs on.
+CPM_DEFAULT_RESOLUTION_RULE = (
+    "γ = Σ w_ij / (n(n−1)/2): the weighted edge density of the undirected W+Wᵀ projection, on the raw tie "
+    "weights, self-loops excluded (0 when n < 2)"
+)
+#: CPM resolution of LEIDEN_TEMPORAL's interslice coupling layer, as in leidenalg.find_partition_temporal.
+TEMPORAL_INTERSLICE_RESOLUTION = 0
+#: Weight of every layer (each year slice and the interslice layer) in LEIDEN_TEMPORAL's joint quality —
+#: leidenalg's own default (``layer_weights=None`` → 1 per layer).
+TEMPORAL_LAYER_WEIGHT = 1
+#: How LEIDEN_TEMPORAL's full-range column summarises the per-year partitions (detect_leiden_temporal).
+TEMPORAL_PLURALITY_RULE = (
+    "each channel's most frequent community across the year slices it appears in; ties go to its latest "
+    "year's community when that is among the tied, else to the smallest community id"
+)
+#: How CONSENSUS turns the input partitions into one (detect_consensus).
+CONSENSUS_CLUSTERING_RULE = (
+    "one pass: Leiden modularity clustering of the consensus graph, which links two channels when the share "
+    "of input partitions co-assigning them is ≥ τ, weighted by that share"
+)
+#: Seed of every SBM / SBM_ASSORTATIVE fit: graph-tool's own generator (``seed_rng``) and numpy's global
+#: one, which graph-tool's Python layer draws from (nested-level shuffles, MCMC sweeps, partition modes).
+#: Non-zero: graph-tool reads ``seed_rng(0)`` as "use the system's entropy source".
+SBM_SEED = 42
+#: SBM fits the degree-corrected block model — graph-tool's BlockState default.
+SBM_DEGREE_CORRECTED = True
+#: SBM minimum-description-length fit: merge-split sweeps per multilevel step and their inverse temperature
+#: (∞ = greedy descent) — graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl defaults.
+SBM_FIT_NITER = 1
+SBM_FIT_BETA = math.inf
+# SBM(refine=MCMC) run lengths: `wait` bounds the multiflip equilibration phase, `samples` is the
+# number of posterior partitions collected for the marginals. Modest by graph-tool-docs standards
+# (which use wait=1000), sized for Pulpit's few-hundred-to-few-thousand-node citation graphs.
+SBM_MCMC_WAIT = 100
+SBM_MCMC_SAMPLES = 100
+#: refine=MCMC equilibration ends once the ``wait`` criterion has been met this many times, a sweep counting
+#: as a change when its relative entropy change is at least ``epsilon`` — graph-tool's mcmc_equilibrate
+#: defaults.
+SBM_MCMC_NBREAKS = 2
+SBM_MCMC_EPSILON = 0
+#: refine=MCMC: merge-split sweeps per MCMC step (equilibration and sampling alike — one posterior sample is
+#: taken per step).
+SBM_MCMC_SWEEP_NITER = 10
+#: refine=MCMC inverse temperature — graph-tool's default (1 = sampling the posterior itself).
+SBM_MCMC_BETA = 1.0
+#: refine=MCMC moves are graph-tool's merge-split (multiflip) moves — mcmc_equilibrate's default.
+SBM_MCMC_MULTIFLIP = True
+#: Empty hierarchy levels appended to a nested SBM fit before refine=MCMC, so the hierarchy can grow during
+#: sampling — graph-tool's documented equilibration pattern.
+SBM_NESTED_PAD_LEVELS = 4
+#: refine=MCMC partition mode (Peixoto 2021, ``PartitionModeState``): align the sample labels first
+#: (graph-tool's default) and iterate the alignment until it converges.
+SBM_MODE_RELABEL = True
+SBM_MODE_CONVERGE = True
+# Zero-temperature merge-split sweeps for the planted-partition greedy fit — the value used in
+# graph-tool's own PPBlockState documentation example.
+PP_GREEDY_NITER = 1000
+#: Inverse temperature of the planted-partition greedy fit (∞ = zero temperature).
+PP_GREEDY_BETA = math.inf
+
+_SOURCE = "network/community.py"
+_LEIDENALG_STRATEGIES = ("LEIDEN", "LEIDEN_DIRECTED", "LEIDEN_CPM", "LEIDEN_TEMPORAL", "CONSENSUS")
+_MERGING_STRATEGIES = ("LEIDEN", "LEIDEN_DIRECTED", "LEIDEN_CPM", "LOUVAIN", "SBM", "SBM_ASSORTATIVE", "CONSENSUS")
+_SBM_STRATEGIES = ("SBM", "SBM_ASSORTATIVE")
+
+
+def _per_strategy(
+    strategies: tuple[str, ...], *, name: str, value: object, affects: str, constant: str, note: str = ""
+) -> tuple[FixedParameter, ...]:
+    """One :class:`FixedParameter` per strategy family sharing a constant, scoped ``strategy:<TOKEN>``."""
+    return tuple(
+        FixedParameter(
+            name=name,
+            value=value,
+            scope=f"strategy:{strategy}",
+            affects=affects,
+            source=f"{_SOURCE}: {constant}",
+            note=note,
+        )
+        for strategy in strategies
+    )
+
+
+#: The values fixed in this module that shape community detection (``PARAMETERS.md``). Strategy parameters
+#: given in a token, ``--community-backbone-alpha`` and the palette are run options, not listed here; the
+#: value a strategy uses for an *omitted* token parameter is.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    *_per_strategy(
+        _LEIDENALG_STRATEGIES,
+        name="Leiden random seed",
+        value=LEIDEN_SEED,
+        affects="Seeds leidenalg's optimiser, so the node-visit order — and hence the partition — is reproducible.",
+        constant="LEIDEN_SEED",
+    ),
+    *_per_strategy(
+        _LEIDENALG_STRATEGIES,
+        name="Leiden iterations",
+        value=LEIDEN_N_ITERATIONS,
+        affects="Number of full Leiden iterations (local moves, refinement, aggregation) per optimisation; "
+        "further iterations can only raise the quality function.",
+        constant="LEIDEN_N_ITERATIONS",
+        note="leidenalg's own default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _LEIDENALG_STRATEGIES,
+        name="Leiden maximum community size",
+        value=LEIDEN_MAX_COMM_SIZE,
+        affects="Largest community, in channels, the Leiden optimiser may form; 0 = no limit.",
+        constant="LEIDEN_MAX_COMM_SIZE",
+        note="leidenalg's own default, passed explicitly.",
+    ),
+    *_per_strategy(
+        ("LEIDEN", "LEIDEN_DIRECTED", "LOUVAIN", "CONSENSUS"),
+        name="Modularity resolution γ",
+        value=MODULARITY_RESOLUTION,
+        affects="Resolution of the modularity objective the partition maximises: 1 = standard modularity; a "
+        "higher value would favour more, smaller communities.",
+        constant="MODULARITY_RESOLUTION",
+        note="Inherent to leidenalg's ModularityVertexPartition (LEIDEN, LEIDEN_DIRECTED, the CONSENSUS "
+        "clustering), which takes no resolution parameter; passed explicitly to networkx's Louvain, whose own "
+        "default it is.",
+    ),
+    *_per_strategy(
+        _MERGING_STRATEGIES,
+        name="Merge isolated channels",
+        value=MERGE_ISOLATED_NODES,
+        affects="Channels with no tie in the graph the detection ran on all share one community (the first "
+        "isolated channel's, by id) instead of each forming its own singleton community.",
+        constant="MERGE_ISOLATED_NODES",
+    ),
+    FixedParameter(
+        name="CPM resolution γ when omitted",
+        value=CPM_DEFAULT_RESOLUTION_RULE,
+        scope="strategy:LEIDEN_CPM",
+        affects="A LEIDEN_CPM token without a resolution (or with resolution=auto) runs at this γ, so a "
+        "community is a group denser than the network as a whole, whatever the scale of the weights.",
+        source=f"{_SOURCE}: CPM_DEFAULT_RESOLUTION_RULE",
+        note="CPM at γ = density is the Reichardt & Bornholdt (2006) quality with an Erdős–Rényi null at "
+        "γ_RB = 1 (cpm_density_resolution).",
+    ),
+    FixedParameter(
+        name="Slice resolution γ when omitted",
+        value=CPM_DEFAULT_RESOLUTION_RULE,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="A LEIDEN_TEMPORAL token without a resolution (or with resolution=auto) gives each year slice "
+        "its own γ by this rule, computed on that slice.",
+        source=f"{_SOURCE}: CPM_DEFAULT_RESOLUTION_RULE",
+        note="A per-slice null model, as in Mucha et al. (2010) (temporal_slice_resolutions).",
+    ),
+    FixedParameter(
+        name="Coupling ω when omitted",
+        value=TEMPORAL_DEFAULT_INTERSLICE,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="Weight of the identity link tying each channel to itself in adjacent years when a "
+        "LEIDEN_TEMPORAL token omits interslice; higher = smoother, more persistent communities across years.",
+        source=f"{_SOURCE}: TEMPORAL_DEFAULT_INTERSLICE",
+        note="leidenalg's own default coupling weight.",
+    ),
+    FixedParameter(
+        name="Interslice-layer resolution",
+        value=TEMPORAL_INTERSLICE_RESOLUTION,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="CPM resolution of the layer holding the identity links: 0, so the coupling only rewards "
+        "keeping a channel in the same community across years and adds no size penalty of its own.",
+        source=f"{_SOURCE}: TEMPORAL_INTERSLICE_RESOLUTION",
+        note="As in leidenalg.find_partition_temporal.",
+    ),
+    FixedParameter(
+        name="Layer weight",
+        value=TEMPORAL_LAYER_WEIGHT,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="Weight of each year slice, and of the interslice layer, in the joint multislice quality; equal "
+        "weights make every year count the same.",
+        source=f"{_SOURCE}: TEMPORAL_LAYER_WEIGHT",
+        note="leidenalg's own default (layer_weights=None), passed explicitly.",
+    ),
+    FixedParameter(
+        name="Full-range plurality rule",
+        value=TEMPORAL_PLURALITY_RULE,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="Sets the full-range LEIDEN_TEMPORAL column (map, tables, exports) — a summary of the per-year "
+        "partitions, not a detection of the full-range graph.",
+        source=f"{_SOURCE}: TEMPORAL_PLURALITY_RULE",
+    ),
+    FixedParameter(
+        name="Louvain random seed",
+        value=LOUVAIN_SEED,
+        scope="strategy:LOUVAIN",
+        affects="Seeds networkx's Louvain, which randomises the node-visit order, so the partition is reproducible.",
+        source=f"{_SOURCE}: LOUVAIN_SEED",
+    ),
+    FixedParameter(
+        name="Louvain level threshold",
+        value=LOUVAIN_THRESHOLD,
+        scope="strategy:LOUVAIN",
+        affects="Louvain stops aggregating once a level raises modularity by less than this.",
+        source=f"{_SOURCE}: LOUVAIN_THRESHOLD",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Louvain maximum levels",
+        value=LOUVAIN_MAX_LEVEL,
+        scope="strategy:LOUVAIN",
+        affects="Maximum number of Louvain aggregation levels; None = no limit (the level threshold stops it).",
+        source=f"{_SOURCE}: LOUVAIN_MAX_LEVEL",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="K-core shell floor",
+        value=KCORE_MIN_SHELL,
+        scope="strategy:KCORE",
+        affects="Isolated channels (coreness 0) are folded into the 1-shell, the outermost community, rather "
+        "than forming a 0-shell of their own.",
+        source=f"{_SOURCE}: KCORE_MIN_SHELL",
+    ),
+    FixedParameter(
+        name="SBM mode when omitted",
+        value=SBM_DEFAULT_MODE,
+        scope="strategy:SBM",
+        affects="An SBM token without a mode fits the nested SBM and reads its partition at the finest level.",
+        source=f"{_SOURCE}: SBM_DEFAULT_MODE",
+        note="Nested SBM: Peixoto (2017).",
+    ),
+    FixedParameter(
+        name="SBM weights when omitted",
+        value=SBM_DEFAULT_WEIGHTS,
+        scope="strategy:SBM",
+        affects="An SBM token without weights (empty) fits the binary citation structure, so the partition is "
+        "invariant to --edge-weight-strategy.",
+        source=f"{_SOURCE}: SBM_DEFAULT_WEIGHTS",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="SBM refinement when omitted",
+        value=SBM_DEFAULT_REFINE,
+        affects="A token without refine (empty) reports the single point estimate — no posterior sampling and "
+        "no confidence column.",
+        constant="SBM_DEFAULT_REFINE",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="graph-tool seed",
+        value=SBM_SEED,
+        affects="Seeds graph-tool's generator (seed_rng) and numpy's global one for the duration of every fit, "
+        "so the same graph gives the same blocks (and refine=MCMC confidences) on every run.",
+        constant="SBM_SEED",
+        note="Non-zero on purpose: graph-tool reads seed_rng(0) as 'use the system's entropy source'. numpy's "
+        "previous global state is restored after the fit.",
+    ),
+    FixedParameter(
+        name="Degree correction",
+        value=SBM_DEGREE_CORRECTED,
+        scope="strategy:SBM",
+        affects="Fits the degree-corrected SBM, so blocks reflect structure beyond each channel's in/out-degree.",
+        source=f"{_SOURCE}: SBM_DEGREE_CORRECTED",
+        note="Karrer & Newman (2011); graph-tool's BlockState default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Fit sweeps per step",
+        value=SBM_FIT_NITER,
+        scope="strategy:SBM",
+        affects="Merge-split sweeps per step of the multilevel minimum-description-length fit (the nested fit "
+        "repeats the step level by level until the description length stops changing).",
+        source=f"{_SOURCE}: SBM_FIT_NITER",
+        note="graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl default, passed explicitly; "
+        "the other multilevel-sweep settings are graph-tool's defaults.",
+    ),
+    FixedParameter(
+        name="Fit inverse temperature β",
+        value=SBM_FIT_BETA,
+        scope="strategy:SBM",
+        affects="Inverse temperature of the minimum-description-length fit: ∞ = greedy descent.",
+        source=f"{_SOURCE}: SBM_FIT_BETA",
+        note="graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Planted-partition greedy sweeps",
+        value=PP_GREEDY_NITER,
+        scope="strategy:SBM_ASSORTATIVE",
+        affects="Merge-split sweeps of the zero-temperature planted-partition fit.",
+        source=f"{_SOURCE}: PP_GREEDY_NITER",
+        note="The value in graph-tool's PPBlockState documentation example.",
+    ),
+    FixedParameter(
+        name="Planted-partition inverse temperature β",
+        value=PP_GREEDY_BETA,
+        scope="strategy:SBM_ASSORTATIVE",
+        affects="Inverse temperature of the planted-partition fit: ∞ = greedy descent of the description length.",
+        source=f"{_SOURCE}: PP_GREEDY_BETA",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC equilibration wait",
+        value=SBM_MCMC_WAIT,
+        affects="refine=MCMC: equilibration runs until this many steps pass without a new description-length "
+        "record (repeated per the equilibration breaks).",
+        constant="SBM_MCMC_WAIT",
+        note="graph-tool's documentation uses 1000; sized for Pulpit's few-hundred-to-few-thousand-node graphs.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC equilibration breaks",
+        value=SBM_MCMC_NBREAKS,
+        affects="refine=MCMC: equilibration ends once the wait criterion has been met this many times.",
+        constant="SBM_MCMC_NBREAKS",
+        note="graph-tool's mcmc_equilibrate default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC equilibration change threshold",
+        value=SBM_MCMC_EPSILON,
+        affects="refine=MCMC: relative entropy change below which an equilibration step counts as no change; "
+        "0 = only new description-length records reset the wait.",
+        constant="SBM_MCMC_EPSILON",
+        note="graph-tool's mcmc_equilibrate default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC posterior samples",
+        value=SBM_MCMC_SAMPLES,
+        affects="refine=MCMC: posterior partitions collected after equilibration; each channel's community is "
+        "its max-marginal block across them and its confidence the share of samples agreeing.",
+        constant="SBM_MCMC_SAMPLES",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC sweeps per step",
+        value=SBM_MCMC_SWEEP_NITER,
+        affects="refine=MCMC: merge-split sweeps per MCMC step, in equilibration and sampling (one sample per step).",
+        constant="SBM_MCMC_SWEEP_NITER",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC inverse temperature β",
+        value=SBM_MCMC_BETA,
+        affects="refine=MCMC: inverse temperature of the chain; 1 = sampling the posterior itself.",
+        constant="SBM_MCMC_BETA",
+        note="graph-tool's default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="MCMC merge-split moves",
+        value=SBM_MCMC_MULTIFLIP,
+        affects="refine=MCMC: the chain uses merge-split (multiflip) moves rather than single-node moves.",
+        constant="SBM_MCMC_MULTIFLIP",
+        note="graph-tool's mcmc_equilibrate default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Nested hierarchy padding",
+        value=SBM_NESTED_PAD_LEVELS,
+        scope="strategy:SBM",
+        affects="refine=MCMC with mode=NESTED: empty hierarchy levels appended before sampling so the hierarchy "
+        "can grow.",
+        source=f"{_SOURCE}: SBM_NESTED_PAD_LEVELS",
+        note="graph-tool's documented equilibration pattern.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="Partition-mode label alignment",
+        value=SBM_MODE_RELABEL,
+        affects="refine=MCMC: posterior samples are aligned to a common labelling before each channel's "
+        "max-marginal block and confidence are read.",
+        constant="SBM_MODE_RELABEL",
+        note="Peixoto (2021), PartitionModeState; graph-tool's default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="Partition-mode convergence",
+        value=SBM_MODE_CONVERGE,
+        affects="refine=MCMC: the label alignment is iterated until it converges, not run once.",
+        constant="SBM_MODE_CONVERGE",
+        note="Peixoto (2021), PartitionModeState.",
+    ),
+    FixedParameter(
+        name="Consensus threshold τ when omitted",
+        value=CONSENSUS_DEFAULT_THRESHOLD,
+        scope="strategy:CONSENSUS",
+        affects="A CONSENSUS token without a threshold links two channels in the consensus graph only when at "
+        "least this share of the input partitions co-assign them (0.5 = a majority).",
+        source=f"{_SOURCE}: CONSENSUS_DEFAULT_THRESHOLD",
+        note="Lancichinetti & Fortunato (2012).",
+    ),
+    FixedParameter(
+        name="Consensus clustering",
+        value=CONSENSUS_CLUSTERING_RULE,
+        scope="strategy:CONSENSUS",
+        affects="How the consensus partition is drawn from the inputs; Lancichinetti & Fortunato's re-clustering "
+        "loop is not run, as deterministic inputs make it a fixed point after one pass.",
+        source=f"{_SOURCE}: CONSENSUS_CLUSTERING_RULE",
+    ),
+)
+
+
 # ── Shared scaffolding for the per-algorithm detect_* functions ────────────────
 
 
@@ -522,7 +951,7 @@ def _finalize_partition(
     palette_name: str,
     *,
     reverse: bool = False,
-    merge_isolated: bool = True,
+    merge_isolated: bool = MERGE_ISOLATED_NODES,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Common closing for every detect_* function: optional isolated-node merge,
     canonical id renumbering, palette construction."""
@@ -578,7 +1007,7 @@ def detect_kcore(
     undirected = to_undirected_sum(graph)
     undirected.remove_edges_from(nx.selfloop_edges(undirected))
     coreness = nx.core_number(undirected)
-    raw: CommunityMap = {node_id: max(k, 1) for node_id, k in coreness.items()}
+    raw: CommunityMap = {node_id: max(k, KCORE_MIN_SHELL) for node_id, k in coreness.items()}
     shells = sorted(set(raw.values()), reverse=True)
     remap = {shell: index for index, shell in enumerate(shells, start=1)}
     community_map: CommunityMap = {node_id: remap[shell] for node_id, shell in raw.items()}
@@ -596,7 +1025,9 @@ def detect_leiden(
         ig_graph,
         leidenalg.ModularityVertexPartition,
         weights="weight" if weights else None,
-        seed=0,
+        n_iterations=LEIDEN_N_ITERATIONS,
+        max_comm_size=LEIDEN_MAX_COMM_SIZE,
+        seed=LEIDEN_SEED,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
@@ -621,7 +1052,9 @@ def detect_leiden_directed(
         ig_graph,
         leidenalg.ModularityVertexPartition,
         weights="weight" if weights else None,
-        seed=0,
+        n_iterations=LEIDEN_N_ITERATIONS,
+        max_comm_size=LEIDEN_MAX_COMM_SIZE,
+        seed=LEIDEN_SEED,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
@@ -725,7 +1158,9 @@ def detect_leiden_cpm(
         leidenalg.CPMVertexPartition,
         weights=weights if weights else None,
         resolution_parameter=gamma,
-        seed=0,
+        n_iterations=LEIDEN_N_ITERATIONS,
+        max_comm_size=LEIDEN_MAX_COMM_SIZE,
+        seed=LEIDEN_SEED,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
@@ -812,12 +1247,20 @@ def detect_leiden_temporal(
         for year, layer in zip(years, layers, strict=True)
     ]
     interslice_partition = leidenalg.CPMVertexPartition(
-        interslice_layer, resolution_parameter=0, node_sizes="node_size", weights="weight"
+        interslice_layer,
+        resolution_parameter=TEMPORAL_INTERSLICE_RESOLUTION,
+        node_sizes="node_size",
+        weights="weight",
     )
     optimiser = leidenalg.Optimiser()
-    optimiser.max_comm_size = 0
-    optimiser.set_rng_seed(0)
-    optimiser.optimise_partition_multiplex(partitions + [interslice_partition], n_iterations=2)
+    optimiser.max_comm_size = LEIDEN_MAX_COMM_SIZE
+    optimiser.set_rng_seed(LEIDEN_SEED)
+    layers_to_optimise = partitions + [interslice_partition]
+    optimiser.optimise_partition_multiplex(
+        layers_to_optimise,
+        layer_weights=[TEMPORAL_LAYER_WEIGHT] * len(layers_to_optimise),
+        n_iterations=LEIDEN_N_ITERATIONS,
+    )
     union_membership = {(v["slice"], v["id"]): m for v, m in zip(union.vs, partitions[0].membership, strict=True)}
     memberships = [
         [union_membership[(slice_index, v["id"])] for v in slice_graph.vs]
@@ -879,7 +1322,16 @@ def detect_louvain(
     order, unlike the deterministic ``leidenalg`` partitions.
     """
     communities = sorted(
-        nx.community.louvain_communities(to_undirected_sum(graph), weight="weight", seed=0), key=len, reverse=True
+        nx.community.louvain_communities(
+            to_undirected_sum(graph),
+            weight="weight",
+            resolution=MODULARITY_RESOLUTION,
+            threshold=LOUVAIN_THRESHOLD,
+            max_level=LOUVAIN_MAX_LEVEL,
+            seed=LOUVAIN_SEED,
+        ),
+        key=len,
+        reverse=True,
     )
     return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
 
@@ -949,24 +1401,80 @@ def detect_consensus(
         consensus_graph,
         leidenalg.ModularityVertexPartition,
         weights=weights if weights else None,
-        seed=0,
+        n_iterations=LEIDEN_N_ITERATIONS,
+        max_comm_size=LEIDEN_MAX_COMM_SIZE,
+        seed=LEIDEN_SEED,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
 
 
-# SBM(refine=MCMC) run lengths: `wait` bounds the multiflip equilibration phase, `samples` is the
-# number of posterior partitions collected for the marginals. Modest by graph-tool-docs standards
-# (which use wait=1000), sized for Pulpit's few-hundred-to-few-thousand-node citation graphs.
-SBM_MCMC_WAIT = 100
-SBM_MCMC_SAMPLES = 100
+@contextmanager
+def _seeded_graph_tool(gt: Any) -> Iterator[None]:
+    """Seed one SBM-family fit: graph-tool's generator and numpy's global one (``SBM_SEED``).
+
+    graph-tool's Python layer draws from numpy's global generator (nested-level shuffles, MCMC
+    sweeps, partition-mode initialisation), which ``seed_rng`` does not touch, so both are seeded;
+    numpy's previous global state is restored afterwards so the fit leaves no trace on other code.
+    """
+    import numpy as np
+
+    saved = np.random.get_state()  # noqa: NPY002 — graph-tool draws from numpy's legacy global RNG
+    gt.seed_rng(SBM_SEED)
+    np.random.seed(SBM_SEED)  # noqa: NPY002
+    try:
+        yield
+    finally:
+        np.random.set_state(saved)  # noqa: NPY002
+
+
+def _mcmc_partition_mode(
+    gt: Any, state: Any, gt_graph: Any, node_ids: list[str], sample_blocks: Callable[[Any], Any]
+) -> tuple[CommunityMap, dict[str, float]]:
+    """``refine=MCMC`` for the SBM family: equilibrate ``state``, collect ``SBM_MCMC_SAMPLES`` posterior
+    partitions (``sample_blocks(state)`` reads one), and return each node's max-marginal block after label
+    alignment (Peixoto 2021, ``PartitionModeState``) with its assignment confidence — the share of samples
+    agreeing with that block."""
+    import numpy as np
+
+    mcmc_args = {"niter": SBM_MCMC_SWEEP_NITER, "beta": SBM_MCMC_BETA}
+    gt.mcmc_equilibrate(
+        state,
+        wait=SBM_MCMC_WAIT,
+        nbreaks=SBM_MCMC_NBREAKS,
+        epsilon=SBM_MCMC_EPSILON,
+        multiflip=SBM_MCMC_MULTIFLIP,
+        mcmc_args=mcmc_args,
+    )
+
+    partitions: list[Any] = []
+
+    def _collect(s: Any) -> None:
+        partitions.append(np.asarray(sample_blocks(s).a).copy())
+
+    gt.mcmc_equilibrate(
+        state, force_niter=SBM_MCMC_SAMPLES, multiflip=SBM_MCMC_MULTIFLIP, mcmc_args=mcmc_args, callback=_collect
+    )
+    pmode = gt.PartitionModeState(partitions, relabel=SBM_MODE_RELABEL, converge=SBM_MODE_CONVERGE)
+    marginals = pmode.get_marginal(gt_graph)
+    b_max = pmode.get_max(gt_graph)
+    n_samples = len(partitions)
+    community_map: CommunityMap = {}
+    confidence: dict[str, float] = {}
+    for index, node_id in enumerate(node_ids):
+        block = int(b_max[index])
+        community_map[node_id] = block
+        marginal_counts = marginals[index]
+        agree = marginal_counts[block] if block < len(marginal_counts) else 0
+        confidence[node_id] = round(float(agree) / n_samples, 4) if n_samples else 0.0
+    return community_map, confidence
 
 
 def detect_sbm(
     graph: nx.DiGraph,
     palette_name: str,
     mode: str,
-    weights: str = "",
-    refine: str = "",
+    weights: str = SBM_DEFAULT_WEIGHTS,
+    refine: str = SBM_DEFAULT_REFINE,
     *,
     reverse: bool = False,
 ) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
@@ -1051,74 +1559,54 @@ def detect_sbm(
             "package manager — it is not available from pip. See docs/community-detection.md."
         ) from exc
 
-    gt.seed_rng(0)
-    node_ids, node_id_map = _node_id_index(graph)
-    gt_graph = gt.Graph(directed=True)
-    gt_graph.add_vertex(len(node_ids))
-    state_args: dict[str, Any] = {}
-    if weights:
-        rec = gt_graph.new_edge_property("int" if weights == "POISSON" else "double")
-        gt_graph.add_edge_list(
-            [(node_id_map[s], node_id_map[t], w) for (s, t), w in zip(graph.edges(), edge_weights, strict=True)],
-            eprops=[rec],
-        )
-        state_args = {"recs": [rec], "rec_types": ["discrete-poisson" if weights == "POISSON" else "real-exponential"]}
-    else:
-        gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
+    with _seeded_graph_tool(gt):
+        node_ids, node_id_map = _node_id_index(graph)
+        gt_graph = gt.Graph(directed=True)
+        gt_graph.add_vertex(len(node_ids))
+        state_args: dict[str, Any] = {"deg_corr": SBM_DEGREE_CORRECTED}
+        if weights:
+            rec = gt_graph.new_edge_property("int" if weights == "POISSON" else "double")
+            gt_graph.add_edge_list(
+                [(node_id_map[s], node_id_map[t], w) for (s, t), w in zip(graph.edges(), edge_weights, strict=True)],
+                eprops=[rec],
+            )
+            state_args["recs"] = [rec]
+            state_args["rec_types"] = ["discrete-poisson" if weights == "POISSON" else "real-exponential"]
+        else:
+            gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in graph.edges()])
 
-    nested = mode.upper() != "FLAT"
-    if nested:
-        state = gt.minimize_nested_blockmodel_dl(gt_graph, state_args=state_args)
-    else:
-        state = gt.minimize_blockmodel_dl(gt_graph, state_args=state_args)
-
-    confidence: dict[str, float] | None = None
-    community_map: CommunityMap
-    if refine == "MCMC":
-        import numpy as np
-
+        nested = mode.upper() != "FLAT"
+        fit_args = {"niter": SBM_FIT_NITER, "beta": SBM_FIT_BETA}
         if nested:
-            # Pad the hierarchy with empty levels so it can grow during sampling, and switch the
-            # nested state to sampling mode — graph-tool's documented equilibration pattern.
-            state = state.copy(bs=state.get_bs() + [np.zeros(1)] * 4, sampling=True)
-        gt.mcmc_equilibrate(state, wait=SBM_MCMC_WAIT, mcmc_args={"niter": 10})
+            state = gt.minimize_nested_blockmodel_dl(gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args)
+        else:
+            state = gt.minimize_blockmodel_dl(gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args)
 
-        partitions: list[Any] = []
+        confidence: dict[str, float] | None = None
+        community_map: CommunityMap
+        if refine == "MCMC":
+            import numpy as np
 
-        def _collect(s: Any) -> None:
-            b = s.levels[0].b if nested else s.b
-            partitions.append(np.asarray(b.a).copy())
-
-        gt.mcmc_equilibrate(state, force_niter=SBM_MCMC_SAMPLES, mcmc_args={"niter": 10}, callback=_collect)
-        pmode = gt.PartitionModeState(partitions, converge=True)
-        marginals = pmode.get_marginal(gt_graph)
-        b_max = pmode.get_max(gt_graph)
-        n_samples = len(partitions)
-        community_map = {}
-        confidence = {}
-        for index, node_id in enumerate(node_ids):
-            block = int(b_max[index])
-            community_map[node_id] = block
-            counts = marginals[index]
-            agree = counts[block] if block < len(counts) else 0
-            confidence[node_id] = round(float(agree) / n_samples, 4) if n_samples else 0.0
-    else:
-        blocks = (state.get_levels()[0] if nested else state).get_blocks()
-        community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+            if nested:
+                # Pad the hierarchy with empty levels so it can grow during sampling — graph-tool's documented
+                # equilibration pattern. (Older releases also took ``sampling=True`` here; graph-tool ≥ 2.4x
+                # dropped it — nested states are always sampling-ready — and warns on the unknown keyword.)
+                state = state.copy(bs=state.get_bs() + [np.zeros(1)] * SBM_NESTED_PAD_LEVELS)
+            community_map, confidence = _mcmc_partition_mode(
+                gt, state, gt_graph, node_ids, lambda s: s.levels[0].b if nested else s.b
+            )
+        else:
+            blocks = (state.get_levels()[0] if nested else state).get_blocks()
+            community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
 
     final_map, palette = _finalize_partition(graph, community_map, palette_name, reverse=reverse)
     return final_map, palette, confidence
 
 
-# Zero-temperature merge-split sweeps for the planted-partition greedy fit — the value used in
-# graph-tool's own PPBlockState documentation example.
-PP_GREEDY_NITER = 1000
-
-
 def detect_sbm_assortative(
     graph: nx.DiGraph,
     palette_name: str,
-    refine: str = "",
+    refine: str = SBM_DEFAULT_REFINE,
     *,
     reverse: bool = False,
 ) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
@@ -1158,44 +1646,23 @@ def detect_sbm_assortative(
             "system package manager — it is not available from pip. See docs/community-detection.md."
         ) from exc
 
-    import numpy as np
+    with _seeded_graph_tool(gt):
+        node_ids, node_id_map = _node_id_index(graph)
+        undirected = to_undirected_sum(graph)
+        gt_graph = gt.Graph(directed=False)
+        gt_graph.add_vertex(len(node_ids))
+        gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()])
 
-    gt.seed_rng(0)
-    node_ids, node_id_map = _node_id_index(graph)
-    undirected = to_undirected_sum(graph)
-    gt_graph = gt.Graph(directed=False)
-    gt_graph.add_vertex(len(node_ids))
-    gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()])
+        state = gt.PPBlockState(gt_graph)
+        state.multiflip_mcmc_sweep(beta=PP_GREEDY_BETA, niter=PP_GREEDY_NITER)
 
-    state = gt.PPBlockState(gt_graph)
-    state.multiflip_mcmc_sweep(beta=np.inf, niter=PP_GREEDY_NITER)
-
-    confidence: dict[str, float] | None = None
-    community_map: CommunityMap
-    if refine == "MCMC":
-        gt.mcmc_equilibrate(state, wait=SBM_MCMC_WAIT, mcmc_args={"niter": 10})
-
-        partitions: list[Any] = []
-
-        def _collect(s: Any) -> None:
-            partitions.append(np.asarray(s.get_blocks().a).copy())
-
-        gt.mcmc_equilibrate(state, force_niter=SBM_MCMC_SAMPLES, mcmc_args={"niter": 10}, callback=_collect)
-        pmode = gt.PartitionModeState(partitions, converge=True)
-        marginals = pmode.get_marginal(gt_graph)
-        b_max = pmode.get_max(gt_graph)
-        n_samples = len(partitions)
-        community_map = {}
-        confidence = {}
-        for index, node_id in enumerate(node_ids):
-            block = int(b_max[index])
-            community_map[node_id] = block
-            marginal_counts = marginals[index]
-            agree = marginal_counts[block] if block < len(marginal_counts) else 0
-            confidence[node_id] = round(float(agree) / n_samples, 4) if n_samples else 0.0
-    else:
-        blocks = state.get_blocks()
-        community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
+        confidence: dict[str, float] | None = None
+        community_map: CommunityMap
+        if refine == "MCMC":
+            community_map, confidence = _mcmc_partition_mode(gt, state, gt_graph, node_ids, lambda s: s.get_blocks())
+        else:
+            blocks = state.get_blocks()
+            community_map = {node_ids[index]: int(blocks[index]) for index in range(len(node_ids))}
 
     final_map, palette = _finalize_partition(graph, community_map, palette_name, reverse=reverse)
     return final_map, palette, confidence
@@ -1273,8 +1740,8 @@ def detect(
             graph,
             palette_name,
             str(params.get("mode", SBM_DEFAULT_MODE)),
-            str(params.get("weights", "") or ""),
-            str(params.get("refine", "") or ""),
+            str(params.get("weights", SBM_DEFAULT_WEIGHTS) or ""),
+            str(params.get("refine", SBM_DEFAULT_REFINE) or ""),
             reverse=reverse,
         )
         _write_confidence(graph, channel_dict, instance, confidence)
@@ -1283,7 +1750,7 @@ def detect(
         community_map, community_palette, confidence = detect_sbm_assortative(
             graph,
             palette_name,
-            str(params.get("refine", "") or ""),
+            str(params.get("refine", SBM_DEFAULT_REFINE) or ""),
             reverse=reverse,
         )
         _write_confidence(graph, channel_dict, instance, confidence)

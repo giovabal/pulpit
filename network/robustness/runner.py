@@ -34,6 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from network.parameters import FixedParameter
 from network.robustness.attacks import (
     ALL_STRATEGIES,
     DEFAULT_STRATEGIES,
@@ -46,6 +47,8 @@ from network.robustness.attacks import (
 )
 from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.robustness.metrics import (
+    CRITICAL_DROP_TO,
+    EFFICIENCY_GRID_POINTS,
     attack_curve,
     critical_threshold,
     efficiency_curve,
@@ -54,7 +57,7 @@ from network.robustness.metrics import (
 )
 from network.robustness.modular import modular_robustness_curves
 from network.robustness.null_model import bh_adjust, empirical_p, null_distribution, z_score
-from network.robustness.scenarios import ban_wave_rows
+from network.robustness.scenarios import BAN_WAVE_MIN_BLOCK_SIZE, ban_wave_rows
 
 import networkx as nx
 import numpy as np
@@ -65,6 +68,21 @@ _METRIC_KEYS: dict[str, str] = {"wcc": "WCC", "scc": "SCC", "reach": "REACH", "s
 # orders — each grid point costs an all-pairs Dijkstra, so the full
 # n_random_runs averaging used for the (cheap) residual sizes is off the table.
 _EFFICIENCY_ORDERS_CAP = 10
+
+#: The values fixed in this module (``PARAMETERS.md``).  α, the strategies, the random-order runs,
+#: the null graphs and model, the seed, the REACH sample and the α grid are run options
+#: (``--robustness-*``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Random-strategy efficiency orders",
+        value=_EFFICIENCY_ORDERS_CAP,
+        scope="robustness",
+        affects="The random strategy's weighted-efficiency curve is averaged over at most this many of its "
+        "random orders (its residual-size curves use all --robustness-runs of them).",
+        source="network/robustness/runner.py: _EFFICIENCY_ORDERS_CAP",
+        note="Each efficiency grid point costs an all-pairs Dijkstra.",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -254,7 +272,7 @@ def run_robustness(
             "label": strategy_label(canonical),
             **{f"curve_{m}": mean_curves[m] for m in _METRICS},
             **{f"r_{m}": r_index(mean_curves[m]) for m in _METRICS},
-            **{f"fc_{m}": critical_threshold(mean_curves[m]) for m in _METRICS},
+            **{f"fc_{m}": critical_threshold(mean_curves[m], drop_to=CRITICAL_DROP_TO) for m in _METRICS},
             "null": None,
         }
 
@@ -265,7 +283,10 @@ def run_robustness(
     eff_curves: dict[str, list[float]] = {}
     for canonical in resolved:
         progress(f"efficiency/{canonical}")
-        per_order = [efficiency_curve(backbone, order) for order in strategy_orders[canonical][:_EFFICIENCY_ORDERS_CAP]]
+        per_order = [
+            efficiency_curve(backbone, order, n_points=EFFICIENCY_GRID_POINTS)
+            for order in strategy_orders[canonical][:_EFFICIENCY_ORDERS_CAP]
+        ]
         eff_fractions = per_order[0][0]
         eff_curves[canonical] = _mean_curve([values for _, values in per_order])
 
@@ -345,7 +366,14 @@ def run_robustness(
         ban_waves = {}
         for partition_name, partition in partitions.items():
             progress(f"banwave/{partition_name}")
-            rows = ban_wave_rows(backbone, partition, random_curves, reach_sample=config.reach_sample, rng=rng)
+            rows = ban_wave_rows(
+                backbone,
+                partition,
+                random_curves,
+                reach_sample=config.reach_sample,
+                rng=rng,
+                min_block_size=BAN_WAVE_MIN_BLOCK_SIZE,
+            )
             if rows:
                 ban_waves[partition_name] = rows
         ban_waves = ban_waves or None

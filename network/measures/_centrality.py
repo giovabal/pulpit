@@ -2,12 +2,58 @@ import logging
 from math import isnan
 
 from network.measures._base import apply_measure, compute_neighbour_community_participation
+from network.parameters import FixedParameter
 from network.utils import GraphData
 
 import networkx as nx
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# ── Fixed parameters ──────────────────────────────────────────────────────────────────────────────
+# Values the measures below rely on, NetworkX defaults included, named here and passed explicitly so
+# PARAMETERS.md reads them from the very constants the computation uses.
+
+#: PageRank damping factor α (NetworkX default).
+PAGERANK_ALPHA = 0.85
+#: PageRank power-iteration cap (NetworkX default); a run that has not converged by then skips the score.
+PAGERANK_MAX_ITER = 100
+#: PageRank convergence tolerance (NetworkX default): iteration stops once the L1 change is below N · tol.
+PAGERANK_TOL = 1.0e-6
+#: Edge attribute the PageRank walk is weighted by (the run's edge weight, ×10/max rescaled).
+PAGERANK_WEIGHT = "weight"
+#: PageRank teleport distribution: ``None`` = uniform over all nodes (NetworkX default).
+PAGERANK_PERSONALIZATION = None
+#: PageRank dangling-node redistribution: ``None`` = the teleport distribution, i.e. uniform (NetworkX default).
+PAGERANK_DANGLING = None
+#: HITS power-iteration cap; the last iterate is used if it has not converged by then.
+HITS_MAX_ITER = 100
+#: HITS convergence tolerance: iteration stops once the L1 change of the max-scaled hub vector is below it.
+HITS_TOL = 1.0e-8
+#: Edge attribute the HITS adjacency is weighted by (the run's edge weight).
+HITS_WEIGHT = "weight"
+#: Edge attribute Burt's constraint weighs ties by (the run's edge weight).
+BURT_CONSTRAINT_WEIGHT = "weight"
+#: Decimal places Burt's constraint is reported to.
+BURT_CONSTRAINT_DECIMALS = 6
+#: Edge attribute the local clustering coefficient weighs triangles by: ``None`` = unweighted.
+LOCAL_CLUSTERING_WEIGHT = None
+#: Decimal places node reciprocity is reported to.
+RECIPROCITY_DECIMALS = 4
+# Guimerà & Amaral (2005) within-module-degree-z / participation-coefficient role thresholds.
+#: Within-module z-score at or above which a node is a hub.
+GA_Z_HUB = 2.5
+#: Non-hub participation upper bounds: ultra-peripheral ≤ 0.05 < peripheral ≤ 0.62 < connector ≤ 0.80 < kinless.
+GA_P_ULTRA_PERIPHERAL = 0.05
+GA_P_PERIPHERAL = 0.62
+GA_P_CONNECTOR = 0.80
+#: Hub participation upper bounds: provincial hub ≤ 0.30 < connector hub ≤ 0.75 < kinless hub.
+GA_P_PROVINCIAL_HUB = 0.30
+GA_P_CONNECTOR_HUB = 0.75
+#: Delta degrees of freedom of the within-module degree standard deviation: 0 = population SD (NumPy default).
+MODULE_Z_STD_DDOF = 0
+#: Decimal places the within-module z-score and participation coefficient are reported to (roles use exact values).
+MODULE_ROLE_DECIMALS = 4
 
 
 def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -23,8 +69,9 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
         ``PR(v) = (1 - α)/N + α · Σ_u PR(u) · w(u→v) / Σ_w w(u→w)``
 
     propagates prestige toward sources without any orientation tricks. NetworkX's
-    ``nx.pagerank`` is used with its defaults (``α = 0.85`` damping, dangling
-    nodes redistributed uniformly, edge weight = ``"weight"``); the random walk
+    ``nx.pagerank`` is called with its default settings passed explicitly
+    (``PAGERANK_ALPHA`` = 0.85 damping, uniform teleport, dangling nodes
+    redistributed uniformly, edge weight = ``"weight"``); the random walk
     is scale-invariant to ``build_graph``'s global max-10 rescaling. See
     `docs/network-measures.md#pagerank` for the prose write-up.
 
@@ -33,7 +80,15 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     """
     key = "pagerank"
     try:
-        pagerank_values: dict[str, float] = nx.pagerank(graph)
+        pagerank_values: dict[str, float] = nx.pagerank(
+            graph,
+            alpha=PAGERANK_ALPHA,
+            personalization=PAGERANK_PERSONALIZATION,
+            max_iter=PAGERANK_MAX_ITER,
+            tol=PAGERANK_TOL,
+            weight=PAGERANK_WEIGHT,
+            dangling=PAGERANK_DANGLING,
+        )
     except Exception as exc:  # noqa: BLE001
         # PageRank rarely fails, but power iteration can diverge on adversarial /
         # degenerate graphs; degrade gracefully rather than aborting the whole
@@ -47,7 +102,7 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
 
 
 def compute_hits(
-    graph: nx.DiGraph, *, max_iter: int = 100, tol: float = 1.0e-8
+    graph: nx.DiGraph, *, max_iter: int = HITS_MAX_ITER, tol: float = HITS_TOL
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Weighted HITS hub & authority scores (Kleinberg 1999, weighted variant).
 
@@ -72,7 +127,7 @@ def compute_hits(
     n = len(nodes)
     if n == 0:
         return {}, {}
-    a_mat = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight="weight", dtype=float, format="csr")
+    a_mat = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight=HITS_WEIGHT, dtype=float, format="csr")
     at_mat = a_mat.T.tocsr()
     hub = np.full(n, 1.0 / n)
     for _ in range(max_iter):
@@ -104,7 +159,7 @@ def compute_hits(
 def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add weighted HITS hub and authority scores to each node."""
     try:
-        hubs, authorities = compute_hits(graph)
+        hubs, authorities = compute_hits(graph, max_iter=HITS_MAX_ITER, tol=HITS_TOL)
     except Exception as exc:  # noqa: BLE001
         # Degrade gracefully on degenerate graphs (e.g. a lone self-referencing
         # channel) instead of aborting the whole export.
@@ -192,10 +247,10 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     See ``docs/network-measures.md#burts-constraint`` for the prose write-up.
     """
     key = "burt_constraint"
-    values: dict[str, float] = nx.constraint(graph, weight="weight")
+    values: dict[str, float] = nx.constraint(graph, weight=BURT_CONSTRAINT_WEIGHT)
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
-        node[key] = None if (val is None or isnan(val)) else round(val, 6)
+        node[key] = None if (val is None or isnan(val)) else round(val, BURT_CONSTRAINT_DECIMALS)
     return [(key, "Burt's Constraint")]
 
 
@@ -215,7 +270,7 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     """
     # float(): nx.clustering yields int 0 for nodes with degree < 2 and float
     # elsewhere; mixed types corrupt GEXF/GraphML attribute typing on export.
-    values = {node: float(value) for node, value in nx.clustering(graph).items()}
+    values = {node: float(value) for node, value in nx.clustering(graph, weight=LOCAL_CLUSTERING_WEIGHT).items()}
     return apply_measure(graph_data, values, "local_clustering", "Local Clustering")
 
 
@@ -246,29 +301,25 @@ def apply_reciprocity(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[st
         pred = set(graph.predecessors(node)) - {node}
         succ = set(graph.successors(node)) - {node}
         total = len(pred) + len(succ)
-        values[node] = round(2 * len(pred & succ) / total, 4) if total else None
+        values[node] = round(2 * len(pred & succ) / total, RECIPROCITY_DECIMALS) if total else None
     return apply_measure(graph_data, values, "reciprocity", "Reciprocity", default=None)
-
-
-# Guimerà & Amaral (2005) within-module-degree-z / participation-coefficient role thresholds.
-_GA_Z_HUB = 2.5
 
 
 def _ga_role(z: float, participation: float) -> str:
     """Map a (within-module z-score, participation coefficient) pair to one of the seven
     Guimerà & Amaral (2005) node roles."""
-    if z < _GA_Z_HUB:  # non-hub
-        if participation <= 0.05:
+    if z < GA_Z_HUB:  # non-hub
+        if participation <= GA_P_ULTRA_PERIPHERAL:
             return "Ultra-peripheral"
-        if participation <= 0.62:
+        if participation <= GA_P_PERIPHERAL:
             return "Peripheral"
-        if participation <= 0.80:
+        if participation <= GA_P_CONNECTOR:
             return "Connector"
         return "Kinless"
     # hub
-    if participation <= 0.30:
+    if participation <= GA_P_PROVINCIAL_HUB:
         return "Provincial hub"
-    if participation <= 0.75:
+    if participation <= GA_P_CONNECTOR_HUB:
         return "Connector hub"
     return "Kinless hub"
 
@@ -314,7 +365,7 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
     for node, deg in module_degree.items():
         by_module.setdefault(community_map[node], []).append(deg)
     module_stats: dict[str, tuple[float, float]] = {
-        m: (float(np.mean(degs)), float(np.std(degs))) for m, degs in by_module.items()
+        m: (float(np.mean(degs)), float(np.std(degs, ddof=MODULE_Z_STD_DDOF))) for m, degs in by_module.items()
     }
     participation = compute_neighbour_community_participation(graph, community_map)
 
@@ -327,7 +378,207 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
             continue
         mean, std = module_stats[community_map[nid]]
         z = (module_degree[nid] - mean) / std if std > 0 else 0.0
-        node["within_module_z"] = round(z, 4)
-        node["participation"] = round(participation.get(nid, 0.0), 4)
+        node["within_module_z"] = round(z, MODULE_ROLE_DECIMALS)
+        node["participation"] = round(participation.get(nid, 0.0), MODULE_ROLE_DECIMALS)
         node["module_role"] = _ga_role(z, participation.get(nid, 0.0))
     return [("within_module_z", "Within-module z"), ("participation", "Participation Coefficient")]
+
+
+_SOURCE = "network/measures/_centrality.py"
+_NX_DEFAULT = "NetworkX default, passed explicitly."
+
+
+def _hits_parameters() -> tuple[FixedParameter, ...]:
+    """The HITS settings, once per HITS measure token: hub and authority come from one computation."""
+    return tuple(
+        parameter
+        for scope in ("measure:HITSHUB", "measure:HITSAUTH")
+        for parameter in (
+            FixedParameter(
+                name="HITS maximum iterations",
+                value=HITS_MAX_ITER,
+                scope=scope,
+                affects="Caps the power iteration; a graph that has not converged by then keeps the last "
+                "iterate's hub and authority scores.",
+                source=f"{_SOURCE}: HITS_MAX_ITER",
+                note="Power iteration from a uniform hub vector; scores normalised to sum to 1, as nx.hits.",
+            ),
+            FixedParameter(
+                name="HITS convergence tolerance",
+                value=HITS_TOL,
+                scope=scope,
+                affects="Iteration stops once the L1 change of the max-scaled hub vector falls below this; "
+                "a looser value stops earlier with less precise scores.",
+                source=f"{_SOURCE}: HITS_TOL",
+            ),
+            FixedParameter(
+                name="HITS edge weight",
+                value=HITS_WEIGHT,
+                scope=scope,
+                affects="Hub and authority scores weigh each citation by this edge attribute, the run's edge "
+                "weight, so they follow --edge-weight-strategy.",
+                source=f"{_SOURCE}: HITS_WEIGHT",
+                note="Weighted HITS (Kleinberg 1999, weighted variant).",
+            ),
+        )
+    )
+
+
+#: The values fixed in this module that shape the structural measures (``PARAMETERS.md``).
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="PageRank damping factor α",
+        value=PAGERANK_ALPHA,
+        scope="measure:PAGERANK",
+        affects="Probability the random walk follows a citation rather than teleporting; higher values give "
+        "more weight to the citation structure and less to the uniform teleport.",
+        source=f"{_SOURCE}: PAGERANK_ALPHA",
+        note=f"{_NX_DEFAULT} Brin & Page 1998.",
+    ),
+    FixedParameter(
+        name="PageRank maximum iterations",
+        value=PAGERANK_MAX_ITER,
+        scope="measure:PAGERANK",
+        affects="Caps the power iteration; a graph that has not converged by then gets no PageRank score.",
+        source=f"{_SOURCE}: PAGERANK_MAX_ITER",
+        note=_NX_DEFAULT,
+    ),
+    FixedParameter(
+        name="PageRank convergence tolerance",
+        value=PAGERANK_TOL,
+        scope="measure:PAGERANK",
+        affects="Iteration stops once the L1 change of the score vector falls below N times this value; a "
+        "looser value stops earlier with less precise scores.",
+        source=f"{_SOURCE}: PAGERANK_TOL",
+        note=_NX_DEFAULT,
+    ),
+    FixedParameter(
+        name="PageRank edge weight",
+        value=PAGERANK_WEIGHT,
+        scope="measure:PAGERANK",
+        affects="Each channel's vote is split across the channels it cites in proportion to this edge "
+        "attribute, the run's edge weight, so PageRank follows --edge-weight-strategy.",
+        source=f"{_SOURCE}: PAGERANK_WEIGHT",
+        note=_NX_DEFAULT,
+    ),
+    FixedParameter(
+        name="PageRank teleport distribution",
+        value=PAGERANK_PERSONALIZATION,
+        scope="measure:PAGERANK",
+        affects="None teleports uniformly to every node; a personalisation vector would bias the scores "
+        "toward the channels it favours.",
+        source=f"{_SOURCE}: PAGERANK_PERSONALIZATION",
+        note=_NX_DEFAULT,
+    ),
+    FixedParameter(
+        name="PageRank dangling-node redistribution",
+        value=PAGERANK_DANGLING,
+        scope="measure:PAGERANK",
+        affects="None sends the score of channels citing no one (dangling nodes) back through the teleport "
+        "distribution, i.e. uniformly.",
+        source=f"{_SOURCE}: PAGERANK_DANGLING",
+        note=_NX_DEFAULT,
+    ),
+    *_hits_parameters(),
+    FixedParameter(
+        name="Burt's constraint edge weight",
+        value=BURT_CONSTRAINT_WEIGHT,
+        scope="measure:BURTCONSTRAINT",
+        affects="Ties are weighed by this edge attribute (mutual weight w(u→v) + w(v→u)), so the constraint "
+        "follows --edge-weight-strategy; None would make it unweighted.",
+        source=f"{_SOURCE}: BURT_CONSTRAINT_WEIGHT",
+        note="Burt 1992; nx.constraint symmetrises direction internally.",
+    ),
+    FixedParameter(
+        name="Burt's constraint decimals",
+        value=BURT_CONSTRAINT_DECIMALS,
+        scope="measure:BURTCONSTRAINT",
+        affects="Decimal places Burt's constraint is reported to; channels equal at this precision tie.",
+        source=f"{_SOURCE}: BURT_CONSTRAINT_DECIMALS",
+    ),
+    FixedParameter(
+        name="Local clustering edge weight",
+        value=LOCAL_CLUSTERING_WEIGHT,
+        scope="measure:LOCALCLUSTERING",
+        affects="None counts triangles unweighted, so the coefficient ignores --edge-weight-strategy; an "
+        "attribute name would switch to the weighted (geometric-mean) clustering.",
+        source=f"{_SOURCE}: LOCAL_CLUSTERING_WEIGHT",
+        note="Fagiolo 2007 directed clustering; NetworkX default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Reciprocity decimals",
+        value=RECIPROCITY_DECIMALS,
+        scope="measure:RECIPROCITY",
+        affects="Decimal places node reciprocity is reported to; channels equal at this precision tie.",
+        source=f"{_SOURCE}: RECIPROCITY_DECIMALS",
+    ),
+    FixedParameter(
+        name="Hub threshold (within-module z)",
+        value=GA_Z_HUB,
+        scope="measure:MODULEROLE",
+        affects="Nodes whose within-module degree z-score reaches this are hubs (provincial / connector / "
+        "kinless hub); below it they take a non-hub role.",
+        source=f"{_SOURCE}: GA_Z_HUB",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Ultra-peripheral participation bound",
+        value=GA_P_ULTRA_PERIPHERAL,
+        scope="measure:MODULEROLE",
+        affects="A non-hub with participation at or below this is ultra-peripheral; above it, peripheral or beyond.",
+        source=f"{_SOURCE}: GA_P_ULTRA_PERIPHERAL",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Peripheral participation bound",
+        value=GA_P_PERIPHERAL,
+        scope="measure:MODULEROLE",
+        affects="A non-hub with participation at or below this (and above the ultra-peripheral bound) is "
+        "peripheral; above it, a connector or kinless.",
+        source=f"{_SOURCE}: GA_P_PERIPHERAL",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Connector participation bound",
+        value=GA_P_CONNECTOR,
+        scope="measure:MODULEROLE",
+        affects="A non-hub with participation at or below this (and above the peripheral bound) is a "
+        "connector; above it, kinless.",
+        source=f"{_SOURCE}: GA_P_CONNECTOR",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Provincial-hub participation bound",
+        value=GA_P_PROVINCIAL_HUB,
+        scope="measure:MODULEROLE",
+        affects="A hub with participation at or below this is a provincial hub; above it, a connector or kinless hub.",
+        source=f"{_SOURCE}: GA_P_PROVINCIAL_HUB",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Connector-hub participation bound",
+        value=GA_P_CONNECTOR_HUB,
+        scope="measure:MODULEROLE",
+        affects="A hub with participation at or below this (and above the provincial-hub bound) is a "
+        "connector hub; above it, a kinless hub.",
+        source=f"{_SOURCE}: GA_P_CONNECTOR_HUB",
+        note="Guimerà & Amaral 2005.",
+    ),
+    FixedParameter(
+        name="Within-module z-score SD degrees of freedom",
+        value=MODULE_Z_STD_DDOF,
+        scope="measure:MODULEROLE",
+        affects="The within-module degree is z-scored against the module's population standard deviation "
+        "(ddof 0); ddof 1 would use the sample SD, shrinking every z-score and so the set of hubs.",
+        source=f"{_SOURCE}: MODULE_Z_STD_DDOF",
+        note="NumPy default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Module-role decimals",
+        value=MODULE_ROLE_DECIMALS,
+        scope="measure:MODULEROLE",
+        affects="Decimal places the within-module z-score and participation coefficient are reported to; "
+        "the role labels are assigned from the exact values.",
+        source=f"{_SOURCE}: MODULE_ROLE_DECIMALS",
+    ),
+)

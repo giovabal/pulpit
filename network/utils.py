@@ -4,12 +4,19 @@ from typing import TYPE_CHECKING, Any
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
+from network.parameters import FixedParameter
+
 import networkx as nx
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from webapp.models import Channel
+
+#: The values fixed in this module (``PARAMETERS.md``): none. The period gate (inclusive local-day bounds on
+#: each channel's in-target periods) and the environment window are rules, not tunable values; the
+#: environment depth and the analysis window are run options.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = ()
 
 type GraphData = dict[str, list[dict[str, Any]]]
 type CommunityTableData = dict[str, Any]

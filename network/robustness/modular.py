@@ -17,7 +17,13 @@ non-finite floats).
 
 from typing import Any
 
+from network.parameters import FixedParameter
+
 import networkx as nx
+
+#: Nothing is fixed here beyond the method itself (an edge touching a node outside the partition
+#: counts as inter-community); declared empty so the robustness aggregate covers every module.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = ()
 
 
 def modular_robustness_curves(

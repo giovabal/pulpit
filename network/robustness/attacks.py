@@ -59,6 +59,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from network.parameters import FixedParameter
+
 import networkx as nx
 import numpy as np
 
@@ -66,6 +68,22 @@ import numpy as np
 # use small radii (ℓ = 2–3, bounded by the network diameter); 2 keeps the
 # per-node cost proportional to the two-hop neighbourhood.
 CI_RADIUS = 2
+
+# PageRank attack order (``pagerank`` / ``pagerank_dyn``): networkx's defaults, named and passed
+# explicitly.  Robustness-scoped — independent of the PAGERANK measure's settings.
+ATTACK_PAGERANK_ALPHA = 0.85
+ATTACK_PAGERANK_MAX_ITER = 100
+ATTACK_PAGERANK_TOL = 1.0e-6
+ATTACK_PAGERANK_WEIGHT = "weight"
+ATTACK_PAGERANK_PERSONALIZATION = None
+ATTACK_PAGERANK_DANGLING = None
+
+# Betweenness attack order (``betweenness`` / ``betweenness_dyn``): networkx's defaults, named and
+# passed explicitly.  ``k=None`` is the exact all-sources Brandes computation (no source sampling);
+# endpoints are not counted.  Normalisation scales every score alike, so it cannot change the order.
+ATTACK_BETWEENNESS_K: int | None = None
+ATTACK_BETWEENNESS_NORMALIZED = True
+ATTACK_BETWEENNESS_ENDPOINTS = False
 
 # ── Spec registry ────────────────────────────────────────────────────────────
 
@@ -105,7 +123,15 @@ def _safe_pagerank(g: nx.DiGraph) -> dict[Any, float]:
     # Power iteration can fail on adversarial residual graphs; fall back to
     # in-strength as a structural proxy so the attack loop never aborts.
     try:
-        return nx.pagerank(g)
+        return nx.pagerank(
+            g,
+            alpha=ATTACK_PAGERANK_ALPHA,
+            personalization=ATTACK_PAGERANK_PERSONALIZATION,
+            max_iter=ATTACK_PAGERANK_MAX_ITER,
+            tol=ATTACK_PAGERANK_TOL,
+            weight=ATTACK_PAGERANK_WEIGHT,
+            dangling=ATTACK_PAGERANK_DANGLING,
+        )
     except nx.PowerIterationFailedConvergence:
         return _in_strength(g)
 
@@ -119,7 +145,13 @@ def _weighted_betweenness(g: nx.DiGraph) -> dict[Any, float]:
     h = nx.DiGraph()
     h.add_nodes_from(g.nodes())
     h.add_edges_from((u, v, {"distance": 1.0 / w}) for u, v, w in g.edges(data="weight", default=0.0) if w > 0)
-    return nx.betweenness_centrality(h, weight="distance")
+    return nx.betweenness_centrality(
+        h,
+        k=ATTACK_BETWEENNESS_K,
+        normalized=ATTACK_BETWEENNESS_NORMALIZED,
+        weight="distance",
+        endpoints=ATTACK_BETWEENNESS_ENDPOINTS,
+    )
 
 
 def _undirected_adjacency(g: nx.DiGraph) -> dict[Any, set]:
@@ -225,6 +257,99 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
 }
 
 DEFAULT_STRATEGIES: list[str] = ["random", "in_strength", "out_strength", "pagerank", "betweenness"]
+
+_SOURCE = "network/robustness/attacks.py"
+
+#: The values fixed in this module that shape the attack orders (``PARAMETERS.md``).  Which
+#: strategies run is a run option (``--robustness-strategies``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Collective-influence ball radius ℓ",
+        value=CI_RADIUS,
+        scope="robustness",
+        affects="The collective_influence attacks score a node by (k − 1) times the summed (k − 1) of the nodes "
+        "exactly ℓ hops away on the undirected projection.",
+        source=f"{_SOURCE}: CI_RADIUS",
+        note="Morone & Makse (2015) use small radii (ℓ = 2–3).",
+    ),
+    FixedParameter(
+        name="PageRank attack: damping factor α",
+        value=ATTACK_PAGERANK_ALPHA,
+        scope="robustness",
+        affects="Damping factor of the PageRank that ranks nodes for the pagerank / pagerank_dyn attacks.",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_ALPHA",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="PageRank attack: maximum iterations",
+        value=ATTACK_PAGERANK_MAX_ITER,
+        scope="robustness",
+        affects="Power-iteration cap; a residual graph on which PageRank does not converge within it is ranked "
+        "by in-strength instead, so the attack never aborts.",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_MAX_ITER",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="PageRank attack: convergence tolerance",
+        value=ATTACK_PAGERANK_TOL,
+        scope="robustness",
+        affects="Power-iteration convergence tolerance (scaled by the node count) of the PageRank attack order.",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_TOL",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="PageRank attack: edge-weight attribute",
+        value=ATTACK_PAGERANK_WEIGHT,
+        scope="robustness",
+        affects="The PageRank attack order follows edges in proportion to their weight on the attacked graph "
+        "(the backbone when --robustness-alpha filters it).",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_WEIGHT",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="PageRank attack: personalisation",
+        value=ATTACK_PAGERANK_PERSONALIZATION,
+        scope="robustness",
+        affects="None: the PageRank attack teleports uniformly to every node.",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_PERSONALIZATION",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="PageRank attack: dangling-node redistribution",
+        value=ATTACK_PAGERANK_DANGLING,
+        scope="robustness",
+        affects="None: the rank of nodes without out-edges is redistributed like the teleport (uniformly).",
+        source=f"{_SOURCE}: ATTACK_PAGERANK_DANGLING",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Betweenness attack: source sample k",
+        value=ATTACK_BETWEENNESS_K,
+        scope="robustness",
+        affects="None: the betweenness attack order is computed exactly over all sources (no sampling), on "
+        "edge distance 1/weight.",
+        source=f"{_SOURCE}: ATTACK_BETWEENNESS_K",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Betweenness attack: count endpoints",
+        value=ATTACK_BETWEENNESS_ENDPOINTS,
+        scope="robustness",
+        affects="Off: a path's own endpoints do not add to their betweenness, so the attack ranks nodes by the "
+        "paths they lie inside.",
+        source=f"{_SOURCE}: ATTACK_BETWEENNESS_ENDPOINTS",
+        note="networkx default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Betweenness attack: normalisation",
+        value=ATTACK_BETWEENNESS_NORMALIZED,
+        scope="robustness",
+        affects="Scores are divided by the number of node pairs; this scales every node alike, so it cannot "
+        "change the removal order.",
+        source=f"{_SOURCE}: ATTACK_BETWEENNESS_NORMALIZED",
+        note="networkx default, passed explicitly.",
+    ),
+)
 
 # Derived sets so existing imports keep working.
 STATIC_STRATEGIES: frozenset[str] = frozenset(name for name, spec in STRATEGY_SPECS.items() if spec.kind != "dynamic")

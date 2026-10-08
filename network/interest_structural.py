@@ -27,6 +27,7 @@ from typing import Any
 from django.db.models import F, Q
 from django.utils import timezone
 
+from network.parameters import FixedParameter
 from network.utils import GraphData, channel_cutoff_q, environment_channels
 from webapp.models import Message
 
@@ -36,6 +37,43 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_PER_CHANNEL: int = 50
 _FORWARDER_CHUNK: int = 5000
+# The export window is applied to the *forwarder* row's date, not the origin's: an older origin counts
+# when it was forwarded inside the window. Reported in the payload as ``forwarder_window_policy``.
+FORWARDER_WINDOW_POLICY = "forwarder-date"
+# Authority credited to a forwarder that carries no authority score in the run (D sums the rest).
+MISSING_AUTHORITY = 0.0
+
+_SOURCE = "network/interest_structural.py"
+
+#: The values fixed in this module that shape the structural interest of messages
+#: (``PARAMETERS.md``). The reaction window and the mentions switch are run options
+#: (``--interest-window-days`` / ``--interest-include-mentions``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Top messages per channel",
+        value=DEFAULT_TOP_PER_CHANNEL,
+        scope="interest",
+        affects="Length of each channel's two top lists (by interest score and by cross-community reach C) "
+        "in interest_structural.json.",
+        source=f"{_SOURCE}: DEFAULT_TOP_PER_CHANNEL",
+    ),
+    FixedParameter(
+        name="Export-window policy",
+        value=FORWARDER_WINDOW_POLICY,
+        scope="interest",
+        affects="The export's date window filters the forwards by the forwarder's date, so an origin posted "
+        "before the window still counts when it was forwarded inside it.",
+        source=f"{_SOURCE}: FORWARDER_WINDOW_POLICY",
+    ),
+    FixedParameter(
+        name="Authority of an unscored forwarder",
+        value=MISSING_AUTHORITY,
+        scope="interest",
+        affects="A forwarder without an authority score in the run adds this to an origin's authority-weighted "
+        "reach D.",
+        source=f"{_SOURCE}: MISSING_AUTHORITY",
+    ),
+)
 
 
 def compute_interest_structural(
@@ -233,7 +271,7 @@ def compute_interest_structural(
             pk for pk, _ in _within_window(out_forwarders_by_origin.get(key, []), origin_date)
         } - forwarder_pks
         c_value = len({comm_by_pk[pk] for pk in forwarder_pks if pk in comm_by_pk})
-        d_value = sum(auth_by_pk.get(pk, 0.0) for pk in forwarder_pks)
+        d_value = sum(auth_by_pk.get(pk, MISSING_AUTHORITY) for pk in forwarder_pks)
         by_message.append(
             {
                 "channel_pk": origin_ch,
@@ -272,7 +310,7 @@ def compute_interest_structural(
         "include_mentions": include_mentions,
         "hot_layer_scope": hot_layer_scope,
         "structural_scope": structural_scope,
-        "forwarder_window_policy": "forwarder-date",
+        "forwarder_window_policy": FORWARDER_WINDOW_POLICY,
         "by_message": by_message,
         "by_channel_top": by_channel_top,
     }
@@ -343,7 +381,7 @@ def _empty_payload(
         "include_mentions": include_mentions,
         "hot_layer_scope": hot_layer_scope,
         "structural_scope": structural_scope,
-        "forwarder_window_policy": "forwarder-date",
+        "forwarder_window_policy": FORWARDER_WINDOW_POLICY,
         "by_message": [],
         "by_channel_top": {},
     }

@@ -12,6 +12,8 @@ from django.conf import settings
 from django.db.models import Count, F, Max, Min, Q
 from django.utils import timezone
 
+from network.coordination import ORIGIN_IDENTITY_FIELDS
+from network.parameters import FixedParameter
 from network.utils import channel_cutoff_q
 from webapp.models import Channel, ChannelLabel, ChannelVacancy, LabelGroup, Message
 from webapp.utils.dates import fmt_day_month_year
@@ -47,6 +49,78 @@ EXTRAS_KEY = "_extras"
 # in webapp_engine/config/defaults.py). The cap is also the Benjamini-Hochberg family
 # size, so the q-values depend on it — see :func:`configured_max_candidates`.
 DEFAULT_MAX_CANDIDATES = 30
+
+# Time zone of the before/after window boundaries: the closure day's midnight (and the after-window's
+# last day's 23:59:59.999999) are taken in UTC.
+WINDOW_TIMEZONE = datetime.timezone.utc
+# Temporal Adoption's hyperbolic discount scale in days: score = coverage / (1 + mean_delay / this),
+# i.e. k = 1/30 days⁻¹ in Mazur's V = A / (1 + kd) — the score halves at a 30-day mean delay.
+TEMPORAL_DISCOUNT_DAYS = 30.0
+# Weights of the in-neighbour (amplifier) and out-neighbour (source) Ochiai cosines in
+# Neighbour-set Equivalence.
+NEIGHBOUR_SET_IN_WEIGHT = 0.5
+NEIGHBOUR_SET_OUT_WEIGHT = 0.5
+# Decimal places every candidate score is rounded to — before ranking, so candidates equal at this
+# precision tie (the known successor's competition rank and hits@k count them as ties).
+SCORE_DECIMALS = 3
+
+_SOURCE = "network/vacancy_analysis.py"
+
+#: The values fixed in this module that shape the vacancy analysis (``PARAMETERS.md``). The
+#: measures, the before/after windows and the candidate cap — also the Benjamini–Hochberg family
+#: size of every q-value — are run options (``--vacancy-*``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Window time zone",
+        value=WINDOW_TIMEZONE,
+        scope="vacancy",
+        affects="The before-window [closure − months_before, closure) and the after-window [closure, "
+        "closure + months_after] start and end at midnight in this time zone (the after-window at the end "
+        "of its last day).",
+        source=f"{_SOURCE}: WINDOW_TIMEZONE",
+    ),
+    FixedParameter(
+        name="Temporal Adoption discount scale (days)",
+        value=TEMPORAL_DISCOUNT_DAYS,
+        scope="vacancy",
+        affects="TEMPORAL = coverage / (1 + mean days to first adoption / this): the score halves at this mean "
+        "delay (hyperbolic, not exponential, decay).",
+        source=f"{_SOURCE}: TEMPORAL_DISCOUNT_DAYS",
+        note="Hyperbolic discount V = A / (1 + kd) of Mazur (1987), k = 1/30 days⁻¹.",
+    ),
+    FixedParameter(
+        name="Neighbour-set Equivalence: amplifier-side weight",
+        value=NEIGHBOUR_SET_IN_WEIGHT,
+        scope="vacancy",
+        affects="Weight of the Ochiai cosine of the vacancy's orphaned amplifiers vs the candidate's amplifiers "
+        "in STRUCTURAL_EQUIV.",
+        source=f"{_SOURCE}: NEIGHBOUR_SET_IN_WEIGHT",
+    ),
+    FixedParameter(
+        name="Neighbour-set Equivalence: source-side weight",
+        value=NEIGHBOUR_SET_OUT_WEIGHT,
+        scope="vacancy",
+        affects="Weight of the Ochiai cosine of the vacancy's before-window sources vs the candidate's "
+        "after-window sources in STRUCTURAL_EQUIV.",
+        source=f"{_SOURCE}: NEIGHBOUR_SET_OUT_WEIGHT",
+    ),
+    FixedParameter(
+        name="Score decimals",
+        value=SCORE_DECIMALS,
+        scope="vacancy",
+        affects="Every candidate score is rounded to this many decimals before ranking, so candidates equal at "
+        "this precision tie in the known successor's rank and in hits@k.",
+        source=f"{_SOURCE}: SCORE_DECIMALS",
+    ),
+    FixedParameter(
+        name="Content Continuity: origin-message identity",
+        value=ORIGIN_IDENTITY_FIELDS,
+        scope="vacancy",
+        affects="ORIGIN_OVERLAP identifies a forward's origin message by its source channel plus the first of "
+        "these fields that is set (post id, else original timestamp), exactly as the coordination layer.",
+        source="network/coordination.py: ORIGIN_IDENTITY_FIELDS",
+    ),
+)
 
 # Self-forwards (a channel re-posting its own content) are excluded from every
 # forward-based query below — ``.exclude(forwarded_from=F("channel"))`` — matching
@@ -98,9 +172,9 @@ def orphaned_amplifier_pks(
     self-forwards are excluded: re-posting itself does not make it its own orphan.
     """
     before_start = datetime.datetime.combine(
-        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=WINDOW_TIMEZONE
     )
-    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=datetime.timezone.utc)
+    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=WINDOW_TIMEZONE)
     return set(
         Message.objects.alive()
         .filter(
@@ -464,14 +538,16 @@ def _scores_abc(
             # that also amplify this candidate, i.e. |A ∩ B| / |A|. This is an
             # asymmetric overlap measure, NOT a Jaccard (which divides by |A ∪ B|);
             # the token is kept verbatim only for saved-config / JS compatibility.
-            scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, 3) if total_orphaned else 0.0
+            scores["AMPLIFIER_JACCARD"] = round(a_count / total_orphaned, SCORE_DECIMALS) if total_orphaned else 0.0
 
         if "NEW_ADOPTERS" in selected:
             # Coverage restricted to orphans that did NOT forward the candidate in the
             # before-window — genuinely new adoption after the closure, the succession-
             # specific complement of Amplifier Coverage (which counts habit and new
             # adoption alike). A − N is the pre-existing-habit share.
-            scores["NEW_ADOPTERS"] = round(new_counts.get(cid, 0) / total_orphaned, 3) if total_orphaned else 0.0
+            scores["NEW_ADOPTERS"] = (
+                round(new_counts.get(cid, 0) / total_orphaned, SCORE_DECIMALS) if total_orphaned else 0.0
+            )
 
         if "STRUCTURAL_EQUIV" in selected:
             # Binary (Ochiai) cosine of in-neighbour sets (who amplifies them) and
@@ -479,7 +555,9 @@ def _scores_abc(
             # strength is ignored — distinct from the weighted Lorrain & White matrix.
             cos_in = _cosine(orphaned_pks, cand_in_pks.get(cid, set()))
             cos_out = _cosine(vacancy_out_pks, cand_out_pks.get(cid, set()))
-            scores["STRUCTURAL_EQUIV"] = round(0.5 * cos_in + 0.5 * cos_out, 3)
+            scores["STRUCTURAL_EQUIV"] = round(
+                NEIGHBOUR_SET_IN_WEIGHT * cos_in + NEIGHBOUR_SET_OUT_WEIGHT * cos_out, SCORE_DECIMALS
+            )
 
         if "BROKERAGE" in selected:
             # Overlap (Jaccard) of the (source-org, amplifier-org) pairs the channel spans — the
@@ -493,7 +571,9 @@ def _scores_abc(
             cand_org_pairs = frozenset(
                 (s, a) for s in cand_src_org_pks.get(cid, set()) for a in cand_amp_org_pks.get(cid, set())
             )
-            scores["BROKERAGE"] = round(_jaccard(vacancy_org_pairs, cand_org_pairs), 3) if vacancy_org_pairs else None
+            scores["BROKERAGE"] = (
+                round(_jaccard(vacancy_org_pairs, cand_org_pairs), SCORE_DECIMALS) if vacancy_org_pairs else None
+            )
 
         scores[EXTRAS_KEY] = {
             "new_adopter_count": new_counts.get(cid, 0) if "NEW_ADOPTERS" in selected else None,
@@ -507,14 +587,18 @@ def _scores_abc(
     return result
 
 
-def _origin_key(fwd_id: int, post_id: int | None, fwd_date: datetime.datetime | None) -> tuple | None:
-    """Identity of a forward's origin message — the coordination layer's rules verbatim:
+# ``values_list`` fields of a forward's origin: its source channel, then the identity fields.
+_ORIGIN_VALUES: tuple[str, ...] = ("forwarded_from_id", *ORIGIN_IDENTITY_FIELDS)
+
+
+def _origin_key(fwd_id: int, *identity: Any) -> tuple | None:
+    """Identity of a forward's origin message — the coordination layer's rules verbatim
+    (:data:`network.coordination.ORIGIN_IDENTITY_FIELDS`, values in that order):
     ``(channel, post id)``, fallback ``(channel, original date)``; ``None`` (skip) when
     the row carries neither."""
-    if post_id is not None:
-        return (fwd_id, post_id)
-    if fwd_date is not None:
-        return (fwd_id, fwd_date)
+    for value in identity:
+        if value is not None:
+            return (fwd_id, value)
     return None
 
 
@@ -554,13 +638,13 @@ def _scores_origin(
     # post yields origin (vacancy, post) — authored pre-closure content, which belongs
     # to its universe either way. They are excluded on the candidate side below.)
     universe: set[tuple] = set()
-    for fwd_id, post_id, fwd_date in (
+    for fwd_id, *identity in (
         Message.objects.alive()
         .filter(channel=vacancy_pk, forwarded_from__isnull=False, date__gte=before_start, date__lt=closure_dt)
         .filter(channel_cutoff_q())
-        .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+        .values_list(*_ORIGIN_VALUES)
     ):
-        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+        if (key := _origin_key(fwd_id, *identity)) is not None:
             universe.add(key)
 
     # … plus the posts it authored: its own crawled originals in the before-window …
@@ -584,7 +668,7 @@ def _scores_origin(
     # itself made before it) establishes that origin as the vacancy's pre-closure
     # content — including forwards made *after* the closure, because authorship, not
     # co-occurrence, is the claim (archive re-seeding testifies to it just as well).
-    for fwd_id, post_id, fwd_date in (
+    for fwd_id, *identity in (
         Message.objects.alive()
         .filter(
             channel__in=Channel.objects.in_target(),
@@ -594,9 +678,9 @@ def _scores_origin(
         )
         .filter(Q(fwd_from_date__lt=closure_dt) | Q(date__lt=closure_dt))
         .filter(channel_cutoff_q())
-        .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+        .values_list(*_ORIGIN_VALUES)
     ):
-        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+        if (key := _origin_key(fwd_id, *identity)) is not None:
             universe.add(key)
 
     # Each candidate's re-circulated old content: after-window forwards whose origin is
@@ -607,7 +691,7 @@ def _scores_origin(
     # forwards of the *vacancy's* posts are not self-forwards (the vacancy is never a
     # candidate), so the archive-forward count is unaffected.
     cand_origins: dict[int, set[tuple]] = defaultdict(set)
-    for ch_id, fwd_id, post_id, fwd_date in (
+    for ch_id, fwd_id, *identity in (
         Message.objects.alive()
         .filter(
             channel__in=candidate_pks,
@@ -618,9 +702,9 @@ def _scores_origin(
         )
         .filter(channel_cutoff_q())
         .exclude(forwarded_from=F("channel"))
-        .values_list("channel_id", "forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+        .values_list("channel_id", *_ORIGIN_VALUES)
     ):
-        if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+        if (key := _origin_key(fwd_id, *identity)) is not None:
             cand_origins[ch_id].add(key)
 
     # Null calibration, same scheme as the amplifier/source tests: the pool a
@@ -633,7 +717,7 @@ def _scores_origin(
     origin_sig: dict[int, dict[str, float]] = {}
     if candidate_pks and universe:
         population_keys: set[tuple] = set()
-        for fwd_id, post_id, fwd_date in (
+        for fwd_id, *identity in (
             Message.objects.alive()
             .filter(
                 channel__in=Channel.objects.in_target(),
@@ -644,9 +728,9 @@ def _scores_origin(
             )
             .filter(channel_cutoff_q())
             .exclude(forwarded_from=F("channel"))
-            .values_list("forwarded_from_id", "fwd_from_channel_post", "fwd_from_date")
+            .values_list(*_ORIGIN_VALUES)
         ):
-            if (key := _origin_key(fwd_id, post_id, fwd_date)) is not None:
+            if (key := _origin_key(fwd_id, *identity)) is not None:
                 population_keys.add(key)
         marked = len(population_keys & universe)
         tested = [cid for cid in candidate_pks if cand_origins.get(cid)]
@@ -672,7 +756,7 @@ def _scores_origin(
         elif not r:
             score = 0.0
         else:
-            score = round(len(shared) / math.sqrt(u_size * len(r)), 3)
+            score = round(len(shared) / math.sqrt(u_size * len(r)), SCORE_DECIMALS)
         result[cid] = {
             "score": score,
             "archive_forward_count": sum(1 for key in shared if key[0] == vacancy_pk),
@@ -735,7 +819,7 @@ def _scores_temporal(
         else:
             mean_days = sum(days_list) / len(days_list)
             coverage = len(days_list) / total_orphaned
-            scores[cid] = round(coverage / (1.0 + mean_days / 30.0), 3)
+            scores[cid] = round(coverage / (1.0 + mean_days / TEMPORAL_DISCOUNT_DAYS), SCORE_DECIMALS)
 
     return scores
 
@@ -766,11 +850,11 @@ def _analyze_vacancy(
     ch = vac.channel
     closure_date = vac.closure_date
     before_start = datetime.datetime.combine(
-        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=datetime.timezone.utc
+        _shift_months(closure_date, -months_before), datetime.time.min, tzinfo=WINDOW_TIMEZONE
     )
-    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=datetime.timezone.utc)
+    closure_dt = datetime.datetime.combine(closure_date, datetime.time.min, tzinfo=WINDOW_TIMEZONE)
     after_end = datetime.datetime.combine(
-        _shift_months(closure_date, months_after), datetime.time.max, tzinfo=datetime.timezone.utc
+        _shift_months(closure_date, months_after), datetime.time.max, tzinfo=WINDOW_TIMEZONE
     )
 
     # Orphaned amplifiers: in-target channels that forwarded from the vacancy in the

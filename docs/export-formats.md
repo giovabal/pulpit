@@ -35,6 +35,8 @@ exports/
     network.graphml         ← GraphML network file (optional)
     nodes.csv               ← CSV node list (optional)
     edges.csv               ← CSV edge list (optional)
+    PARAMETERS.md           ← every parameter behind the numbers (always)
+    summary.json            ← name, counts and CLI options, machine-readable (always)
     data/near_copies.csv    ← near-copy audit list (only with --near-copy-edges)
     data/
       channels.json
@@ -42,7 +44,6 @@ exports/
       channel_position_3d.json  (optional)
       communities.json
       meta.json
-      summary.json
       structural_similarity.json  (when --structural-similarity)
       behavioural_equivalence.json  (when --behavioural-equivalence)
       robustness.json       (when --robustness)
@@ -64,7 +65,7 @@ exports/
 
 ### Atomic writes
 
-All output first goes to a `<name>.tmp` staging directory. Only after every file — including `summary.json` — has been successfully written is the staging directory renamed to `<name>`. Aborting an in-progress export (via the Abort button or Ctrl-C) leaves any previous export with the same name untouched. A stale `<name>.tmp` directory from a crashed run is removed automatically at the start of the next export with the same name.
+All output first goes to a `<name>.tmp` staging directory. Only after every file — including `PARAMETERS.md` and `summary.json` — has been successfully written is the staging directory renamed to `<name>`. Aborting an in-progress export (via the Abort button or Ctrl-C) leaves any previous export with the same name untouched. A stale `<name>.tmp` directory from a crashed run is removed automatically at the start of the next export with the same name.
 
 ---
 
@@ -380,6 +381,17 @@ Generated with `--gexf` and `--graphml`. Import directly into [Gephi](https://ge
 Both files include all node attributes (channel name, organization, subscriber count, environment depth — `0` in target, `k` for an environment channel *k* citation hops out, `1` for a dead leaf — all computed measures, community assignments for each active strategy) and edge weights.
 
 ---
+
+## PARAMETERS.md — the parameters of the run
+
+`PARAMETERS.md`, at the root of every export, is the reproducibility record of the run: everything that shaped its numbers, in one readable document — paste it into a methods appendix, or diff two of them to see why two exports differ. It is written at the end of the run, just before `summary.json` and inside the staging directory, so it is published atomically with the export it describes (one file per export; the per-year exports of a timeline run share it).
+
+- **Header** — export name, generation time, Pulpit version, and the size of the full-range graph.
+- **Run options** — what was chosen for this run (CLI flags, the Operations panel, or the configuration fallbacks), *as resolved*: defaults filled in and automatic values replaced by the value actually used — the CPM resolution γ of a bare `LEIDEN_CPM` (the network density), the basis a `MODULEROLE` resolved to, the ForceAtlas2 iteration count an `Nx` value became, the vacancy candidate cap, the structural-interest basis. Grouped by topic (scope & data window, edges & weights, near-copies, measures — one row per measure token —, communities — one row per strategy instance, plus a per-year γ table for the CPM-family strategies on a timeline run —, network statistics, layout, robustness, coordination, dominance, vacancy, structural interest, timeline). Each row gives the value, the CLI flag and what the option controls; the features the run did not compute are listed in one closing line.
+- **Fixed parameters** — the values set in Pulpit's code (seeds, iteration counts, thresholds, and the library defaults the code relies on, which it passes explicitly), one table per section, listed only for the parts of the analysis that ran. Each row names the parameter, its value, what it affects, and where it is set (`module.py: CONSTANT`). Every analysis module declares these next to the constants it uses (a `FIXED_PARAMETERS` tuple, `network/parameters.py`), so the document is read from the very values the computation used.
+- **Software** — Python and the versions of the libraries that compute results (networkx, python-igraph, leidenalg, graph-tool, numpy, scipy, scikit-learn, umap-learn, fa2, Django); a library that is absent reads *not installed*.
+
+`summary.json` carries the same run options in machine-readable form (it is what **Import from export** reads); `PARAMETERS.md` is the human-readable counterpart that also records the fixed parameters and the software.
 
 ## summary.json / meta.json — machine-readable metadata
 
