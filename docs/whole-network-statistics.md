@@ -193,7 +193,7 @@ The average Burt's constraint score across all channels. A low mean indicates a 
 
 ### Content originality (network-level)
 
-The fraction of all messages across in-target channels that are original (not forwarded from another channel): total non-forwarded messages / total messages.
+The fraction of all messages across in-target channels that are original, meaning they carry no Telegram forward header: total non-forwarded messages / total messages. As with the per-channel [content originality](network-measures.md#content-originality), a forward counts whatever its source: a stored channel, a private channel, a hidden user account or a source not yet resolved.
 
 **In practice:** this single number characterises the network as a production system. A value near 1.0 means the network is primarily a content-creation ecosystem; a value near 0.0 means it is primarily a redistribution and amplification machine.
 
@@ -212,6 +212,8 @@ Beyond the whole-network level, community statistics appear in `community_table.
 ### Modularity (per strategy)
 
 Modularity measures the quality of a community partition — the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. Values above roughly 0.3 are conventionally considered evidence of meaningful community structure.
+
+Some partitions leave channels without a community. A label-group partition, for example, has no label for dead leaves, environment channels or channels never labelled in that group. When that happens, each channel left out counts as a community of its own, which is the standard convention. It keeps its degree in the random-graph baseline, and its edges count as edges between communities. The rule is the same for the directed and the undirected modularity. The table's per-community contributions list only the real communities, so when some channels are left out the contributions no longer add up exactly to the headline figure. The difference is the left-out channels' own terms, which are zero or negative unless a channel cites itself.
 
 **In practice:** if your Organization partition's modularity is close to that of Leiden, your manual categorisation captures most of the network's structural organization. If Leiden's modularity is substantially higher, there is structure your categorisation does not capture.
 

@@ -592,6 +592,46 @@ class MessageSaveTests(TestCase):
         self.assertEqual(len(inserts), 1)
 
 
+class RepairReferenceUsersAndEnvironmentStampsMigrationTests(TestCase):
+    """Data migration 0065: re-type users stored as channels, clear stamps on never-crawled dark channels."""
+
+    @staticmethod
+    def _run() -> None:
+        import importlib
+
+        from django.apps import apps
+
+        importlib.import_module("webapp.migrations.0065_repair_reference_users_and_environment_stamps").repair(
+            apps, None
+        )
+
+    def test_user_rows_from_references_become_user_accounts(self) -> None:
+        user = Channel.objects.create(telegram_id=1, username="somebot", access_hash=11)
+        stub = Channel.objects.create(telegram_id=2, username="stub")  # no access hash: not a resolver row
+        titled = Channel.objects.create(telegram_id=3, title="Chan", access_hash=13)
+        crawled = Channel.objects.create(telegram_id=4, access_hash=14)
+        Message.objects.create(telegram_id=1, channel=crawled)
+        labelled = Channel.objects.create(telegram_id=5, access_hash=15)
+        attribute(labelled, make_label("Org", is_in_target=True))
+        self._run()
+        user.refresh_from_db()
+        self.assertTrue(user.is_user_account)
+        self.assertFalse(user.broadcast)
+        for channel in (stub, titled, crawled, labelled):
+            channel.refresh_from_db()
+            self.assertFalse(channel.is_user_account, channel.telegram_id)
+
+    def test_environment_stamp_cleared_only_on_never_crawled_dark_channels(self) -> None:
+        lost = Channel.objects.create(telegram_id=1, title="Lost", is_lost=True, environment_depth=1)
+        private = Channel.objects.create(telegram_id=2, title="Private", is_private=True, environment_depth=2)
+        lost_after_crawl = Channel.objects.create(telegram_id=3, title="Gone", is_lost=True, environment_depth=1)
+        Message.objects.create(telegram_id=1, channel=lost_after_crawl)
+        live = Channel.objects.create(telegram_id=4, title="Live", environment_depth=1)
+        self._run()
+        depths = dict(Channel.objects.values_list("telegram_id", "environment_depth"))
+        self.assertEqual(depths, {lost.telegram_id: None, private.telegram_id: None, 3: 1, live.telegram_id: 1})
+
+
 class MessageGetTelegramReferencesTests(TestCase):
     def test_extracts_username(self) -> None:
         msg = Message(message="Check t.me/somechannel for info")
@@ -624,6 +664,12 @@ class MessageGetTelegramReferencesTests(TestCase):
     def test_duplicate_links_each_included(self) -> None:
         refs = Message(message="t.me/chan t.me/chan").get_telegram_references()
         self.assertEqual(refs.count("chan"), 2)
+
+    def test_agrees_with_the_crawler_parser(self) -> None:
+        # Same parser as crawler.reference_resolver: preview, host variants and
+        # reserved paths resolve the way the crawler resolves them.
+        text = "t.me/s/chan1 https://Telegram.me/Chan2 t.me/share/url?u=x t.me/joinchat/abc"
+        self.assertEqual(Message(message=text).get_telegram_references(), ["chan1", "chan2"])
 
 
 class MessageTelegramUrlTests(TestCase):
@@ -1115,6 +1161,18 @@ class VacanciesViewTests(TestCase):
         # lost forwarder are all excluded — matching the vacancy-analysis card.
         self.assertEqual(rows[0]["orphaned_amplifier_count"], 2)
 
+    def test_vacancy_self_forward_does_not_make_it_its_own_orphan(self) -> None:
+        # The (in-target, not lost) vacancy re-posting itself inside the window is not
+        # amplification — it must not count as one of its own orphaned amplifiers.
+        Message.objects.create(
+            telegram_id=1,
+            channel=self.vacancy_ch,
+            forwarded_from=self.vacancy_ch,
+            date=datetime.datetime(2023, 6, 20, tzinfo=datetime.timezone.utc),
+        )
+        response = self.client.get(reverse("channel-vacancies"))
+        self.assertEqual(response.context["vacancies"][0]["orphaned_amplifier_count"], 2)
+
 
 # ─── SoftPaginator ─────────────────────────────────────────────────────────────
 
@@ -1495,6 +1553,9 @@ class PurgeOutOfTargetTests(TestCase):
     def _run_purge(self, **kwargs):
         from webapp.management.commands.purge_out_of_target_messages import purge
 
+        # The media files here were written moments ago: skip the recent-file grace
+        # period unless a test asks for it (test_recently_written_media_file_left_on_disk).
+        kwargs.setdefault("grace_seconds", 0)
         return purge(**kwargs)
 
     def test_dry_run_changes_nothing(self) -> None:
@@ -1551,6 +1612,20 @@ class PurgeOutOfTargetTests(TestCase):
         self._run_purge()
         self.assertEqual(Message.objects.filter(pk__in=[self.purge_msg.pk, share.pk]).count(), 2)
 
+    def test_tagged_share_of_a_still_pending_source_kept(self) -> None:
+        """A share whose source lookup stayed pending across runs is linked to its tag, so it survives."""
+        from webapp.management.commands.purge_out_of_target_messages import find_purgeable_messages
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        share = Message.objects.create(
+            telegram_id=204, channel=self.mention_target, pending_forward_telegram_id=777, fwd_from_channel_post=5
+        )
+        tag_post(share, MessageTag.objects.create(name="keep"))
+        self.assertFalse(find_purgeable_messages().filter(pk=share.pk).exists())
+        self._run_purge()
+        self.assertTrue(Message.objects.filter(pk=share.pk).exists())
+
     def test_environment_channel_messages_kept(self) -> None:
         """A channel reached by ``crawl_channels --environment`` keeps every message, like to_inspect."""
         env = Channel.objects.create(telegram_id=8, title="env-chan", environment_depth=2)
@@ -1597,6 +1672,86 @@ class PurgeOutOfTargetTests(TestCase):
         self.assertFalse(MessagePicture.objects.filter(pk=purged_pic.pk).exists())  # purged row gone
         self.assertTrue(MessagePicture.objects.filter(pk=kept_pic.pk).exists())  # kept row stays
         self.assertTrue(os.path.exists(shared_path), "shared media file was deleted out from under a surviving message")
+
+    def test_purge_stays_under_the_sqlite_variable_limit(self) -> None:
+        """More candidates than SQLite binds per statement: preview and run work in chunks, and a
+        file shared across chunks is reference-counted over the whole purge, not per chunk."""
+        import sqlite3
+        from pathlib import Path
+
+        from django.conf import settings
+        from django.db import connection
+
+        from webapp.management.commands import purge_out_of_target_messages as purge_mod
+        from webapp.models import MessagePicture
+
+        if connection.vendor != "sqlite":
+            self.skipTest("SQLite bound-variable limit")
+        Message.objects.bulk_create([Message(telegram_id=1000 + i, channel=self.purgeable) for i in range(150)])
+        purged = list(Message.objects.filter(channel=self.purgeable, telegram_id__gte=1000).order_by("pk"))
+        photos = Path(settings.MEDIA_ROOT) / "photos"
+        photos.mkdir(exist_ok=True)
+        (photos / "777.jpg").write_bytes(b"purged rows only")
+        (photos / "778.jpg").write_bytes(b"shared with a kept row")
+        # Both files are referenced from the first and the last purged message — different chunks.
+        for msg in (purged[0], purged[-1]):
+            MessagePicture.objects.create(message=msg, telegram_id=777, picture="photos/777.jpg")
+            MessagePicture.objects.create(message=msg, telegram_id=778, picture="photos/778.jpg")
+        kept = Message.objects.create(telegram_id=400, channel=self.healthy)
+        MessagePicture.objects.create(message=kept, telegram_id=778, picture="photos/778.jpg")
+
+        connection.ensure_connection()
+        raw = connection.connection
+        old_limit = raw.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 100)
+        try:
+            with mock.patch.object(purge_mod, "_CHUNK_SIZE", 40):
+                preview = self._run_purge(dry_run=True)
+                report = self._run_purge()
+        finally:
+            raw.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, old_limit)
+
+        self.assertEqual(preview.candidate_messages, 152)  # 150 + purge_msg + mention_msg
+        self.assertEqual(preview.candidate_media_files, 2)  # purgeable.jpg + 777.jpg
+        self.assertEqual(report.deleted_messages, 152)
+        self.assertEqual(report.removed_files, 2)
+        self.assertFalse((photos / "777.jpg").exists())
+        self.assertTrue((photos / "778.jpg").exists())
+        self.assertTrue(MessagePicture.objects.filter(message=kept).exists())
+
+    def test_file_linked_to_a_new_row_during_the_purge_survives(self) -> None:
+        """A crawl reusing the file for a new message (``_existing_sibling_file``) after the
+        candidates were collected keeps it: each file is re-checked against the DB before unlinking."""
+        import os
+
+        from webapp.management.commands import purge_out_of_target_messages as purge_mod
+        from webapp.models import MessagePicture
+
+        path = self.pic.picture.path
+        real_collect = purge_mod.collect_media_files
+
+        def collect_then_crawler_links(*args, **kwargs):
+            files = real_collect(*args, **kwargs)
+            fresh = Message.objects.create(telegram_id=401, channel=self.healthy)
+            MessagePicture.objects.create(message=fresh, telegram_id=999, picture=self.pic.picture.name)
+            return files
+
+        with mock.patch.object(purge_mod, "collect_media_files", side_effect=collect_then_crawler_links):
+            report = self._run_purge()
+        self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
+        self.assertEqual(report.candidate_media_files, 1)
+        self.assertEqual(report.removed_files, 0)
+        self.assertEqual(report.skipped_files, 1)
+        self.assertTrue(os.path.exists(path), "a file a new row references was unlinked")
+
+    def test_recently_written_media_file_left_on_disk(self) -> None:
+        """A file touched within the grace period may be mid-download by a crawl: its row goes, the file stays."""
+        import os
+
+        report = self._run_purge(grace_seconds=3600)
+        self.assertFalse(Message.objects.filter(pk=self.purge_msg.pk).exists())
+        self.assertEqual(report.removed_files, 0)
+        self.assertEqual(report.skipped_files, 1)
+        self.assertTrue(os.path.exists(self.pic.picture.path))
 
     def test_mention_only_target_messages_deleted(self) -> None:
         """Channels reached only via t.me/ mentions don't shield their messages from the purge.
@@ -1709,7 +1864,7 @@ class PurgeOrphanMediaTests(TestCase):
 
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             self._make_layout(media_root)
-            report = purge_orphans(dry_run=True)
+            report = purge_orphans(dry_run=True, grace_seconds=0)
             self.assertEqual(report.candidate_files, 2)  # orphan + empty_parent_orphan
             self.assertGreater(report.candidate_bytes, 0)
             self.assertEqual(report.removed_files, 0)
@@ -1725,7 +1880,7 @@ class PurgeOrphanMediaTests(TestCase):
 
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
             self._make_layout(media_root)
-            report = purge_orphans(dry_run=False)
+            report = purge_orphans(dry_run=False, grace_seconds=0)
             self.assertEqual(report.removed_files, 2)
             self.assertGreater(report.removed_bytes, 0)
             # Orphans gone, referenced file preserved.
@@ -1749,9 +1904,63 @@ class PurgeOrphanMediaTests(TestCase):
             if self.symlink_path is None:
                 self.skipTest("symlinks unavailable on this platform")
             self.assertTrue(self.symlink_path.is_symlink())
-            purge_orphans(dry_run=False)
+            purge_orphans(dry_run=False, grace_seconds=0)
             # The symlink survives (we never unlink the link itself).
             self.assertTrue(self.symlink_path.is_symlink())
+
+    def test_file_referenced_after_the_snapshot_is_kept(self) -> None:
+        """A crawl linking a row to a file after the referenced-paths snapshot keeps it: each
+        candidate is re-checked against the DB right before it is unlinked."""
+        import tempfile
+        from pathlib import Path
+
+        from django.test import override_settings
+
+        from webapp.management.commands import purge_orphan_media as orphan_mod
+        from webapp.models import MessagePicture
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self._make_layout(media_root)
+            photos = Path(media_root) / "photos"
+            late = photos / "555.jpg"
+            late.write_bytes(b"downloaded during the walk")
+            real_snapshot = orphan_mod.collect_referenced_paths
+
+            def snapshot_then_crawler_links():
+                referenced = real_snapshot()
+                msg = Message.objects.create(telegram_id=2, channel=self.channel)
+                MessagePicture.objects.create(message=msg, telegram_id=555, picture="photos/555.jpg")
+                return referenced
+
+            with mock.patch.object(orphan_mod, "collect_referenced_paths", side_effect=snapshot_then_crawler_links):
+                report = orphan_mod.purge_orphans(dry_run=False, grace_seconds=0)
+            self.assertTrue(late.exists(), "a file a row now references was unlinked")
+            self.assertEqual(report.candidate_files, 3)  # the two orphans + the late file
+            self.assertEqual(report.skipped_referenced, 1)
+            self.assertEqual(report.removed_files, 2)
+            self.assertFalse(self.orphan_path.exists())
+
+    def test_recently_modified_orphan_is_skipped(self) -> None:
+        """A file touched within the grace period may still be gaining its row (mid-download)."""
+        import tempfile
+        import time
+
+        from django.test import override_settings
+
+        from webapp.management.commands import purge_orphan_media as orphan_mod
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self._make_layout(media_root)
+            report = orphan_mod.purge_orphans(dry_run=False)
+            self.assertEqual(report.candidate_files, 0)
+            self.assertEqual(report.skipped_recent, 2)
+            self.assertTrue(self.orphan_path.exists())
+            # Once the grace period has elapsed the same files go.
+            with mock.patch.object(orphan_mod, "time") as clock:
+                clock.time.return_value = time.time() + orphan_mod.RECENT_FILE_GRACE_SECONDS + 60
+                report = orphan_mod.purge_orphans(dry_run=False)
+            self.assertEqual(report.removed_files, 2)
+            self.assertFalse(self.orphan_path.exists())
 
     def test_missing_channels_root_returns_empty_report(self) -> None:
         import tempfile
@@ -1840,6 +2049,87 @@ class ScoreMessagesTests(TestCase):
                 self.assertIsNone(msg.interest_score)
             else:
                 self.assertAlmostEqual(msg.interest_score, expected_score, places=6)
+
+    def test_baseline_rows_set_the_statistics_for_every_row(self) -> None:
+        from webapp.scoring import score_messages
+
+        baseline = [(i, 100 + i, 5 + i % 3, 2 + i % 4) for i in range(20)]
+        outside = [(100, 500, 9, 9)]  # not in the baseline, still scored against it
+        scored = score_messages(baseline + outside, min_sample=10, baseline_rows=baseline)
+        self.assertEqual(scored, {**score_messages(baseline, min_sample=10), 100: scored[100]})
+        mean_views = sum(r[1] for r in baseline) / len(baseline)
+        self.assertGreater(scored[100][0], 0)
+        self.assertAlmostEqual(
+            scored[100][0],
+            (500 - mean_views) / (sum((r[1] - mean_views) ** 2 for r in baseline) / len(baseline)) ** 0.5,
+        )
+
+    def test_recompute_channel_recency_window_rescores_every_message(self) -> None:
+        # --recency-days limits only the baseline: older messages are rescored against the
+        # recent baseline instead of keeping stale scores from an earlier, all-time run.
+        from django.utils import timezone
+
+        from webapp.scoring import recompute_channel, score_messages
+
+        org = make_label(name="In target", is_in_target=True)
+        ch = make_channel(telegram_id=2002, title="RecencyCh", label=org)
+        now = timezone.now()
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=11_000 + i,
+                channel=ch,
+                date=now - datetime.timedelta(days=700 + i),
+                views=1_000 + 10 * i,
+                forwards=50 + (i % 5),
+                total_reactions=20 + (i % 3),
+                interest_score=99.0,  # stale score from an earlier run
+            )
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=12_000 + i,
+                channel=ch,
+                date=now - datetime.timedelta(days=i),
+                views=100 + i,
+                forwards=5 + (i % 4),
+                total_reactions=2 + (i % 3),
+            )
+        alive = Message.objects.alive().filter(channel_id=ch.pk)
+        cols = ("pk", "views", "forwards", "total_reactions")
+        recent = list(alive.filter(date__gte=now - datetime.timedelta(days=90)).values_list(*cols))
+        expected = score_messages(list(alive.values_list(*cols)), min_sample=10, baseline_rows=recent)
+
+        n = recompute_channel(ch.pk, min_sample=10, recency_days=90)
+
+        self.assertEqual(n, 80)
+        for msg in Message.objects.filter(channel_id=ch.pk):
+            self.assertIsNotNone(msg.interest_scored_at, msg=msg.telegram_id)
+            self.assertAlmostEqual(msg.interest_score, expected[msg.pk][3], places=6)
+        old_scores = Message.objects.filter(channel_id=ch.pk, telegram_id__lt=12_000).values_list(
+            "interest_score", flat=True
+        )
+        self.assertTrue(all(score != 99.0 and score > 0 for score in old_scores))
+
+    def test_recompute_channel_recency_window_below_floor_clears_every_score(self) -> None:
+        from django.utils import timezone
+
+        from webapp.scoring import recompute_channel
+
+        org = make_label(name="In target", is_in_target=True)
+        ch = make_channel(telegram_id=2003, title="ThinWindowCh", label=org)
+        now = timezone.now()
+        for i in range(40):
+            Message.objects.create(
+                telegram_id=13_000 + i,
+                channel=ch,
+                date=now - datetime.timedelta(days=700 + i),
+                views=100 + i,
+                forwards=5 + (i % 4),
+                total_reactions=2 + (i % 3),
+                interest_score=1.5,
+            )
+        n = recompute_channel(ch.pk, min_sample=10, recency_days=90)
+        self.assertEqual(n, 40)
+        self.assertFalse(Message.objects.filter(channel_id=ch.pk, interest_score__isnull=False).exists())
 
 
 class ScoreMessagesForWindowTests(TestCase):
@@ -2463,6 +2753,39 @@ class MessageTagPropagationTests(TestCase):
         p2 = Message.objects.create(telegram_id=20, channel=self.c, forwarded_from_private=999, fwd_from_channel_post=7)
         Message.objects.create(telegram_id=21, channel=self.c, forwarded_from_private=999, fwd_from_channel_post=8)
         self.assertEqual(self._members(tag_post(p1, self.tag)), {p1.pk, p2.pk})
+
+    def test_shares_whose_source_is_still_pending_are_linked(self) -> None:
+        """A share left awaiting source resolution across runs belongs to its post like any other."""
+        from webapp.models.tag_models import tag_post
+
+        p1 = Message.objects.create(
+            telegram_id=40, channel=self.b, pending_forward_telegram_id=777, fwd_from_channel_post=5
+        )
+        p2 = Message.objects.create(
+            telegram_id=40, channel=self.c, pending_forward_telegram_id=777, fwd_from_channel_post=5
+        )
+        Message.objects.create(telegram_id=41, channel=self.c, pending_forward_telegram_id=777, fwd_from_channel_post=6)
+        tagging = tag_post(p1, self.tag)
+        self.assertEqual(tagging.origin, (777, 5))
+        self.assertEqual(self._members(tagging), {p1.pk, p2.pk})
+
+    def test_pending_share_of_a_known_channel_joins_its_post(self) -> None:
+        """The source channel can exist by now while the share's lookup is still pending."""
+        from webapp.models.tag_models import sync_tag_members, tag_post
+
+        tagging = tag_post(self.original, self.tag)
+        pending = Message.objects.create(
+            telegram_id=42, channel=self.c, pending_forward_telegram_id=100, fwd_from_channel_post=5
+        )
+        self.assertEqual(sync_tag_members(), 1)
+        self.assertIn(pending.pk, self._members(tagging))
+
+    def test_tag_post_always_links_the_tagged_message(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        with mock.patch("webapp.models.tag_models.resolve_origin_messages", return_value={}):
+            tagging = tag_post(self.share_b, self.tag)
+        self.assertEqual(self._members(tagging), {self.share_b.pk})
 
     def test_forward_without_an_origin_post_id_is_a_post_of_its_own(self) -> None:
         from webapp.models.tag_models import tag_post

@@ -720,6 +720,11 @@
   width: 5rem;
 }
 
+/* Auto-resolved numbers (empty = auto, e.g. CPM γ) need room for their placeholder. */
+.ops-mparam-input[type="number"][placeholder] {
+  width: 7.5rem;
+}
+
 .ops-mparam-input:focus {
   border-color: var(--accent);
   outline: none;

@@ -259,7 +259,7 @@ Amplification factor is the ratio of *forwarding events received* to *messages p
 
 *The share of a channel's posts that are not forwards from someone else — a simple producer-vs-redistributor measure.*
 
-Content originality is the fraction of a channel's own messages that are not native Telegram forwards. A score of 1.0 means everything the channel publishes is original; 0.0 means everything is a forward; intermediate values give the production-to-redistribution mix. The score reads off the channel's own publishing ledger — not the citation network around it — so it is independent of structural choices that change other measures, and it can be read on its own.
+Content originality is the fraction of a channel's own messages that are not native Telegram forwards. Every message carrying a forward header counts as a forward, whatever its source: a channel Pulpit stored, a private channel it cannot open, a user account that hides its identity, or a source the crawler has not resolved yet. A score of 1.0 means everything the channel publishes is original; 0.0 means everything is a forward; intermediate values give the production-to-redistribution mix. The score reads off the channel's own publishing ledger — not the citation network around it — so it is independent of structural choices that change other measures, and it can be read on its own.
 
 **References:**
 - Boyd, D., Golder, S. & Lotan, G. (2010) "Tweet, Tweet, Retweet: Conversational Aspects of Retweeting on Twitter." *HICSS-43*. [doi:10.1109/HICSS.2010.412](https://doi.org/10.1109/HICSS.2010.412)

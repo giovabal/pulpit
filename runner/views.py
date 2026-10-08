@@ -148,8 +148,6 @@ class OperationsView(View):
             "SA_DOMINANCE": settings.SA_DOMINANCE,
             "SA_DOMINANCE_MIN_EVENTS": settings.SA_DOMINANCE_MIN_EVENTS,
             "SA_DOMINANCE_PERMUTATIONS": settings.SA_DOMINANCE_PERMUTATIONS,
-            # Default value pre-filled on a freshly-dragged community-strategy chip (per-instance).
-            "SA_CPM_RESOLUTION": net_community.CPM_DEFAULT_RESOLUTION,
             "SA_COMMUNITY_DISTRIBUTION_THRESHOLD": settings.SA_COMMUNITY_DISTRIBUTION_THRESHOLD,
             "SA_COMMUNITY_BACKBONE_ALPHA": settings.SA_COMMUNITY_BACKBONE_ALPHA,
             "SA_VACANCY_MONTHS_BEFORE": settings.SA_VACANCY_MONTHS_BEFORE,
@@ -237,9 +235,9 @@ class RunTaskView(View):
             return JsonResponse({"error": "Task already running"}, status=409)
         try:
             _validate_post_constraints(task, request.POST, launching=True)
+            args = _build_args(task, request.POST)
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
-        args = _build_args(task, request.POST)
         # Persist any new search terms only after validation passes; otherwise a
         # 400 leaves the DB written despite the user-visible failure.
         if task == "search_channels" and request.POST.get("save_terms"):
@@ -268,9 +266,9 @@ class WriteCliCommandView(View):
             return JsonResponse({"error": "Unknown task"}, status=404)
         try:
             _validate_post_constraints(task, request.POST)
+            args = _build_args(task, request.POST)
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
-        args = _build_args(task, request.POST)
         # shlex.quote each arg so multi-word values (e.g. search_channels
         # --extra-term "hello world") remain executable when copy-pasted.
         command_parts = ["python", "manage.py", task] + [shlex.quote(a) for a in args]
@@ -466,6 +464,27 @@ class ExportDetailView(View):
 
 _CHANNEL_TYPE_KEYS = ("CHANNEL", "GROUP", "USER")
 
+# Every form value lands in the subprocess argv as its own element, and Django's ManagementUtility
+# pre-parses --settings / --pythonpath with parse_known_args before the command's argparse runs, so
+# an element spelling either option is honoured from *any* position: export_name
+# "--pythonpath=<a crawled zip>" plus dead_leaves_color "--settings=evil" would make django.setup()
+# import attacker code before argparse rejects anything. A value may therefore start with "-" only
+# when it is a dash followed by a digit and nothing but digits, separators and dashes — a negative
+# number ("-1001234567890", "-0.5") or a crawl_channels --ids range ("-30, 50-80") — which cannot
+# spell an option name.
+_SAFE_DASH_VALUE = re.compile(r"-\d[\d\s,.\-]*")
+
+
+class UnsafeArgumentError(ValueError):
+    """A form value would be read as a command-line option by the launched command."""
+
+
+def _arg_value(value: str, key: str) -> str:
+    """Return *value* for use as an argv element, refusing one that would parse as an option."""
+    if value.startswith("-") and not _SAFE_DASH_VALUE.fullmatch(value):
+        raise UnsafeArgumentError(f"Field '{key}': value {value!r} must not start with '-' (only negative numbers may)")
+    return value
+
 
 def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
     kind = spec[0]
@@ -477,17 +496,17 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         _, key, flag = spec
         val = post.get(key, "").strip()
         if val:
-            args += [flag, val]
+            args += [flag, _arg_value(val, key)]
     elif kind == "csv":
         _, key, flag = spec
         val = ",".join(post.getlist(key))
         if val:
-            args += [flag, val]
+            args += [flag, _arg_value(val, key)]
     elif kind == "csv_unique":
         _, key, flag = spec
         val = ",".join(dict.fromkeys(post.getlist(key)))
         if val:
-            args += [flag, val]
+            args += [flag, _arg_value(val, key)]
     elif kind == "community_strategies":
         # Manual label-group partitions (their own "Label groups" fieldset, name="label_groups")
         # and the algorithmic strategies (name="community_strategies") share one CLI flag: the
@@ -496,7 +515,7 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         _, flag = spec
         val = ",".join(post.getlist("label_groups") + post.getlist("community_strategies"))
         if val:
-            args += [flag, val]
+            args += [flag, _arg_value(val, "community_strategies")]
     elif kind == "const":
         _, key, flag, const_value = spec
         if post.get(key):
@@ -517,7 +536,7 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         _, flag = spec
         tokens = post.getlist("robustness_strategies")
         if tokens:
-            args += ["--robustness", flag, ",".join(tokens)]
+            args += ["--robustness", flag, _arg_value(",".join(tokens), "robustness_strategies")]
         else:
             args.append("--no-robustness")
     elif kind == "extra_terms":
@@ -525,7 +544,7 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         for line in post.get(key, "").splitlines():
             word = " ".join(line.split()).lower()
             if word:
-                args += ["--extra-term", word]
+                args += ["--extra-term", _arg_value(word, key)]
     elif kind == "lines":
         # Unlike extra_terms, lines are passed verbatim (no lowercasing/space
         # collapsing): the management command normalises identifiers itself.
@@ -533,12 +552,12 @@ def _apply_spec(spec: tuple, post: Any, args: list[str]) -> None:
         for line in post.get(key, "").splitlines():
             item = line.strip()
             if item:
-                args += [flag, item]
+                args += [flag, _arg_value(item, key)]
     elif kind == "positional":
         _, key = spec
         val = post.get(key, "").strip()
         if val:
-            args.append(val)
+            args.append(_arg_value(val, key))
     else:
         raise ValueError(f"Unknown arg-spec kind: {kind!r}")
 
@@ -727,6 +746,10 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
 
 
 def _build_args(task: str, post: Any) -> list[str]:
+    """Translate the Operations-panel POST into the command's argv.
+
+    Raises UnsafeArgumentError (a ValueError) when a form value would be read as an option.
+    """
     args: list[str] = []
     for spec in TASK_ARG_SPECS.get(task, []):
         _apply_spec(spec, post, args)

@@ -39,6 +39,13 @@ Only *interior* wave years get a full row (``G_{Y-1}`` and ``G_{Y+1}`` must
 both exist); the observed column is ``None`` when ``G_{Y+1}`` is missing (Y is
 the last year), and the year is skipped entirely when ``G_{Y-1}`` is missing.
 
+``strength`` compares edge weight *across* two graphs, so it is computed on
+the un-rescaled ``weight_raw`` every ``build_graph`` edge carries: the display
+``weight`` is rescaled to each year graph's own maximum (×10/max), and when the
+closed hub carried the pre-wave graph's heaviest tie the post-wave weights
+would be inflated by the rescale alone — a fake "healing".  Hand-built graphs
+without ``weight_raw`` fall back to ``weight``.
+
 References:
     Rogers, R. (2020). Deplatforming: Following extreme Internet celebrities
         to Telegram and alternative social media. *European Journal of
@@ -53,6 +60,7 @@ References:
 from typing import Any
 
 from network.robustness.metrics import component_sizes, residual_sizes
+from network.utils import tie_weight_key
 
 import networkx as nx
 import numpy as np
@@ -100,18 +108,25 @@ def ban_replay_rows(
         if not closed:
             continue
 
+        post = year_graphs.get(year + 1)
+        if post is not None and post.number_of_nodes() == 0:
+            post = None
+        # One weight scale for the pre-wave baseline and the post-wave survivors (see module docstring).
+        weight = tie_weight_key(pre, post) if post is not None else tie_weight_key(pre)
+
         n_pre = pre.number_of_nodes()
-        w0 = pre.size(weight="weight")
+        w0 = pre.size(weight=weight)
         q = len(closed)
 
-        predicted = residual_sizes(pre, closed, reach_sample=reach_sample, rng=rng)
-        random_sizes = _random_baseline(pre, q, n_random_runs, reach_sample, rng)
+        predicted = residual_sizes(pre, closed, reach_sample=reach_sample, rng=rng, weight=weight)
+        random_sizes = _random_baseline(pre, q, n_random_runs, reach_sample, rng, weight=weight)
 
-        post = year_graphs.get(year + 1)
         observed: dict[str, float] | None = None
-        if post is not None and post.number_of_nodes() > 0:
+        if post is not None:
             survivors = (pre_nodes - closed) & set(post.nodes())
-            observed = component_sizes(post.subgraph(survivors), n0=n_pre, w0=w0, reach_sample=reach_sample, rng=rng)
+            observed = component_sizes(
+                post.subgraph(survivors), n0=n_pre, w0=w0, reach_sample=reach_sample, rng=rng, weight=weight
+            )
 
         row: dict[str, Any] = {"year": year, "n_pre": n_pre, "n_closed": q, "fraction": q / n_pre}
         for m in _METRICS:
@@ -129,13 +144,14 @@ def _random_baseline(
     n_runs: int,
     reach_sample: int | None,
     rng: np.random.Generator,
+    weight: str = "weight",
 ) -> dict[str, float]:
     """Mean residual sizes after removing *q* uniformly-random nodes, over *n_runs* draws."""
     nodes = list(G.nodes())
     acc: dict[str, list[float]] = {m: [] for m in _METRICS}
     for _ in range(max(1, n_runs)):
         pick = [nodes[i] for i in rng.choice(len(nodes), size=min(q, len(nodes)), replace=False)]
-        sizes = residual_sizes(G, pick, reach_sample=reach_sample, rng=rng)
+        sizes = residual_sizes(G, pick, reach_sample=reach_sample, rng=rng, weight=weight)
         for m in _METRICS:
             acc[m].append(sizes[m])
     return {m: float(np.mean(acc[m])) for m in _METRICS}

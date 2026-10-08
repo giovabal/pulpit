@@ -59,6 +59,7 @@ import math
 import re
 import unicodedata
 from collections.abc import Iterable
+from fractions import Fraction
 
 from django.db.models import Q
 
@@ -80,17 +81,37 @@ _HANDLE_RE = re.compile(r"@\w+|\S+@\S+\.\S+")
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
 
+#: Nullable ``Message`` fields any one of which marks a Telegram forward header: the resolved source
+#: channel, a private source channel, a source still awaiting resolution, or the header's own date.
+_FORWARD_HEADER_NULLABLE_FIELDS = (
+    "forwarded_from",
+    "forwarded_from_private",
+    "pending_forward_telegram_id",
+    "fwd_from_date",
+)
+
+
+def forward_header_q() -> Q:
+    """Messages carrying a Telegram forward header of any kind — a resolved source channel, a private
+    one, one still pending resolution, a hidden user (``fwd_from_from_name``) or a bare forward date.
+
+    The exact complement of the header terms of :func:`original_text_q`, so a near-copy (always an
+    original message) can never also count as a forward. Content originality counts these messages
+    as forwarded.
+    """
+    q = ~Q(fwd_from_from_name="")
+    for field in _FORWARD_HEADER_NULLABLE_FIELDS:
+        q |= Q(**{f"{field}__isnull": False})
+    return q
+
+
 def original_text_q() -> Q:
     """Messages eligible on either side of a near-copy: dated, with text, and carrying no forward
-    header of any kind (resolved channel, private channel, hidden user, or a bare forward date)."""
-    return (
-        Q(forwarded_from__isnull=True)
-        & Q(forwarded_from_private__isnull=True)
-        & Q(fwd_from_date__isnull=True)
-        & Q(fwd_from_from_name="")
-        & Q(date__isnull=False)
-        & ~Q(message="")
-    )
+    header of any kind (the negation of :func:`forward_header_q`)."""
+    q = Q(fwd_from_from_name="")
+    for field in _FORWARD_HEADER_NULLABLE_FIELDS:
+        q &= Q(**{f"{field}__isnull": True})
+    return q & Q(date__isnull=False) & ~Q(message="")
 
 
 def normalise_tokens(text: str) -> list[str]:
@@ -140,7 +161,13 @@ def _similar_pairs(docs: dict[int, set[str]], threshold: float) -> dict[tuple[in
     two documents at or above the threshold must share a shingle inside both prefixes
     (Chaudhuri, Ganti & Kaushik 2006), so the candidates found this way are complete and
     each is verified exactly.
+
+    The threshold is read as the exact decimal it was written as (``Fraction(str(t))``) and
+    every comparison against it is done in integer arithmetic: in floating point ``0.55 * 100``
+    is ``55.000…01``, whose ceiling (56) would shorten the prefix by one and silently drop the
+    pairs lying exactly at the threshold.
     """
+    exact = Fraction(str(threshold))
     frequency: collections.Counter[str] = collections.Counter()
     for shingles in docs.values():
         frequency.update(shingles)
@@ -150,7 +177,7 @@ def _similar_pairs(docs: dict[int, set[str]], threshold: float) -> dict[tuple[in
     for doc_id in sorted(docs):
         shingles = docs[doc_id]
         ordered = sorted(shingles, key=rank.__getitem__)
-        prefix_length = len(ordered) - math.ceil(threshold * len(ordered)) + 1
+        prefix_length = len(ordered) - math.ceil(exact * len(ordered)) + 1
         candidates: set[int] = set()
         for shingle in ordered[:prefix_length]:
             candidates.update(index[shingle])
@@ -159,9 +186,9 @@ def _similar_pairs(docs: dict[int, set[str]], threshold: float) -> dict[tuple[in
             other_shingles = docs[other]
             intersection = len(shingles & other_shingles)
             union = len(shingles) + len(other_shingles) - intersection
-            similarity = intersection / union if union else 0.0
-            if similarity >= threshold:
-                pairs[(min(doc_id, other), max(doc_id, other))] = similarity
+            # intersection / union ≥ t, exactly: intersection · den ≥ num · union.
+            if union and intersection * exact.denominator >= exact.numerator * union:
+                pairs[(min(doc_id, other), max(doc_id, other))] = intersection / union
     return pairs
 
 

@@ -9,6 +9,7 @@ from django.db.models import Count, F, Q, QuerySet
 
 from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key, labelgroup_display_labels
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
+from network.near_copies import forward_header_q
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
@@ -345,13 +346,15 @@ def _network_content_metrics(
     msg_q = Q(channel_id__in=channel_pks) & make_date_q(start_date, end_date) & cutoff_q
     # ``.alive()`` (exclude lost messages) to match the per-channel CONTENTORIGINALITY /
     # AMPLIFICATION measures, which run on ``Message.objects.alive()``; otherwise the
-    # whole-network aggregate would not reconcile with the per-channel column.
+    # whole-network aggregate would not reconcile with the per-channel column. Forwarded =
+    # any forward header (resolved, private, hidden-user or pending source), the same
+    # ``forward_header_q`` numerator as the per-channel CONTENTORIGINALITY.
     agg = (
         Message.objects.alive()
         .filter(msg_q)
         .aggregate(
             total=Count("id"),
-            forwarded_out=Count("id", filter=Q(forwarded_from__isnull=False)),
+            forwarded_out=Count("id", filter=forward_header_q()),
         )
     )
     total = agg["total"]
@@ -622,6 +625,24 @@ def _compute_cross_tab(
     }
 
 
+def _modularity_partition(mod_graph: "nx.DiGraph | nx.Graph", label_to_nodes: dict[str, set[str]]) -> list[set[str]]:
+    """The communities of ``label_to_nodes`` completed into a partition of ``mod_graph``'s nodes.
+
+    A partition may leave nodes unassigned — a label-group partition has no label for dead
+    leaves, environment nodes or unlabelled channels, and LEIDEN_TEMPORAL's full-range plurality
+    has none for a channel absent from every year slice — and ``nx.community.modularity``
+    rejects anything that is not an exact partition. Each unassigned node therefore counts as a
+    singleton community, the standard convention: it keeps its degree in the null model and its
+    edges count as between-community edges, for the directed and undirected variants alike.
+    """
+    nodes = set(mod_graph)
+    communities = [members & nodes for members in label_to_nodes.values()]
+    assigned = set().union(*communities)
+    communities = [members for members in communities if members]
+    communities.extend({node} for node in mod_graph if node not in assigned)
+    return communities
+
+
 def _compute_strategy_entry(
     strategy_key: str,
     strategy_data: dict[str, Any],
@@ -692,7 +713,7 @@ def _compute_strategy_entry(
     modularity = None
     if label_to_nodes:
         with _swallow_metric(f"modularity (strategy {strategy_key})", ValueError):
-            modularity = nx.community.modularity(mod_graph, label_to_nodes.values())
+            modularity = nx.community.modularity(mod_graph, _modularity_partition(mod_graph, label_to_nodes))
 
     # ── Inter-community edge ratio ────────────────────────────────────────────
     # Fraction of all directed edges whose source and target belong to different

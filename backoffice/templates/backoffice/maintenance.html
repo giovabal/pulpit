@@ -133,12 +133,15 @@
     </div>
 
     <p class="bo-maint-intro">
-      Walk <code>MEDIA_ROOT/channels</code> and remove files that no longer have any
-      reference in the database — left behind by interrupted crawls, deleted
+      Walk the media folders under <code>MEDIA_ROOT</code> (<code>channels/</code>,
+      <code>photos/</code>, <code>videos/</code>, <code>audios/</code>,
+      <code>stickers/</code>, <code>others/</code>) and remove files that no longer
+      have any reference in the database — left behind by interrupted crawls, deleted
       messages, or by older versions of the cleanup script that removed rows but
-      not their payloads. Only files under <code>channels/</code> are considered;
-      everything else under <code>MEDIA_ROOT</code> stays untouched. Empty
-      directories are cleaned up afterwards.
+      not their payloads. Everything else under <code>MEDIA_ROOT</code> stays
+      untouched. Files written in the last hour are left alone, and each file is
+      checked against the database again just before it is removed, so a crawl
+      running at the same time is safe. Empty directories are cleaned up afterwards.
     </p>
 
     <div class="bo-maint-status">

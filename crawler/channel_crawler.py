@@ -1,18 +1,20 @@
 import datetime
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from time import sleep
 from typing import Any
 
 from django.conf import settings
 from django.db import DatabaseError, transaction
-from django.db.models import Max, Min, Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
+from crawler import coverage
 from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
-from crawler.media_handler import MediaHandler
-from crawler.reference_resolver import ReferenceResolver
+from crawler.media_handler import MediaHandler, detect_media_type
+from crawler.reference_resolver import ReferenceResolver, message_references
 from webapp.models import (
     Channel,
     ChannelLabel,
@@ -103,6 +105,19 @@ def _save_poll(message_pk: int, telegram_message: Any) -> None:
         )
 
 
+def _factcheck_data(telegram_message: Any) -> dict | None:
+    """The ``Message.factcheck`` JSON for a Telethon message (``None`` when it carries no fact-check)."""
+    fc = getattr(telegram_message, "factcheck", None)
+    if fc is None:
+        return None
+    text_obj = getattr(fc, "text", None)
+    return {
+        "need_check": bool(getattr(fc, "need_check", False)),
+        "country": getattr(fc, "country", None),
+        "text": getattr(text_obj, "text", None) if text_obj else None,
+    }
+
+
 def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> dict:
     """Build the volatile-stats update dict used to refresh a stored Message row.
 
@@ -121,24 +136,14 @@ def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> d
     last-known-good counters; the caller layer also applies a monotonic guard
     to refuse outright downgrades.
 
-    ``get_message`` / ``Message.from_telegram_object`` (force_update=True) is still
-    the path used to write fresh content when adding messages for the first time.
+    ``get_message`` is still the path used to write fresh content when adding
+    messages for the first time.
     """
     replies_obj = getattr(telegram_message, "replies", None)
-    fc = getattr(telegram_message, "factcheck", None)
-    if fc is not None:
-        text_obj = getattr(fc, "text", None)
-        factcheck_data: dict | None = {
-            "need_check": bool(getattr(fc, "need_check", False)),
-            "country": getattr(fc, "country", None),
-            "text": getattr(text_obj, "text", None) if text_obj else None,
-        }
-    else:
-        factcheck_data = None
     update_kwargs: dict = {
         "pinned": bool(telegram_message.pinned),
         "edit_date": telegram_message.edit_date,
-        "factcheck": factcheck_data,
+        "factcheck": _factcheck_data(telegram_message),
         "_updated": now,
         "stats_refreshed_at": now,
     }
@@ -164,6 +169,41 @@ def _dated_before(telegram_message: Any, day: datetime.date) -> bool:
     """True when the message carries a date and falls on a calendar day before ``day``."""
     date = getattr(telegram_message, "date", None)
     return date is not None and timezone.localdate(date) < day
+
+
+_DAY = datetime.timedelta(days=1)
+
+
+def _day_start(day: datetime.date) -> datetime.datetime:
+    """The aware datetime at which the local (TIME_ZONE) calendar day ``day`` begins."""
+    return timezone.make_aware(datetime.datetime.combine(day, datetime.time.min))
+
+
+@dataclass
+class _HistoryWalk:
+    """One Telegram walk in flight, so the days it fully walked can be recorded if it is interrupted.
+
+    Ascending walks run from ``start`` upward; descending ones from ``end`` down to ``start``.
+    Message ids grow with the publication date, so every day before (ascending) or after
+    (descending) the last day reached has been walked in full; the last day itself may not.
+    """
+
+    descending: bool
+    start: datetime.date | None
+    end: datetime.date | None = None
+    last_day: datetime.date | None = None
+
+    def reached(self, telegram_message: Any) -> None:
+        date = getattr(telegram_message, "date", None)
+        if date is not None:
+            self.last_day = timezone.localdate(date)
+
+    def fully_walked(self) -> list[coverage.Interval]:
+        if self.last_day is None:
+            return []
+        if self.descending:
+            return coverage.normalize([(self.last_day + _DAY, self.end)])
+        return coverage.normalize([(self.start, self.last_day - _DAY)])
 
 
 class ChannelCrawler:
@@ -540,6 +580,18 @@ class ChannelCrawler:
         are stored, and the Telegram iteration itself is clipped to it (started at the
         window's first day on the first crawl, stopped past its last day) instead of
         walking the whole history and discarding most of it.
+
+        The crawl stores every message dated on a *required* day (``_required_dates``: the
+        window, else the in-target periods; every day for to_inspect) and records the days it
+        has walked in full in ``Channel.history_coverage``. It walks up from the newest stored
+        message (from the first required day when none is stored) and stops past the last
+        required day — skipped when no required day is left above the newest stored message —
+        then down through each required day up to today not covered yet —
+        a period added or moved earlier, an inserted middle period, a period end moved later,
+        to_inspect switched on, a wider environment window — each once, stopping at the
+        interval's first day. Nothing has to flag those changes: they show as required days
+        missing from the coverage. An interrupted walk records the days it finished.
+        ``are_messages_crawled`` only says the channel was crawled at least once.
         """
 
         def update_status(message: str) -> None:
@@ -587,52 +639,115 @@ class ChannelCrawler:
             # messages dated inside it — the same day-bucketing as an in-target period.
             channel._in_target_intervals_cache = [(window_start, window_end)]
 
-        id_agg = channel.message_set.aggregate(min_id=Min("telegram_id"), max_id=Max("telegram_id"))
-        last_known_id = id_agg["max_id"] or 0
+        required = self._required_dates(channel, message_window)
+        required_end = required[-1][1] if required else None
+        today = timezone.localdate()
+        horizon = coverage.intersect(required, [(None, today)])  # the required days that can hold messages yet
+        covered = coverage.from_json(channel.history_coverage)
+        newest = self._stored_edge(channel, newest=True)
+        last_known_id = newest[0] if newest else 0
         message_count = 0
-        update_status(f"{channel_label} | downloading recent messages")
-        batch_count = 0
-        recent_kwargs: dict[str, Any] = {}
-        if last_known_id == 0 and window_start is not None:
-            # First crawl of a windowed channel: start the ascending walk just before the
-            # window's first day (offset_date is exclusive) instead of at the channel's birth.
-            recent_kwargs["offset_date"] = timezone.make_aware(
-                datetime.datetime.combine(window_start, datetime.time.min)
-            ) - datetime.timedelta(seconds=1)
-        for telegram_message in self.api_client.client.iter_messages(
-            telegram_channel,
-            min_id=last_known_id,
-            wait_time=self.api_client.wait_time,
-            reverse=True,
-            **recent_kwargs,
-        ):
-            if window_end is not None and _dated_after(telegram_message, window_end):
-                break  # ascending order: everything from here on is past the window
-            stored, imgs = self.get_message(channel, telegram_message)
-            image_count += imgs
-            if stored:
-                batch_count += 1
-            update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
+        walk: _HistoryWalk | None = None
+        try:
+            # ── Up: every message newer than the newest stored one ──────────────────────
+            recent_kwargs: dict[str, Any] = {}
+            walk_from: datetime.date | None = None
+            claim = True
+            if newest is None:
+                # Nothing stored yet: start at the first required day (offset_date is exclusive)
+                # instead of at the channel's birth; an open start walks from the first message.
+                walk_up = bool(horizon)
+                walk_from = horizon[0][0] if horizon else None
+                if walk_from is not None:
+                    recent_kwargs["offset_date"] = _day_start(walk_from) - datetime.timedelta(seconds=1)
+            elif newest[1] is None:
+                walk_up, claim = bool(horizon), False  # an undated row (never from Telegram): claim nothing
+            else:
+                newest_day = newest[1]
+                # Only messages dated on or after newest_day lie above the newest stored id: when
+                # no required day is left there, the walk could not store anything.
+                walk_up = bool(coverage.intersect(horizon, [(newest_day, None)]))
+                # The walk visits every id above the newest stored one, and ids grow with the
+                # publication date: every message dated after newest_day is visited. Messages of
+                # newest_day itself with smaller ids were visited by an earlier walk only if that
+                # day is covered already — not when it was outside the required days back then, or
+                # the message came from a walk that broke off inside that day — so the day is
+                # claimed only then. Otherwise it stays missing and the downward pass re-walks it,
+                # a cheap one-day walk, instead of hiding its earlier messages for good.
+                walk_from = newest_day if coverage.covers(covered, newest_day) else newest_day + _DAY
 
-        message_count += batch_count
+            if walk_up:
+                update_status(f"{channel_label} | downloading recent messages")
+                walk = _HistoryWalk(descending=False, start=walk_from) if claim else None
+                past_required_end = False
+                batch_count = 0
+                for telegram_message in self.api_client.client.iter_messages(
+                    telegram_channel,
+                    min_id=last_known_id,
+                    wait_time=self.api_client.wait_time,
+                    reverse=True,
+                    **recent_kwargs,
+                ):
+                    if required_end is not None and _dated_after(telegram_message, required_end):
+                        past_required_end = True
+                        break  # ascending order: everything from here on is past the last required day
+                    if walk is not None:
+                        walk.reached(telegram_message)
+                    stored, imgs = self.get_message(channel, telegram_message)
+                    image_count += imgs
+                    if stored:
+                        batch_count += 1
+                    update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
+                message_count += batch_count
+                if claim:
+                    # Today is claimed although it is not over: anything posted later lies above the
+                    # newest stored id, and this upward walk runs while a required day remains there.
+                    walked_to = required_end if past_required_end else today
+                    covered = self._extend_coverage(channel, covered, [(walk_from, walked_to)], horizon)
+                walk = None
 
-        max_id = id_agg["min_id"] if not channel.are_messages_crawled else None
-
-        batch_count = 0
-        if max_id is not None:
-            update_status(f"{channel_label} | downloading history")
-            for telegram_message in self.api_client.client.iter_messages(
-                telegram_channel, max_id=max_id, wait_time=self.api_client.wait_time
-            ):
-                if window_start is not None and _dated_before(telegram_message, window_start):
-                    break  # descending order: everything from here on predates the window
-                stored, imgs = self.get_message(channel, telegram_message)
-                image_count += imgs
-                if stored:
-                    batch_count += 1
-                update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
-
-        message_count += batch_count
+            # ── Down: each required day up to today that no walk has covered yet ──────────
+            for start, end in reversed(coverage.subtract(horizon, covered)):
+                walk_kwargs: dict[str, Any] = {}
+                oldest = self._stored_edge(channel, newest=False)
+                if (
+                    oldest is not None
+                    and oldest[1] is not None
+                    and end is not None
+                    and end < oldest[1]
+                    and not coverage.subtract([(end + _DAY, oldest[1] - _DAY)], covered)
+                ):
+                    # Right below the oldest stored message (the days in between are covered):
+                    # continue from its id, the walk an older history has always needed.
+                    walk_kwargs["max_id"] = oldest[0]
+                elif end is not None and end < today:
+                    walk_kwargs["offset_date"] = _day_start(end + _DAY)  # exclusive: from the end of ``end``
+                update_status(f"{channel_label} | downloading history {start or '…'} → {end or '…'}")
+                walk = _HistoryWalk(descending=True, start=start, end=end)
+                batch_count = 0
+                for telegram_message in self.api_client.client.iter_messages(
+                    telegram_channel, wait_time=self.api_client.wait_time, **walk_kwargs
+                ):
+                    if start is not None and _dated_before(telegram_message, start):
+                        break  # descending order: everything from here on predates the interval
+                    walk.reached(telegram_message)
+                    stored, imgs = self.get_message(channel, telegram_message)
+                    image_count += imgs
+                    if stored:
+                        batch_count += 1
+                    update_status(f"{channel_label} | messages processed: {message_count + batch_count}")
+                message_count += batch_count
+                covered = self._extend_coverage(channel, covered, [(start, end)], horizon)
+                walk = None
+        except BaseException:
+            # Interrupted (flood wait, lost connection, "database is locked", Ctrl-C): keep the days
+            # the walk in flight finished, so the next crawl resumes there instead of re-walking them.
+            if walk is not None:
+                try:
+                    self._extend_coverage(channel, covered, walk.fully_walked(), required)
+                except Exception:  # noqa: BLE001 - never mask the error that interrupted the walk
+                    logger.warning("Could not record the history walked for %s before the interruption", channel)
+            raise
 
         if fix_holes:
             update_status(f"{channel_label} | checking for message holes")
@@ -653,12 +768,64 @@ class ChannelCrawler:
         channel.are_messages_crawled = True
         channel.is_lost = False
         channel.is_private = False
-        channel.save()
+        # Only the fields set here: history_coverage is written by _extend_coverage alone, and a
+        # whole-row save of this instance (loaded when the crawl began) would also undo edits made
+        # meanwhile — in the backoffice, or a purge trimming the coverage.
+        channel.save(update_fields=["are_messages_crawled", "is_lost", "is_private", "_updated"])
         completion_parts = [f"{message_count} new messages", f"{image_count} downloaded images"]
         if profile_picture_count:
             completion_parts.append(f"{profile_picture_count} profile pictures")
         update_status(f"{channel_label} | completed ({', '.join(completion_parts)})")
         return last_known_id
+
+    def _required_dates(
+        self,
+        channel: Channel,
+        message_window: "tuple[datetime.date | None, datetime.date | None] | None",
+    ) -> list[coverage.Interval]:
+        """The local dates whose messages the crawl must store, as normalised intervals (``None`` = open).
+
+        Every day for a to_inspect channel; an environment crawl's ``message_window``; else
+        the channel's in-target periods — empty when it holds none (nothing would be stored).
+        The same days ``_skip_out_of_target`` lets through.
+        """
+        if channel.to_inspect:
+            return [(None, None)]
+        if message_window is not None:
+            return coverage.normalize([message_window])
+        return coverage.normalize(self._in_target_intervals(channel))
+
+    @staticmethod
+    def _stored_edge(channel: Channel, newest: bool) -> "tuple[int, datetime.date | None] | None":
+        """``(telegram_id, local date)`` of the channel's newest (or oldest) stored message; None when none is."""
+        row = (
+            channel.message_set.order_by("-telegram_id" if newest else "telegram_id")
+            .values_list("telegram_id", "date")
+            .first()
+        )
+        if row is None:
+            return None
+        return row[0], timezone.localdate(row[1]) if row[1] is not None else None
+
+    @staticmethod
+    def _extend_coverage(
+        channel: Channel,
+        covered: list[coverage.Interval],
+        walked: list[coverage.Interval],
+        required: list[coverage.Interval],
+    ) -> list[coverage.Interval]:
+        """Record that the ``walked`` required days now hold every message; return the crawl's updated coverage.
+
+        Merged into the value stored *now* rather than the one read when the crawl began, so a
+        purge that trimmed the coverage meanwhile (``purge_out_of_target_messages``) keeps its trim.
+        """
+        added = coverage.intersect(walked, required)
+        if not added:
+            return covered
+        stored = Channel.objects.filter(pk=channel.pk).values_list("history_coverage", flat=True).first()
+        channel.history_coverage = coverage.to_json(coverage.union(coverage.from_json(stored), added))
+        Channel.objects.filter(pk=channel.pk).update(history_coverage=channel.history_coverage)
+        return coverage.union(covered, added)
 
     @staticmethod
     def _in_target_intervals(channel: Channel) -> list[tuple[Any, Any]]:
@@ -687,7 +854,10 @@ class ChannelCrawler:
         if channel.to_inspect:
             return None
         intervals = self._in_target_intervals(channel)
-        if not intervals:
+        # A fully-open (None, None) period covers every date: no restriction. Folding its empty
+        # Q() into the OR-chain below would be absorbed (Q() | Q(range) == Q(range)) and restrict
+        # the channel to its *other* periods — mirrors Channel._get_activity_bounds.
+        if not intervals or any(start is None and end is None for start, end in intervals):
             return None
         q = Q()
         for start, end in intervals:
@@ -713,95 +883,111 @@ class ChannelCrawler:
             return source, post
         return channel.telegram_id, telegram_message.id
 
+    @staticmethod
+    def _message_fields(telegram_message: Any) -> dict[str, Any]:
+        """Every ``Message`` field derivable from *telegram_message* alone — no network, no lookups.
+
+        The Telegram properties plus the forward header, media type, web preview, reply link,
+        reply count and fact-check. Fields a message lacks are left out (so a re-fetch keeps
+        what the stored row already holds), as get_message always did.
+        """
+        fields: dict[str, Any] = {
+            field: getattr(telegram_message, field)
+            for field in Message.TELEGRAM_OBJECT_PROPERTIES
+            if hasattr(telegram_message, field)
+        }
+        fwd = telegram_message.fwd_from
+        if fwd:
+            fields["fwd_from_channel_post"] = getattr(fwd, "channel_post", None)
+            fields["fwd_from_from_name"] = getattr(fwd, "from_name", None) or ""
+            fields["fwd_from_date"] = getattr(fwd, "date", None)
+        media = telegram_message.media
+        if media:
+            media_type = detect_media_type(telegram_message)
+            if media_type != "none":
+                fields["media_type"] = media_type
+            if hasattr(media, "webpage"):
+                # Sliced to the model's max_length: preview URLs with tracking params can
+                # exceed it, and PostgreSQL raises DataError instead of truncating.
+                # ``or ""``: a WebPagePending carries ``url=None`` (Telegram hasn't fetched the
+                # preview yet); slicing / saving None crashed the whole channel.
+                fields["webpage_url"] = (getattr(media.webpage, "url", None) or "")[:2048]
+                fields["webpage_type"] = getattr(media.webpage, "type", None) or ""
+        fields["replies"] = getattr(getattr(telegram_message, "replies", None), "replies", None)
+        fields["reply_to_msg_id"] = getattr(getattr(telegram_message, "reply_to", None), "reply_to_msg_id", None)
+        factcheck = _factcheck_data(telegram_message)
+        if factcheck is not None:
+            fields["factcheck"] = factcheck
+        return fields
+
+    @staticmethod
+    def _named_references(message: Message, telegram_message: Any) -> list[str]:
+        """The t.me handles a message names — text links and link entities — before any lookup.
+
+        get_message's first save records them as ``missing_references`` and the resolver then
+        rewrites the field with what is really still unresolved, so a lookup that dies half-way
+        (a dropped connection, "database is locked") leaves every reference to the
+        ``--retry-references`` pass instead of losing them. Same extraction as
+        ``ReferenceResolver.resolve_message_references`` (``message_references``).
+        """
+        return sorted(message_references(message.message, telegram_message.entities))
+
     def get_message(self, channel: Channel, telegram_message: Any) -> tuple[bool, int]:
-        """Store *telegram_message* and return ``(stored, downloaded_images)``."""
+        """Store *telegram_message* and return ``(stored, downloaded_images)``.
+
+        The row is written once with every field the Telegram object carries — forward header,
+        forward source (or the pending lookup), media type, web preview, reply link, fact-check,
+        and the named references — before any step that can fail on the network: reference
+        lookups and media downloads (a FloodWaitError from GetFileRequest, a dropped connection,
+        a download error, "database is locked"). The crawl resumes from the newest stored id, so
+        a row left half-filled by such a failure was never revisited: without its forward header
+        it passed for an original post (``network.near_copies.original_text_q``) and lost its
+        forward identity for coordination, diffusion lag and tags. The downloads are deliberately
+        not wrapped in one transaction — SQLite would hold its write lock for the whole download.
+        """
         if isinstance(telegram_message, MessageService):
             return False, 0
         if self._skip_out_of_target(channel, telegram_message):
             return False, 0
-        downloaded_images = 0
-        message = Message.from_telegram_object(telegram_message, force_update=True, defaults={"channel": channel})
-
-        if telegram_message.fwd_from:
-            message.fwd_from_channel_post = getattr(telegram_message.fwd_from, "channel_post", None)
-            message.fwd_from_from_name = getattr(telegram_message.fwd_from, "from_name", None) or ""
-            message.fwd_from_date = getattr(telegram_message.fwd_from, "date", None)
-
-        if (
-            telegram_message.fwd_from
-            and telegram_message.fwd_from.from_id
-            and hasattr(telegram_message.fwd_from.from_id, "channel_id")
-        ):
-            channel_id = telegram_message.fwd_from.from_id.channel_id
-            existing = Channel.objects.filter(telegram_id=channel_id).first()
+        fields = self._message_fields(telegram_message)
+        fwd_from_id = getattr(telegram_message.fwd_from, "from_id", None) if telegram_message.fwd_from else None
+        if fwd_from_id and hasattr(fwd_from_id, "channel_id"):
+            existing = Channel.objects.filter(telegram_id=fwd_from_id.channel_id).first()
             if existing:
-                # Persist immediately so a crash before message.save() doesn't lose the edge.
-                # Also clear any stale pending_forward_telegram_id from a previous partial run.
-                Message.objects.filter(pk=message.pk).update(forwarded_from=existing, pending_forward_telegram_id=None)
-                message.forwarded_from = existing
-                message.pending_forward_telegram_id = None
+                # Also clears a stale pending_forward_telegram_id from a previous partial run.
+                fields["forwarded_from"] = existing
+                fields["pending_forward_telegram_id"] = None
             else:
-                # Defer the get_entity() call to _resolve_pending_forwards() so that
-                # a channel with many novel forwards doesn't burst the API mid-iteration.
-                # Persisted to DB immediately so a crash doesn't lose the pending lookup.
-                Message.objects.filter(pk=message.pk).update(pending_forward_telegram_id=channel_id)
-                message.pending_forward_telegram_id = channel_id
+                # Defer the get_entity() call to _resolve_pending_forwards() so that a channel
+                # with many novel forwards doesn't burst the API mid-iteration; stored with the
+                # row so a crash doesn't lose the pending lookup.
+                fields["pending_forward_telegram_id"] = fwd_from_id.channel_id
 
-        missing_references = self.reference_resolver.resolve_message_references(message, telegram_message)
-        if missing_references:
-            message.missing_references = "|".join(missing_references)
+        message = Message.objects.filter(channel=channel, telegram_id=telegram_message.id).first() or Message(
+            channel=channel, telegram_id=telegram_message.id
+        )
+        for field, value in fields.items():
+            setattr(message, field, value)
+        message.missing_references = "|".join(self._named_references(message, telegram_message))
+        message.save()
 
+        _save_reactions(message.pk, telegram_message)
+        _save_poll(message.pk, telegram_message)
+        # A share of a tagged post — or a tagged share's original — takes the post's tags now.
+        link_stored_message(message.pk, self._post_origin(channel, telegram_message))
+
+        unresolved = "|".join(self.reference_resolver.resolve_message_references(message, telegram_message) or ())
+        if unresolved != message.missing_references:
+            message.missing_references = unresolved
+            message.save(update_fields=["missing_references"])
+
+        downloaded_images = 0
         if telegram_message.media:
             downloaded_images += self.media_handler.download_message_picture(telegram_message)
             self.media_handler.download_message_video(telegram_message)
             self.media_handler.download_message_audio(telegram_message)
             self.media_handler.download_message_sticker(telegram_message)
             self.media_handler.download_message_other_media(telegram_message)
-            if hasattr(telegram_message.media, "photo"):
-                message.media_type = "photo"
-            elif hasattr(telegram_message.media, "document"):
-                from crawler.media_handler import _is_audio, _is_sticker
-
-                doc = telegram_message.media.document
-                mime_type = getattr(doc, "mime_type", "") or ""
-                if _is_sticker(doc):
-                    message.media_type = "sticker"
-                elif mime_type.startswith("video/"):
-                    message.media_type = "video"
-                elif _is_audio(doc):
-                    message.media_type = "audio"
-                else:
-                    message.media_type = "document"
-            elif hasattr(telegram_message.media, "poll"):
-                message.media_type = "poll"
-            if hasattr(telegram_message.media, "webpage"):
-                # Sliced to the model's max_length: preview URLs with tracking params can
-                # exceed it, and PostgreSQL raises DataError instead of truncating.
-                # ``or ""``: a WebPagePending carries ``url=None`` (Telegram hasn't fetched the
-                # preview yet); slicing / saving None crashed the whole channel.
-                message.webpage_url = (getattr(telegram_message.media.webpage, "url", None) or "")[:2048]
-                message.webpage_type = getattr(telegram_message.media.webpage, "type", None) or ""
-
-        replies_obj = getattr(telegram_message, "replies", None)
-        message.replies = getattr(replies_obj, "replies", None)
-
-        reply_to = getattr(telegram_message, "reply_to", None)
-        message.reply_to_msg_id = getattr(reply_to, "reply_to_msg_id", None)
-
-        fc = getattr(telegram_message, "factcheck", None)
-        if fc is not None:
-            text_obj = getattr(fc, "text", None)
-            message.factcheck = {
-                "need_check": bool(getattr(fc, "need_check", False)),
-                "country": getattr(fc, "country", None),
-                "text": getattr(text_obj, "text", None) if text_obj else None,
-            }
-
-        message.save()
-        _save_reactions(message.pk, telegram_message)
-        _save_poll(message.pk, telegram_message)
-        # A share of a tagged post — or a tagged share's original — takes the post's tags now.
-        link_stored_message(message.pk, self._post_origin(channel, telegram_message))
         return True, downloaded_images
 
     def _resolve_pending_forwards(self, status_callback: Callable[[str], None] | None = None) -> None:

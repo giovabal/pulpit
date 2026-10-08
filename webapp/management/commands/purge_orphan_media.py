@@ -18,6 +18,14 @@ that isn't pointed to by one of the seven file-bearing model fields:
 Anything outside these six roots is untouched. Symlinks are skipped. Empty
 directories left behind by the cleanup are removed at the end.
 
+Safe to run while a crawl is downloading media. The referenced-path snapshot is
+taken before the walk, so two guards cover what a crawl does meanwhile: a file
+written or moved into place within ``RECENT_FILE_GRACE_SECONDS`` (one hour) is
+never a candidate — the crawler writes a download to its final path a moment
+before saving the row that references it — and each candidate is re-checked
+against the database right before it is unlinked, so a row saved (or a new
+message linked to an already-stored file) after the snapshot keeps its file.
+
 Usage:
     python manage.py purge_orphan_media --dry-run   # preview
     python manage.py purge_orphan_media             # interactive
@@ -27,8 +35,10 @@ Usage:
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+import time
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import batched
 from pathlib import Path
 
 from django.conf import settings
@@ -56,6 +66,16 @@ _REFERENCED_FIELDS: tuple[tuple[type, str], ...] = (
     (ProfilePicture, "thumbnail"),
 )
 
+# Files written or moved into place within this many seconds are left alone: a
+# running crawl writes each download to its final path a moment before it saves
+# the row that references it, and a large video can take minutes to write. An
+# hour is far above that gap; anything skipped is reclaimed by the next run.
+RECENT_FILE_GRACE_SECONDS = 3600
+
+# File names per query when re-checking candidates against the database, well
+# under SQLite's bound-variable limit (Django does not split IN lists there).
+_RECHECK_CHUNK = 500
+
 
 @dataclass(frozen=True)
 class OrphanReport:
@@ -65,6 +85,8 @@ class OrphanReport:
     removed_bytes: int = 0
     failed_files: int = 0
     empty_dirs_removed: int = 0
+    skipped_recent: int = 0
+    skipped_referenced: int = 0
     dry_run: bool = False
 
 
@@ -88,6 +110,28 @@ def collect_referenced_paths() -> set[str]:
             if name:
                 referenced.add(name)
     return referenced
+
+
+def referenced_among(names: Iterable[str]) -> set[str]:
+    """The subset of ``names`` (MEDIA_ROOT-relative POSIX paths) some row references right now.
+
+    Batched by ``_RECHECK_CHUNK`` names per query; also used by
+    ``purge_out_of_target_messages`` for its own last-moment re-check.
+    """
+    found: set[str] = set()
+    for chunk in batched(names, _RECHECK_CHUNK):
+        for model, field in _REFERENCED_FIELDS:
+            found.update(model.objects.filter(**{f"{field}__in": chunk}).values_list(field, flat=True))
+    return found
+
+
+def recently_modified(st: os.stat_result, grace_seconds: float) -> bool:
+    """True when the file behind ``st`` was written or moved into place within ``grace_seconds``.
+
+    Takes the later of mtime and ctime — a rename or a new hard link bumps only
+    the latter. ``grace_seconds <= 0`` disables the check.
+    """
+    return grace_seconds > 0 and max(st.st_mtime, st.st_ctime) > time.time() - grace_seconds
 
 
 def iter_orphan_files() -> Iterator[Path]:
@@ -127,37 +171,62 @@ def _remove_empty_dirs(root: Path) -> int:
     return removed
 
 
-def purge_orphans(*, dry_run: bool = False) -> OrphanReport:
-    """Find — and, unless ``dry_run`` is set, delete — every orphan file."""
+def purge_orphans(*, dry_run: bool = False, grace_seconds: float = RECENT_FILE_GRACE_SECONDS) -> OrphanReport:
+    """Find — and, unless ``dry_run`` is set, delete — every orphan file.
+
+    Files modified within ``grace_seconds`` are skipped (``skipped_recent``), and
+    each candidate is re-checked against the database right before it is unlinked
+    (``skipped_referenced``): see the module docstring.
+    """
     roots = [r for r in scan_roots() if r.is_dir()]
     if not roots:
         return OrphanReport(candidate_files=0, candidate_bytes=0, dry_run=dry_run)
 
     candidates: list[tuple[Path, int]] = []
+    skipped_recent = 0
     for path in iter_orphan_files():
         try:
-            size = path.stat().st_size
+            st = path.stat()
         except OSError:
-            size = 0
-        candidates.append((path, size))
+            continue  # gone (or unreadable) since the walk listed it: nothing to vet
+        if recently_modified(st, grace_seconds):
+            skipped_recent += 1
+            continue
+        candidates.append((path, st.st_size))
 
     total_files = len(candidates)
     total_bytes = sum(size for _, size in candidates)
 
     if dry_run or total_files == 0:
-        return OrphanReport(candidate_files=total_files, candidate_bytes=total_bytes, dry_run=dry_run)
+        return OrphanReport(
+            candidate_files=total_files, candidate_bytes=total_bytes, skipped_recent=skipped_recent, dry_run=dry_run
+        )
 
+    media_root = Path(settings.MEDIA_ROOT)
     removed_files = 0
     removed_bytes = 0
     failed_files = 0
-    for path, size in candidates:
-        try:
-            path.unlink()
-        except OSError:
-            failed_files += 1
-            continue
-        removed_files += 1
-        removed_bytes += size
+    skipped_referenced = 0
+    for batch in batched(candidates, _RECHECK_CHUNK):
+        # The snapshot predates the walk: a crawl may since have saved a row for one of
+        # these files (or linked a new message to it via ``_existing_sibling_file``), or
+        # be rewriting it. Re-check both, a batch at a time, right before unlinking.
+        names = {path: path.relative_to(media_root).as_posix() for path, _ in batch}
+        still_referenced = referenced_among(names.values())
+        for path, size in batch:
+            if names[path] in still_referenced:
+                skipped_referenced += 1
+                continue
+            try:
+                if recently_modified(path.stat(), grace_seconds):
+                    skipped_recent += 1
+                    continue
+                path.unlink()
+            except OSError:
+                failed_files += 1
+                continue
+            removed_files += 1
+            removed_bytes += size
 
     empty_dirs = 0
     for root in roots:
@@ -170,6 +239,8 @@ def purge_orphans(*, dry_run: bool = False) -> OrphanReport:
         removed_bytes=removed_bytes,
         failed_files=failed_files,
         empty_dirs_removed=empty_dirs,
+        skipped_recent=skipped_recent,
+        skipped_referenced=skipped_referenced,
     )
 
 
@@ -188,6 +259,8 @@ class Command(BaseCommand):
     help = (
         "Delete media files under MEDIA_ROOT's media subdirectories (channels, photos, "
         "videos, audios, stickers, others) that have no corresponding row in the database. "
+        f"Files modified within the last {RECENT_FILE_GRACE_SECONDS // 60} minutes are left alone, and each "
+        "file is re-checked against the database right before deletion, so it is safe to run during a crawl. "
         "Run --dry-run first to preview."
     )
 
@@ -209,6 +282,11 @@ class Command(BaseCommand):
         preview = purge_orphans(dry_run=True)
         self.stdout.write(f"Orphan files: {preview.candidate_files:,}")
         self.stdout.write(f"Disk space to reclaim: {fmt_bytes(preview.candidate_bytes)}")
+        if preview.skipped_recent:
+            self.stdout.write(
+                f"Skipping {preview.skipped_recent:,} unreferenced files modified within the last "
+                f"{RECENT_FILE_GRACE_SECONDS // 60} minutes (a crawl may still be saving them)."
+            )
 
         if dry_run:
             self.stdout.write(self.style.NOTICE("Dry run — no changes made."))
@@ -231,5 +309,7 @@ class Command(BaseCommand):
         )
         if report.failed_files:
             self.stdout.write(self.style.WARNING(f"{report.failed_files:,} files could not be removed."))
+        if report.skipped_referenced:
+            self.stdout.write(f"Kept {report.skipped_referenced:,} files a database row started referencing meanwhile.")
         if report.empty_dirs_removed:
             self.stdout.write(f"Cleaned up {report.empty_dirs_removed:,} empty directories.")

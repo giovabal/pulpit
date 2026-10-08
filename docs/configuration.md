@@ -288,7 +288,7 @@ Three safeguards follow. The copy count travels in its own counter — `weight_c
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `scope.include_lost` | Include channels currently flagged `is_lost=True` | `false` |
-| `scope.environment_depth` | Environment level pre-filled in the **Environment level** field of the Outputs fieldset (`--environment-depth`): `0` = None (in-target channels only), `N` = also the environment channels within `N` citation hops of the monitored ones, as full participants | `0` |
+| `scope.environment_depth` | Environment level pre-filled in the **Environment level** field of the Outputs fieldset (`--environment-depth`): `0` = None (in-target channels only), `N` = also the environment channels within `N` citation hops of the monitored ones, as full participants — their messages counted only inside the span of the in-target periods (earliest start to latest end) | `0` |
 | `scope.include_private` | Include channels currently flagged `is_private=True` | `false` |
 
 ## `[vacancy]`

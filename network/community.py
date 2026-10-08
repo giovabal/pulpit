@@ -7,7 +7,7 @@ from typing import Any
 from django.utils.text import slugify
 
 from network.tokens import TokenInstance, TokenParam, TokenSpec, base_keys_for, canonical_key, parse_tokens
-from network.utils import to_undirected_sum
+from network.utils import tie_weight_key, to_undirected_sum
 from webapp.models import Label, LabelGroup
 from webapp.utils.colors import (
     DEFAULT_FALLBACK_COLOR,
@@ -153,7 +153,9 @@ def consensus_eligible(strategy_name: str) -> bool:
 StrategyParam = TokenParam
 StrategySpec = TokenSpec
 
-CPM_DEFAULT_RESOLUTION = 0.05
+# LEIDEN_CPM / LEIDEN_TEMPORAL take no fixed default γ: an omitted ``resolution`` (empty default, the
+# token machinery's "auto") resolves at compute time to the weighted edge density of the graph CPM
+# runs on — CPM at the Reichardt–Bornholdt Erdős–Rényi null (see cpm_density_resolution).
 SBM_DEFAULT_MODE = "NESTED"
 CONSENSUS_DEFAULT_THRESHOLD = 0.5
 # leidenalg's own default coupling weight; higher ω = smoother, more persistent communities
@@ -173,12 +175,16 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             StrategyParam(
                 "resolution",
                 "float",
-                CPM_DEFAULT_RESOLUTION,
+                "",
                 minimum=0.0,
                 label="Resolution γ",
                 help="CPM resolution: a community is stable when its internal edge density exceeds γ. "
-                "Lower = fewer, larger communities (γ ≈ 0.01); higher = more, "
-                "smaller communities (γ ≈ 0.05).",
+                "Empty (or auto) = the network's own weighted edge density, so communities are groups "
+                "denser than the network as a whole (Reichardt & Bornholdt 2006) — unaffected by a uniform "
+                "rescale of the weights. An explicit γ is an absolute density on the raw (un-rescaled) tie "
+                "weights, in the units of --edge-weight-strategy: a binary edge density under NONE, a "
+                "citation-share density under PARTIAL_*, a citation-count density under TOTAL. "
+                "Lower = fewer, larger communities; higher = more, smaller ones.",
             ),
         ),
         primary_keys=("leiden_cpm",),
@@ -228,11 +234,13 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
             StrategyParam(
                 "resolution",
                 "float",
-                CPM_DEFAULT_RESOLUTION,
+                "",
                 minimum=0.0,
                 label="Resolution γ",
-                help="CPM resolution of each year slice, as in LEIDEN_CPM: lower = fewer, larger "
-                "communities; higher = more, smaller ones.",
+                help="CPM resolution of each year slice, as in LEIDEN_CPM. Empty (or auto) = each slice's own "
+                "weighted edge density (a per-slice null, as in Mucha et al. 2010); an explicit γ is one "
+                "absolute density in the raw tie-weight units of --edge-weight-strategy, the same in every "
+                "year. Lower = fewer, larger communities; higher = more, smaller ones.",
             ),
             StrategyParam(
                 "interslice",
@@ -241,8 +249,8 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 minimum=0.0,
                 label="Coupling ω",
                 help="Weight of the identity link tying each channel to itself in adjacent years "
-                "(Mucha et al. 2010). 0 = years partitioned independently; higher = smoother, more "
-                "persistent communities across the timeline.",
+                "(Mucha et al. 2010), in the same raw tie-weight units as the citation edges. 0 = years "
+                "partitioned independently; higher = smoother, more persistent communities across the timeline.",
             ),
         ),
         primary_keys=("leiden_temporal",),
@@ -329,8 +337,9 @@ def parse_strategies(
 
     ``ALL`` expands to every strategy with default parameters — including one ``LABELGROUP<id>`` per
     partition LabelGroup (queried fresh each call, so newly-added groups appear). ``defaults`` supplies
-    per-strategy parameter overrides for omitted values (the command passes the global
-    ``--leiden-cpm-resolution`` so a bare ``LEIDEN_CPM`` inherits it). Raises ``ValueError`` on unknown
+    per-strategy parameter overrides for omitted values (the command passes an explicitly given
+    ``--leiden-cpm-resolution`` so a bare ``LEIDEN_CPM`` inherits it; without it a bare ``LEIDEN_CPM`` is
+    auto — the network density, key ``leiden_cpm``). Raises ``ValueError`` on unknown
     strategies, bad/duplicate parameters — mirroring ``measures.parse_measures``.
     """
     labelgroup_tokens = labelgroup_strategy_tokens()
@@ -466,6 +475,16 @@ def _node_id_index(graph: nx.DiGraph) -> tuple[list[str], dict[str, int]]:
     igraph- or matrix-based detector to translate between str ids and 0..n-1 indices."""
     node_ids = sorted(graph.nodes())
     return node_ids, {node_id: index for index, node_id in enumerate(node_ids)}
+
+
+# ``build_graph`` stores two weights per edge: ``weight`` — rescaled to 10·w/max(w) *per graph*, the
+# display / layout scale — and ``weight_raw`` — the un-rescaled tie weight in the units of
+# ``--edge-weight-strategy``. Modularity (LEIDEN, LEIDEN_DIRECTED, LOUVAIN) is invariant to a uniform
+# rescale, so those detectors keep ``weight``; CPM's resolution γ (LEIDEN_CPM, LEIDEN_TEMPORAL) and the
+# weighted SBM's edge covariates read weights in absolute units, so they use the raw value — otherwise
+# the same γ would mean a different density on every graph / year / weight strategy, and a
+# ``TOTAL`` count graph would reach SBM(weights=POISSON) as non-integers (``network.utils.tie_weight_key``
+# picks the attribute).
 
 
 def _build_directed_igraph(
@@ -608,21 +627,76 @@ def detect_leiden_directed(
 
 
 def _build_undirected_igraph(
-    graph: nx.DiGraph, node_ids: list[str], node_id_map: dict[str, int]
+    graph: nx.DiGraph, node_ids: list[str], node_id_map: dict[str, int], weight: str = "weight"
 ) -> tuple[ig.Graph, list[float]]:
-    """Build an undirected igraph from a NetworkX DiGraph, summing reciprocal edge weights."""
-    undirected = to_undirected_sum(graph)
+    """Build an undirected igraph from a NetworkX DiGraph, summing reciprocal edge weights.
+
+    ``weight`` names the edge attribute summed into the W+Wᵀ projection — ``weight`` (rescaled) by
+    default, :data:`RAW_WEIGHT_KEY` for the scale-sensitive CPM objective (see :func:`tie_weight_key`).
+    """
+    undirected = to_undirected_sum(graph, weight=weight)
     ig_graph = ig.Graph(n=len(node_ids), directed=False)
     edges, weights = [], []
     for s, t in undirected.edges():
         edges.append((node_id_map[s], node_id_map[t]))
-        weights.append(undirected.edges[s, t].get("weight", 1.0))
+        weights.append(undirected.edges[s, t].get(weight, 1.0))
     ig_graph.add_edges(edges)
     return ig_graph, weights
 
 
+def cpm_density_resolution(graph: nx.Graph, weight: str | None = None) -> float:
+    """Default CPM resolution γ: the weighted edge density of the graph CPM runs on.
+
+    ``p = Σ w_ij / (n(n−1)/2)`` — the total tie weight of the undirected W+Wᵀ projection CPM is
+    optimised on (self-loops excluded: CPM's ``n_c(n_c−1)/2`` penalty counts distinct pairs only)
+    over its number of node pairs; ``0.0`` when ``n < 2``. Summing the directed edges of a DiGraph
+    gives the same total as summing its W+Wᵀ projection, so either can be passed. ``weight`` names the
+    edge attribute (default :func:`tie_weight_key` — the raw tie weight CPM reads).
+
+    CPM at γ = p is exactly the Reichardt–Bornholdt quality function with an Erdős–Rényi null model at
+    γ_RB = 1 (Reichardt & Bornholdt 2006; Traag, Van Dooren & Nesterov 2011 — leidenalg's
+    ``RBERVertexPartition``): a community is a group denser than the network as a whole. Because p
+    scales with the weights, the partition is invariant to a uniform rescale of the tie weights,
+    unlike a fixed γ — and it adapts to each graph, year slice or backbone it is computed on.
+    """
+    n = graph.number_of_nodes()
+    if n < 2:
+        return 0.0
+    key = weight or tie_weight_key(graph)
+    total = sum(float(data.get(key, 1.0)) for u, v, data in graph.edges(data=True) if u != v)
+    return total / (n * (n - 1) / 2)
+
+
+def instance_resolution(instance: "StrategyInstance") -> float | None:
+    """The explicit CPM resolution γ of a LEIDEN_CPM / LEIDEN_TEMPORAL instance, or ``None`` when it is
+    auto (the token omitted ``resolution``, or gave ``auto``) — the graph's density, resolved per graph by
+    :func:`cpm_density_resolution`."""
+    value = instance.params_dict.get("resolution", "")
+    return None if value in ("", None) else float(value)
+
+
+def cpm_resolution(instance: "StrategyInstance", graph: nx.DiGraph) -> float:
+    """The γ a LEIDEN_CPM instance runs with on ``graph`` (the graph passed to :func:`detect`, i.e. the
+    community backbone when one is set): its explicit ``resolution``, else ``graph``'s weighted edge
+    density. The same computation :func:`detect_leiden_cpm` performs, so callers can record the γ used."""
+    explicit = instance_resolution(instance)
+    return explicit if explicit is not None else cpm_density_resolution(graph)
+
+
+def temporal_slice_resolutions(year_graphs: dict[int, nx.DiGraph], resolution: float | None) -> dict[int, float]:
+    """The γ each LEIDEN_TEMPORAL year slice runs with: the explicit ``resolution`` for every slice, or —
+    when ``None`` (auto) — each slice's own weighted edge density (:func:`cpm_density_resolution`, on the
+    raw-weight attribute chosen once across all slices, as :func:`detect_leiden_temporal` does). The
+    multislice analogue of the single-graph default: Mucha et al. (2010) give every slice its own null
+    model."""
+    if resolution is not None:
+        return {year: float(resolution) for year in sorted(year_graphs)}
+    weight_key = tie_weight_key(*year_graphs.values())
+    return {year: cpm_density_resolution(year_graphs[year], weight_key) for year in sorted(year_graphs)}
+
+
 def detect_leiden_cpm(
-    graph: nx.DiGraph, palette_name: str, resolution: float, *, reverse: bool = False
+    graph: nx.DiGraph, palette_name: str, resolution: float | None = None, *, reverse: bool = False
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Leiden algorithm with the Constant Potts Model objective (Traag, Van Dooren & Nesterov 2011).
 
@@ -632,15 +706,25 @@ def detect_leiden_cpm(
 
     Same Leiden machinery as ``detect_leiden``: undirected W+Wᵀ projection via
     ``to_undirected_sum``, weights honoured, seed=0, connectivity refinement.
-    Only the quality function differs.
+    Only the quality function differs — and, because CPM (unlike modularity) is
+    *not* invariant to a uniform rescale of the weights, the projection sums the
+    raw tie weights (``weight_raw``, see :func:`tie_weight_key`) rather than the
+    per-graph ×10/max ``weight``. An explicit γ is therefore a density in the units of
+    ``--edge-weight-strategy`` (binary under NONE, citation shares under
+    PARTIAL_*, counts under TOTAL), comparable across graphs, years and datasets.
+
+    ``resolution=None`` (a bare ``LEIDEN_CPM``) uses the graph's own weighted edge density
+    (:func:`cpm_density_resolution`) — the Reichardt–Bornholdt Erdős–Rényi null at γ_RB = 1, invariant
+    to a uniform rescale of the weights. :func:`cpm_resolution` reports the γ used.
     """
     node_ids, node_id_map = _node_id_index(graph)
-    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
+    ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map, weight=tie_weight_key(graph))
+    gamma = resolution if resolution is not None else cpm_density_resolution(graph)
     partition = leidenalg.find_partition(
         ig_graph,
         leidenalg.CPMVertexPartition,
         weights=weights if weights else None,
-        resolution_parameter=resolution,
+        resolution_parameter=gamma,
         seed=0,
     )
     return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
@@ -649,7 +733,7 @@ def detect_leiden_cpm(
 def detect_leiden_temporal(
     year_graphs: dict[int, nx.DiGraph],
     palette_name: str,
-    resolution: float,
+    resolution: float | None,
     interslice_weight: float,
     *,
     reverse: bool = False,
@@ -658,14 +742,22 @@ def detect_leiden_temporal(
 
     ``year_graphs`` maps each non-empty timeline year to its citation graph (built with the same
     scope/weight settings as that year's export). Each year becomes one **slice** — the undirected
-    W+Wᵀ projection with edge weights, exactly as ``LEIDEN_CPM`` sees a single graph — and every
-    channel present in two consecutive slices is tied to *itself* across them with weight
-    ``interslice_weight`` (ω). ``leidenalg.find_partition_temporal`` then optimises the CPM
-    objective (``resolution`` γ, seed=0) over all slices at once, so a community's identity is
-    **shared across years**: persistence, splits, and merges become properties of the partition
-    itself rather than post-hoc ribbon-reading in the alluvial diagram. The identity link ties a
-    channel only to itself in adjacent years — no multi-hop flow claim — so the strategy stays
-    inside the one-degree attribution model.
+    W+Wᵀ projection with edge weights, exactly as ``LEIDEN_CPM`` sees a single graph (raw tie weights,
+    so γ and ω are on one scale across every year rather than each year's own ×10/max rescale) — and
+    every channel present in two consecutive slices is tied to *itself* across them with weight
+    ``interslice_weight`` (ω). The CPM objective is then optimised (seed=0) over all slices at once,
+    so a community's identity is **shared across years**: persistence, splits, and merges become
+    properties of the partition itself rather than post-hoc ribbon-reading in the alluvial diagram.
+    The identity link ties a channel only to itself in adjacent years — no multi-hop flow claim — so
+    the strategy stays inside the one-degree attribution model.
+
+    ``resolution`` is the CPM γ of every slice; ``None`` (auto) gives each slice its **own** weighted
+    edge density (:func:`temporal_slice_resolutions`) — the per-slice null of Mucha et al. 2010, which
+    ``leidenalg.find_partition_temporal`` (one γ for every slice) cannot express. So the optimisation
+    replicates ``find_partition_temporal`` step for step with leidenalg's lower-level API
+    (``time_slices_to_layers``, one ``CPMVertexPartition`` per layer, the zero-resolution interslice
+    partition, a seeded ``Optimiser.optimise_partition_multiplex``) — with an explicit γ the membership
+    is identical to ``find_partition_temporal``'s. ω stays absolute (raw tie-weight units) either way.
 
     Returns ``(per_year, plurality, palette)``:
 
@@ -688,9 +780,13 @@ def detect_leiden_temporal(
             f"got {len(year_graphs)}. Check --timeline-step year and the date window."
         )
     years = sorted(year_graphs)
+    # Raw tie weights, not each year's own ×10/max rescale: one γ (and one ω) must couple slices
+    # that sit on the same scale, or a year whose heaviest tie is light would be inflated.
+    weight_key = tie_weight_key(*year_graphs.values())
+    gammas = temporal_slice_resolutions(year_graphs, resolution)
     slices: list[ig.Graph] = []
     for year in years:
-        undirected = to_undirected_sum(year_graphs[year])
+        undirected = to_undirected_sum(year_graphs[year], weight=weight_key)
         node_ids = sorted(undirected.nodes())
         node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
         slice_graph = ig.Graph(n=len(node_ids), directed=False)
@@ -698,20 +794,35 @@ def detect_leiden_temporal(
         edges, weights = [], []
         for s, t in undirected.edges():
             edges.append((node_id_map[s], node_id_map[t]))
-            weights.append(undirected.edges[s, t].get("weight", 1.0))
+            weights.append(undirected.edges[s, t].get(weight_key, 1.0))
         slice_graph.add_edges(edges)
         slice_graph.es["weight"] = weights
         slices.append(slice_graph)
 
-    memberships, _improvement = leidenalg.find_partition_temporal(
-        slices,
-        leidenalg.CPMVertexPartition,
-        interslice_weight=interslice_weight,
-        vertex_id_attr="id",
-        weight_attr="weight",
-        seed=0,
-        resolution_parameter=resolution,
+    # leidenalg.find_partition_temporal(slices, CPMVertexPartition, interslice_weight=ω,
+    # vertex_id_attr="id", weight_attr="weight", seed=0, resolution_parameter=γ), unrolled so each
+    # layer can carry its own γ. Each layer holds every slice's nodes but only its own slice's edges;
+    # node_size is 1 for that slice's nodes and 0 for the rest, so a layer's CPM penalty counts its
+    # own slice only. The interslice layer carries the identity links at resolution 0.
+    layers, interslice_layer, union = leidenalg.time_slices_to_layers(
+        slices, interslice_weight=interslice_weight, vertex_id_attr="id", weight_attr="weight"
     )
+    partitions = [
+        leidenalg.CPMVertexPartition(layer, node_sizes="node_size", weights="weight", resolution_parameter=gammas[year])
+        for year, layer in zip(years, layers, strict=True)
+    ]
+    interslice_partition = leidenalg.CPMVertexPartition(
+        interslice_layer, resolution_parameter=0, node_sizes="node_size", weights="weight"
+    )
+    optimiser = leidenalg.Optimiser()
+    optimiser.max_comm_size = 0
+    optimiser.set_rng_seed(0)
+    optimiser.optimise_partition_multiplex(partitions + [interslice_partition], n_iterations=2)
+    union_membership = {(v["slice"], v["id"]): m for v, m in zip(union.vs, partitions[0].membership, strict=True)}
+    memberships = [
+        [union_membership[(slice_index, v["id"])] for v in slice_graph.vs]
+        for slice_index, slice_graph in enumerate(slices)
+    ]
 
     per_year: dict[int, CommunityMap] = {}
     for year, slice_graph, membership in zip(years, slices, memberships, strict=True):
@@ -882,8 +993,10 @@ def detect_sbm(
     ``EXPONENTIAL`` fit a **weighted SBM** with the edge weights as covariates (Peixoto 2018,
     "Nonparametric weighted stochastic block models"): POISSON models discrete counts (pair
     with ``--edge-weight-strategy TOTAL``), EXPONENTIAL positive reals (pair with the
-    ratio-valued ``PARTIAL_*`` strategies). The weight model is validated against the actual
-    edge weights before graph-tool is imported.
+    ratio-valued ``PARTIAL_*`` strategies). The covariate is the raw tie weight
+    (``weight_raw``, see :func:`tie_weight_key`), not the per-graph ×10/max ``weight``, so
+    TOTAL's counts stay integers. The weight model is validated against the actual edge
+    weights before graph-tool is imported.
 
     ``mode``: ``NESTED`` (default) fits the nested SBM (Peixoto 2017) and takes the partition
     at the bottom (finest) hierarchy level — better model selection on large graphs, avoiding
@@ -907,7 +1020,10 @@ def detect_sbm(
 
     edge_weights: list[float] = []
     if weights:
-        edge_weights = [float(graph.edges[s, t].get("weight", 1.0)) for s, t in graph.edges()]
+        # Raw tie weights: the per-graph ×10/max ``weight`` would turn TOTAL's integer counts into
+        # non-integers (rejected by POISSON) and put every graph's covariates on its own scale.
+        weight_key = tie_weight_key(graph)
+        edge_weights = [float(graph.edges[s, t].get(weight_key, 1.0)) for s, t in graph.edges()]
         if weights == "POISSON":
             bad = next((w for w in edge_weights if w < 0 or not w.is_integer()), None)
             if bad is not None:
@@ -1119,9 +1235,9 @@ def detect(
     """Run community detection for one strategy instance. Returns (community_map, community_palette).
 
     ``instance`` is a :class:`StrategyInstance`; a bare strategy-name string is also accepted (wrapped
-    as a parameter-free instance) for convenience. The one parameterised strategy reads its tunable
-    value from the instance — LEIDEN_CPM its ``resolution`` γ — falling back to the module default when
-    omitted.
+    as a parameter-free instance) for convenience. Parameterised strategies read their tunable values
+    from the instance — LEIDEN_CPM its ``resolution`` γ, which when omitted (auto) is the weighted edge
+    density of ``graph`` (:func:`cpm_resolution` reports the γ used).
     """
     if isinstance(instance, str):
         instance = StrategyInstance(instance.upper())
@@ -1148,9 +1264,8 @@ def detect(
     if strategy == "LEIDEN_DIRECTED":
         return detect_leiden_directed(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN_CPM":
-        return detect_leiden_cpm(
-            graph, palette_name, float(params.get("resolution", CPM_DEFAULT_RESOLUTION)), reverse=reverse
-        )
+        # An omitted / auto resolution reaches the detector as None → the graph's own density.
+        return detect_leiden_cpm(graph, palette_name, instance_resolution(instance), reverse=reverse)
     if strategy == "LOUVAIN":
         return detect_louvain(graph, palette_name, reverse=reverse)
     if strategy == "SBM":

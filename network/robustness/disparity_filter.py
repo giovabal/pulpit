@@ -16,15 +16,28 @@ convention.  This is the standard "keep the single edge" rule used in the
 backbone-extraction literature: discarding the only incident edge of a node
 would isolate it from the network entirely.
 
+When **every edge carries the same weight** (``--edge-weight-strategy NONE``,
+or a ``TOTAL`` graph whose ties are all single citations) the filter carries no
+information: each edge of a degree-``k`` node gets ``α = (1 − 1/k)^(k−1)``,
+which is ≥ 1/e ≈ 0.37 for every ``k ≥ 2``, so any ``α < 0.37`` keeps only the
+edges of degree-1 endpoints and the "backbone" collapses to a near-empty graph
+for purely combinatorial reasons.  :func:`disparity_filter` therefore logs a
+warning and returns an unfiltered copy in that case (:func:`has_uniform_weights`
+lets callers detect and report it).
+
 Reference:
     Serrano, M. Á., Boguñá, M., & Vespignani, A. (2009). Extracting the
     multiscale backbone of complex weighted networks. *PNAS* 106(16),
     6483-6488. https://doi.org/10.1073/pnas.0808904106
 """
 
+import logging
+import math
 from typing import Any
 
 import networkx as nx
+
+logger = logging.getLogger(__name__)
 
 
 def disparity_filter(
@@ -43,9 +56,23 @@ def disparity_filter(
     ``alpha`` must lie in ``(0, 1]``.  Node attributes are preserved; isolated
     nodes that result from the filtering are kept so the backbone shares the
     same vertex set as *G*.  Edge attributes are preserved on retained edges.
+
+    When every edge carries the same weight (:func:`has_uniform_weights`) the
+    test is uninformative — it would keep only degree-1 endpoints' edges — so a
+    warning is logged and an unfiltered copy of *G* is returned instead.
     """
     if not (0 < alpha <= 1):
         raise ValueError(f"alpha must be in (0, 1]; got {alpha!r}")
+
+    if has_uniform_weights(G, weight=weight):
+        logger.warning(
+            "Disparity filter skipped (α=%g): all %d edges carry the same weight, so the backbone test "
+            "carries no information (it would keep only the edges of degree-1 endpoints). Using the full "
+            "graph — pick a weighted --edge-weight-strategy (TOTAL / PARTIAL_*) for a meaningful backbone.",
+            alpha,
+            G.number_of_edges(),
+        )
+        return G.copy()
 
     backbone = G.__class__()
     backbone.add_nodes_from(G.nodes(data=True))
@@ -53,6 +80,27 @@ def disparity_filter(
         if min(a_in, a_out) < alpha:
             backbone.add_edge(u, v, **G.edges[u, v])
     return backbone
+
+
+def has_uniform_weights(G: nx.DiGraph, weight: str = "weight") -> bool:
+    """Whether *G* has at least two edges and every edge carries the same *weight*.
+
+    The disparity filter is uninformative on such a graph (see the module docstring); with fewer
+    than two edges there is nothing to filter either way (a lone edge is always kept), so that case
+    is not flagged.  Weights are compared with a relative tolerance so a float round-off in the
+    ×10/max rescale cannot hide a uniform graph.  A missing attribute counts as ``1.0``, matching
+    ``G.degree(weight=…)``.
+    """
+    if G.number_of_edges() < 2:
+        return False
+    first: float | None = None
+    for _, _, data in G.edges(data=True):
+        w = float(data.get(weight, 1.0))
+        if first is None:
+            first = w
+        elif not math.isclose(w, first, rel_tol=1e-9, abs_tol=1e-12):
+            return False
+    return True
 
 
 def compute_alpha_values(

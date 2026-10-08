@@ -198,6 +198,7 @@ def residual_sizes(
     *,
     reach_sample: int | None = 500,
     rng: np.random.Generator | None = None,
+    weight: str = "weight",
 ) -> dict[str, float]:
     """One-shot residual sizes after removing the *remove* nodes from *G*.
 
@@ -207,17 +208,17 @@ def residual_sizes(
     the building block of the ban-wave scenarios.  Keys are the lowercase
     metric names: ``"wcc"``, ``"scc"``, ``"reach"``, ``"strength"``.  Nodes
     in *remove* that are not in the graph are silently skipped; *G* is never
-    mutated.
+    mutated.  *weight* names the edge attribute the strength metric sums.
     """
     n0 = G.number_of_nodes()
     if n0 == 0:
         return {"wcc": 0.0, "scc": 0.0, "reach": 0.0, "strength": 0.0}
-    w0 = G.size(weight="weight")
+    w0 = G.size(weight=weight)
     if rng is None:
         rng = np.random.default_rng()
     g = G.copy()
     g.remove_nodes_from([nid for nid in remove if g.has_node(nid)])
-    return component_sizes(g, n0=n0, w0=w0, reach_sample=reach_sample, rng=rng)
+    return component_sizes(g, n0=n0, w0=w0, reach_sample=reach_sample, rng=rng, weight=weight)
 
 
 def component_sizes(
@@ -227,6 +228,7 @@ def component_sizes(
     w0: float,
     reach_sample: int | None = 500,
     rng: np.random.Generator | None = None,
+    weight: str = "weight",
 ) -> dict[str, float]:
     """The four residual sizes of *g*, normalised against *external* ``n0``/``w0``.
 
@@ -239,6 +241,12 @@ def component_sizes(
     same pre-wave baseline, so the two are directly comparable — the building
     block of :mod:`network.robustness.replay`.  Keys are the lowercase metric
     names ``"wcc"`` / ``"scc"`` / ``"reach"`` / ``"strength"``.
+
+    *weight* names the edge attribute the strength metric sums; ``w0`` must be
+    a total of that same attribute.  When *g* and the ``w0`` baseline come from
+    *different* graphs, pass an attribute on one shared scale (``weight_raw``):
+    each export graph's ``weight`` is rescaled to its own maximum, so a
+    cross-graph ratio of ``weight`` mixes two scales.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -246,7 +254,7 @@ def component_sizes(
         "wcc": _wcc_size(g, n0),
         "scc": _scc_size(g, n0),
         "reach": _reach_size(g, n0, reach_sample, rng),
-        "strength": _strength_size(g, w0),
+        "strength": _strength_size(g, w0, weight),
     }
 
 
@@ -305,7 +313,7 @@ def _scc_size(g: nx.DiGraph, n0: int) -> float:
     return max((len(c) for c in nx.strongly_connected_components(g)), default=0) / n0
 
 
-def _strength_size(g: nx.DiGraph, w0: float) -> float:
+def _strength_size(g: nx.DiGraph, w0: float, weight: str = "weight") -> float:
     # Weight of the heaviest residual WCC over the original total weight.
     # "Heaviest" (not "largest by nodes") keeps the curve monotone: every
     # residual component is a subgraph of a pre-removal component, so the
@@ -314,7 +322,7 @@ def _strength_size(g: nx.DiGraph, w0: float) -> float:
         return 0.0
     best = 0.0
     for comp in nx.weakly_connected_components(g):
-        tw = g.subgraph(comp).size(weight="weight")
+        tw = g.subgraph(comp).size(weight=weight)
         if tw > best:
             best = tw
     return best / w0

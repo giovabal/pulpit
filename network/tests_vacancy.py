@@ -10,17 +10,20 @@ agreement contract.
 import datetime
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from network.vacancy_analysis import (
     ALL_VACANCY_MEASURES,
+    DEFAULT_MAX_CANDIDATES,
     _bh_adjust,
     _hypergeom_sf,
     _scores_origin,
     _shift_months,
     _successor_ranks,
     compute_vacancy_analysis,
+    configured_max_candidates,
+    orphaned_amplifier_pks,
 )
 from webapp.models import ChannelVacancy, Message
 from webapp.test_helpers import make_channel, make_label
@@ -313,6 +316,192 @@ class VacancyAnalysisCardTests(VacancyScorerFixture):
         flags = {c["pk"]: c["is_successor"] for c in data["candidates"]}
         self.assertTrue(flags[self.c1.pk])
         self.assertFalse(flags[self.c2.pk])
+
+    @override_settings(SA_VACANCY_MAX_CANDIDATES=1)
+    def test_card_uses_configured_candidate_cap(self) -> None:
+        # The cap is the BH family size: the card used to hard-code 30 candidates, so
+        # with any other configured cap its q-values disagreed with the export's. With
+        # a cap of 1 only c1 (2 orphaned amplifiers) is scored, and its amplifier q is
+        # its raw p = 0.5 (a family of one) — not the 0.75 a 2-candidate family gives.
+        data = self._get(only_after_vacancy="0")
+        self.assertEqual([c["pk"] for c in data["candidates"]], [self.c1.pk])
+        self.assertAlmostEqual(data["candidates"][0]["q_amp"], 0.5)
+        self.assertEqual(data["max_candidates"], 1)
+        export = compute_vacancy_analysis(selected_measures=set(ALL_VACANCY_MEASURES))
+        self.assertEqual(export["max_candidates"], 1)
+        (export_c1,) = export["vacancies"][0]["candidates"]
+        self.assertEqual(data["candidates"][0]["q_amp"], export_c1["significance"]["amplifiers"]["q"])
+        self.assertEqual(data["candidates"][0]["q_origin"], export_c1["significance"]["origins"]["q"])
+
+
+class ConfiguredMaxCandidatesTests(TestCase):
+    """The card and the export's default share one candidate cap source."""
+
+    @override_settings(SA_VACANCY_MAX_CANDIDATES=7)
+    def test_reads_configured_value(self) -> None:
+        self.assertEqual(configured_max_candidates(), 7)
+
+    def test_invalid_values_fall_back_to_factory_default(self) -> None:
+        for bad in (None, 0, -3, "x"):
+            with self.subTest(value=bad), override_settings(SA_VACANCY_MAX_CANDIDATES=bad):
+                self.assertEqual(configured_max_candidates(), DEFAULT_MAX_CANDIDATES)
+
+
+class SelfForwardExclusionTests(TestCase):
+    """Self-forwards are not amplification anywhere in the vacancy analysis.
+
+    Closure 2024-01-01. Orphans o1 (org A) and o2 (org B) forward the vacancy in the
+    before-window; the vacancy — not lost, so in-target — also forwards *itself* there
+    and must not become its own orphan. Its sources are s1 (out of target) and o2 (the
+    o2 forward carries origin (o2, 5), the whole content universe). After the closure o1 adopts
+    o2 (30 days in) and o2 sources from s1 — the legitimate signal. The traps: o2
+    self-forwards its old post (o2, 5) 10 days in (must not count o2 as its own
+    adopter, amplifier, source or re-circulated origin), and o1 self-forwards (must not
+    put o1 in the candidate list on its own re-posts). Every expected value below is
+    the self-forward-free one.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        org_a = make_label(name="Org A")
+        org_b = make_label(name="Org B")
+        # Out of target, so s1 has an org for Brokerage but is never itself a candidate.
+        org_src = make_label(name="Source org", is_in_target=False)
+        cls.vacancy_ch = make_channel(telegram_id=1, label=org_a, title="Vacancy")
+        cls.o1 = make_channel(telegram_id=2, label=org_a, title="Orphan 1")
+        cls.o2 = make_channel(telegram_id=3, label=org_b, title="Orphan 2")
+        cls.s1 = make_channel(telegram_id=4, label=org_src, title="Source 1")
+
+        def msg(tid, channel, date, fwd=None, post=None, fwd_date=None):
+            Message.objects.create(
+                telegram_id=tid,
+                channel=channel,
+                date=date,
+                forwarded_from=fwd,
+                fwd_from_channel_post=post,
+                fwd_from_date=fwd_date,
+            )
+
+        def dt(*args):
+            return datetime.datetime(*args, tzinfo=UTC)
+
+        # Before-window.
+        msg(1, cls.o1, dt(2023, 6, 15), fwd=cls.vacancy_ch)
+        msg(1, cls.o2, dt(2023, 6, 15), fwd=cls.vacancy_ch)
+        msg(1, cls.vacancy_ch, dt(2023, 5, 1), fwd=cls.s1)
+        msg(2, cls.vacancy_ch, dt(2023, 5, 2), fwd=cls.o2, post=5, fwd_date=dt(2023, 4, 30))
+        msg(3, cls.vacancy_ch, dt(2023, 6, 20), fwd=cls.vacancy_ch)  # trap: vacancy self-forward
+        # After-window.
+        msg(2, cls.o1, dt(2024, 1, 31), fwd=cls.o2)
+        msg(2, cls.o2, dt(2024, 2, 15), fwd=cls.s1)
+        msg(3, cls.o2, dt(2024, 1, 11), fwd=cls.o2, post=5, fwd_date=dt(2023, 4, 30))  # trap: o2 self-forward
+        msg(3, cls.o1, dt(2024, 3, 1), fwd=cls.o1)  # trap: o1 self-forward
+        ChannelVacancy.objects.create(channel=cls.vacancy_ch, closure_date=datetime.date(2024, 1, 1))
+
+        cls.payload = compute_vacancy_analysis(selected_measures=set(ALL_VACANCY_MEASURES))
+        cls.vac = cls.payload["vacancies"][0]
+        cls.by_pk = {c["pk"]: c for c in cls.vac["candidates"]}
+
+    def test_vacancy_self_forward_is_not_its_own_orphan(self) -> None:
+        self.assertEqual(orphaned_amplifier_pks(self.vacancy_ch, datetime.date(2024, 1, 1)), {self.o1.pk, self.o2.pk})
+        self.assertEqual(self.vac["orphaned_count"], 2)
+
+    def test_orphan_does_not_enter_candidates_on_own_self_forwards(self) -> None:
+        self.assertEqual(set(self.by_pk), {self.o2.pk})
+
+    def test_orphan_is_not_its_own_adopter(self) -> None:
+        o2 = self.by_pk[self.o2.pk]
+        self.assertEqual(o2["amplifier_count"], 1)  # o1 only
+        self.assertEqual(o2["scores"]["AMPLIFIER_JACCARD"], 0.5)
+        self.assertEqual(o2["scores"]["NEW_ADOPTERS"], 0.5)
+        self.assertEqual(o2["new_adopter_count"], 1)
+        # Coverage 1/2 at o1's 30-day delay; o2's own 10-day re-post doesn't count.
+        self.assertEqual(o2["scores"]["TEMPORAL"], 0.25)
+
+    def test_neighbour_sets_exclude_self(self) -> None:
+        # cos_in = |{o1,o2} ∩ {o1}| / √(2·1); cos_out = |{s1,o2} ∩ {s1}| / √(2·1) —
+        # neither the vacancy nor o2 is its own source or amplifier.
+        self.assertEqual(self.by_pk[self.o2.pk]["scores"]["STRUCTURAL_EQUIV"], round(1 / 2**0.5, 3))
+
+    def test_brokerage_excludes_self(self) -> None:
+        # Vacancy pairs {src, B} × {A, B} = 4; o2 spans only (src, A) — not (B, ·) via
+        # its self-source nor (·, B) via its self-amplification → 1/4.
+        self.assertEqual(self.by_pk[self.o2.pk]["scores"]["BROKERAGE"], 0.25)
+
+    def test_self_forward_is_not_recirculated_origin(self) -> None:
+        # Universe {(o2, 5)}: o2 re-posting its own old post is not continuing the
+        # vacancy's stream, so it circulates no old content at all → 0.0, untested.
+        o2 = self.by_pk[self.o2.pk]
+        self.assertEqual(o2["scores"]["ORIGIN_OVERLAP"], 0.0)
+        self.assertEqual(o2["archive_forward_count"], 0)
+        self.assertIsNone(o2["significance"]["origins"])
+
+    def test_source_null_excludes_self(self) -> None:
+        # Source universe {vacancy, s1, o2} (no self-forward targets), marked {s1, o2};
+        # o2 draws {s1}, 1 hit → p = 2/3, sole test → q = p.
+        sig = self.by_pk[self.o2.pk]["significance"]["sources"]
+        self.assertAlmostEqual(sig["p"], 0.6667)
+        self.assertAlmostEqual(sig["q"], 0.6667)
+
+    def test_card_matches(self) -> None:
+        cache.clear()
+        url = reverse("channel-vacancy-analysis", kwargs={"pk": self.vacancy_ch.pk})
+        data = self.client.get(url, {"only_after_vacancy": "0"}).json()
+        self.assertEqual(data["orphaned_count"], 2)
+        self.assertEqual([c["pk"] for c in data["candidates"]], [self.o2.pk])
+        card = data["candidates"][0]
+        self.assertEqual(card["amplifier_count"], 1)
+        self.assertEqual(card["score_a"], 0.5)
+        self.assertEqual(card["score_o"], 0.0)
+
+
+class LostVacancySourceNullTests(TestCase):
+    """The source-overlap null when the vacancy is marked lost.
+
+    A closed vacancy is typically ``is_lost`` — out of ``in_target()`` — while its
+    messages stay alive. Its four before-window sources s1..s4 are cited by no one else
+    except s1 (by candidate c after the closure). The universe must still contain all
+    four (marked ⊆ universe): {vacancy, c, s1, s2, s3, s4} = 6, marked 4, c draws {s1}
+    with 1 hit → p = 4/6. Built from in-target citers only, the universe was
+    {vacancy, c, s1} = 3 < 4 marked — inconsistent, degenerating to p = 1.0.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        org = make_label(name="Org")
+        src_org = make_label(name="Source org")
+        cls.vacancy_ch = make_channel(telegram_id=1, label=org, title="Vacancy", is_lost=True)
+        cls.o1 = make_channel(telegram_id=2, label=org, title="Orphan")
+        cls.c = make_channel(telegram_id=3, label=org, title="Candidate")
+        sources = [make_channel(telegram_id=10 + i, label=src_org, title=f"Source {i}") for i in range(1, 5)]
+        Message.objects.create(
+            telegram_id=1,
+            channel=cls.o1,
+            forwarded_from=cls.vacancy_ch,
+            date=datetime.datetime(2023, 6, 15, tzinfo=UTC),
+        )
+        for i, src in enumerate(sources, start=1):
+            Message.objects.create(
+                telegram_id=i,
+                channel=cls.vacancy_ch,
+                forwarded_from=src,
+                date=datetime.datetime(2023, 5, i, tzinfo=UTC),
+            )
+        Message.objects.create(
+            telegram_id=2, channel=cls.o1, forwarded_from=cls.c, date=datetime.datetime(2024, 2, 1, tzinfo=UTC)
+        )
+        Message.objects.create(
+            telegram_id=1, channel=cls.c, forwarded_from=sources[0], date=datetime.datetime(2024, 2, 15, tzinfo=UTC)
+        )
+        ChannelVacancy.objects.create(channel=cls.vacancy_ch, closure_date=datetime.date(2024, 1, 1))
+
+    def test_vacancy_sources_are_in_the_universe(self) -> None:
+        payload = compute_vacancy_analysis(selected_measures={"STRUCTURAL_EQUIV"})
+        (cand,) = payload["vacancies"][0]["candidates"]
+        self.assertEqual(cand["pk"], self.c.pk)
+        sig = cand["significance"]["sources"]
+        self.assertAlmostEqual(sig["p"], 0.6667)
+        self.assertAlmostEqual(sig["q"], 0.6667)
 
 
 class ScoresOriginTests(TestCase):

@@ -1,5 +1,4 @@
 import datetime
-import re
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -65,6 +64,10 @@ class Channel(TelegramBaseModel):
     environment_depth = models.PositiveSmallIntegerField(null=True, blank=True)
     is_user_account = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
+    # Inclusive local-date intervals ``[[start, end], …]`` (ISO strings, ``None`` = open) inside
+    # which every message the channel was required to keep is stored — see
+    # ChannelCrawler.get_channel, which walks only the required dates not covered yet.
+    history_coverage = models.JSONField(default=list, blank=True)
     last_hole_check_max_telegram_id = models.PositiveBigIntegerField(null=True)
     broadcast = models.BooleanField(default=True)
     verified = models.BooleanField(default=False)
@@ -429,6 +432,13 @@ class Message(TelegramBaseModel):
                 condition=Q(forwarded_from_private__isnull=False),
                 name="webapp_msg_fwd_private_idx",
             ),
+            # Forwards whose source channel is still being resolved: few rows, read after every
+            # crawled channel (_resolve_pending_forwards) and by tag propagation.
+            models.Index(
+                fields=["pending_forward_telegram_id", "fwd_from_channel_post"],
+                condition=Q(pending_forward_telegram_id__isnull=False),
+                name="webapp_msg_fwd_pending_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -448,10 +458,14 @@ class Message(TelegramBaseModel):
         return {"telegram_id": telegram_object.id, "channel__telegram_id": telegram_object.peer_id.channel_id}
 
     def get_telegram_references(self) -> list[str]:
-        # \w only: Telegram usernames are [A-Za-z0-9_], so accepting "." or "-" would
-        # swallow trailing sentence punctuation ("t.me/canale." → reference "canale.")
-        # and the resolver would classify the mangled handle as a permanent failure.
-        return [url[5:] for url in re.findall(r"t\.me/(?:\w|(?:%[\da-fA-F]{2}))+", str(self.message))]
+        """Lower-cased channel handles named by t.me links in the text (duplicates kept).
+
+        Delegates to the crawler's parser so the web app and the resolver agree on
+        every link form (``/s/`` previews, query strings, ``telegram.me``, reserved paths).
+        """
+        from crawler.reference_resolver import extract_text_references  # lazy: crawler imports webapp.models
+
+        return extract_text_references(str(self.message))
 
     @property
     def is_album(self) -> bool:

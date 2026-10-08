@@ -44,7 +44,7 @@ from network.robustness.attacks import (
     removal_order,
     strategy_label,
 )
-from network.robustness.disparity_filter import disparity_filter
+from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.robustness.metrics import (
     attack_curve,
     critical_threshold,
@@ -150,7 +150,8 @@ def run_robustness(
           "config":     {alpha, strategies, n_random_runs, n_null, null_model,
                          seed, reach_sample, n_rewire_swaps, alpha_grid},
           "graph":      {n, m, alpha, backbone_n, backbone_m,
-                         filtered: bool},
+                         filtered: bool,
+                         filter_skipped: "uniform_weights" | None},
           "efficiency": {
             "baseline":  float,
             "fractions": [...],                      # coarse grid, shared by all curves
@@ -200,6 +201,12 @@ def run_robustness(
         }
 
     ``<strategy_key>`` is the canonical strategy token (a bare lowercase name).
+
+    ``graph.filter_skipped`` is ``"uniform_weights"`` when a backbone was requested
+    but every edge carries the same weight (``--edge-weight-strategy NONE``): the
+    disparity test is then uninformative, so the battery runs on the full graph
+    (``filtered`` is ``False``) instead of a degenerate near-edgeless backbone.  The
+    α-sensitivity rows fall back to the full graph for the same reason.
     """
     config = config or RobustnessConfig()
     progress = progress or (lambda _: None)
@@ -207,12 +214,18 @@ def run_robustness(
 
     # 1. Optional disparity-filter backbone
     progress("disparity")
+    filtered = False
+    filter_skipped: str | None = None
     if config.alpha is not None and 0 < config.alpha < 1:
         backbone = disparity_filter(G, alpha=config.alpha)
-        filtered = True
+        # On uniform weights the disparity test is uninformative and disparity_filter returns the
+        # full graph (logging a warning) — record the skip rather than claim a backbone.
+        if has_uniform_weights(G):
+            filter_skipped = "uniform_weights"
+        else:
+            filtered = True
     else:
         backbone = G.copy()
-        filtered = False
 
     # 2. Baseline weighted global efficiency
     progress("baseline-efficiency")
@@ -382,6 +395,7 @@ def run_robustness(
             "backbone_n": backbone.number_of_nodes(),
             "backbone_m": backbone.number_of_edges(),
             "filtered": filtered,
+            "filter_skipped": filter_skipped,
         },
         "efficiency": {"baseline": baseline_eff, "fractions": eff_fractions, "curves": eff_curves},
         "strategies": strategy_results,
