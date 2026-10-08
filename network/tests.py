@@ -1040,6 +1040,28 @@ class DetectSbmTests(TestCase):
         self.assertEqual(set(community_map.values()), set(palette))
         self.assertIsNone(confidence)  # no refine → no confidence companion
 
+    def test_fit_is_seeded_and_leaves_numpy_state_alone(self) -> None:
+        # graph-tool reads seed_rng(0) as "use the system entropy source", and its Python layer draws
+        # from numpy's global RNG: the fit must seed both with a non-zero SBM_SEED, so scrambling
+        # numpy's global state between runs cannot change the result — and must restore that state.
+        from network import community as c
+
+        import numpy as np
+
+        self.assertNotEqual(c.SBM_SEED, 0)
+        results = []
+        for scramble in (1, 2):
+            np.random.seed(scramble)  # noqa: NPY002 — the global state graph-tool reads
+            before = np.random.get_state()[1].copy()  # noqa: NPY002
+            results.append(
+                (
+                    c.detect_sbm(self.graph, "vaporwave", "NESTED", refine="MCMC"),
+                    c.detect_sbm_assortative(self.graph, "vaporwave", refine="MCMC"),
+                )
+            )
+            self.assertTrue((np.random.get_state()[1] == before).all())  # noqa: NPY002
+        self.assertEqual(results[0], results[1])
+
     def test_modes_are_deterministic(self) -> None:
         from network.community import detect_sbm
 
@@ -1185,6 +1207,279 @@ class DetectSbmAssortativeTests(TestCase):
         for value in confidence.values():
             self.assertGreaterEqual(value, 0.0)
             self.assertLessEqual(value, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# community.py / community_stats.py — FIXED_PARAMETERS (PARAMETERS.md)
+# ---------------------------------------------------------------------------
+
+
+class CommunityFixedParametersTests(TestCase):
+    """The fixed values network.community and network.community_stats declare are well-formed, are the
+    live constants, equal the library defaults they name, and are what the detectors and statistics pass."""
+
+    @staticmethod
+    def _modules() -> dict[str, Any]:
+        from network import community, community_stats
+
+        return {"network.community": community, "network.community_stats": community_stats}
+
+    @staticmethod
+    def _graph() -> "nx.DiGraph":
+        # Two cohesive triangles joined by one bridge, plus two isolated channels.
+        graph = nx.DiGraph()
+        for s, t in [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")]:
+            graph.add_edge(s, t, weight=1.0, weight_raw=1.0)
+        graph.add_nodes_from(["g", "h"])
+        return graph
+
+    def test_every_entry_is_well_formed_and_is_the_live_constant(self) -> None:
+        import importlib
+
+        from network.parameters import FixedParameter, is_valid_scope
+
+        for module_name, module in self._modules().items():
+            self.assertTrue(module.FIXED_PARAMETERS, module_name)
+            for parameter in module.FIXED_PARAMETERS:
+                with self.subTest(module=module_name, name=parameter.name, scope=parameter.scope):
+                    self.assertIsInstance(parameter, FixedParameter)
+                    self.assertTrue(is_valid_scope(parameter.scope), parameter.scope)
+                    if parameter.scope.startswith("strategy:"):
+                        self.assertIn(parameter.scope.removeprefix("strategy:"), VALID_STRATEGIES)
+                    self.assertTrue(parameter.name.strip())
+                    self.assertTrue(parameter.affects.strip())
+                    path, _, constant = parameter.source.partition(": ")
+                    source_module = importlib.import_module(path.removesuffix(".py").replace("/", "."))
+                    self.assertIs(getattr(source_module, constant), parameter.value)
+
+    def test_a_setting_shared_across_scopes_reads_the_same(self) -> None:
+        # PARAMETERS.md lists a setting declared under several active scopes (same name and source) once,
+        # with its first declaration's text — so every declaration must carry the same value and text.
+        texts: dict[tuple[str, str], tuple[object, str, str]] = {}
+        scoped: set[tuple[str, str]] = set()
+        for module in self._modules().values():
+            for parameter in module.FIXED_PARAMETERS:
+                text = (parameter.value, parameter.affects, parameter.note)
+                self.assertEqual(texts.setdefault((parameter.name, parameter.source), text), text, parameter.name)
+                self.assertNotIn((parameter.name, parameter.scope), scoped)
+                scoped.add((parameter.name, parameter.scope))
+
+    def test_named_library_defaults_equal_the_installed_defaults(self) -> None:
+        import inspect
+
+        from network import community as c, community_stats as cs
+
+        import leidenalg
+        from sklearn.metrics import adjusted_mutual_info_score, normalized_mutual_info_score
+
+        find_partition = inspect.signature(leidenalg.find_partition).parameters
+        self.assertEqual(find_partition["n_iterations"].default, c.LEIDEN_N_ITERATIONS)
+        self.assertEqual(find_partition["max_comm_size"].default, c.LEIDEN_MAX_COMM_SIZE)
+        temporal = inspect.signature(leidenalg.find_partition_temporal).parameters
+        self.assertEqual(temporal["interslice_weight"].default, c.TEMPORAL_DEFAULT_INTERSLICE)
+        louvain = inspect.signature(nx.community.louvain_communities).parameters
+        self.assertEqual(louvain["resolution"].default, c.MODULARITY_RESOLUTION)
+        self.assertEqual(louvain["threshold"].default, c.LOUVAIN_THRESHOLD)
+        self.assertEqual(louvain["max_level"].default, c.LOUVAIN_MAX_LEVEL)
+        self.assertEqual(
+            inspect.signature(nx.community.modularity).parameters["resolution"].default, c.MODULARITY_RESOLUTION
+        )
+        algebraic = inspect.signature(nx.algebraic_connectivity).parameters
+        self.assertEqual(algebraic["tol"].default, cs.ALGEBRAIC_CONNECTIVITY_TOL)
+        self.assertEqual(algebraic["normalized"].default, cs.ALGEBRAIC_CONNECTIVITY_NORMALIZED)
+        self.assertEqual(algebraic["weight"].default, cs.ALGEBRAIC_CONNECTIVITY_WEIGHT)
+        clustering = inspect.signature(nx.average_clustering).parameters
+        self.assertEqual(clustering["weight"].default, cs.CLUSTERING_WEIGHT)
+        self.assertEqual(clustering["count_zeros"].default, cs.CLUSTERING_COUNT_ZEROS)
+        for scorer in (adjusted_mutual_info_score, normalized_mutual_info_score):
+            self.assertEqual(
+                inspect.signature(scorer).parameters["average_method"].default, cs.PARTITION_MI_AVERAGE_METHOD
+            )
+        self.assertEqual(inspect.signature(np.std).parameters["ddof"].default, cs.DEGREE_CV_DDOF)
+
+    def test_named_graph_tool_defaults_equal_the_installed_defaults(self) -> None:
+        import importlib.util
+        import inspect
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        from network import community as c
+
+        import graph_tool.all as gt
+
+        self.assertEqual(
+            inspect.signature(gt.BlockState.__init__).parameters["deg_corr"].default, c.SBM_DEGREE_CORRECTED
+        )
+        equilibrate = inspect.signature(gt.mcmc_equilibrate).parameters
+        self.assertEqual(equilibrate["nbreaks"].default, c.SBM_MCMC_NBREAKS)
+        self.assertEqual(equilibrate["epsilon"].default, c.SBM_MCMC_EPSILON)
+        self.assertEqual(equilibrate["multiflip"].default, c.SBM_MCMC_MULTIFLIP)
+        self.assertEqual(
+            inspect.signature(gt.BlockState.multiflip_mcmc_sweep).parameters["beta"].default, c.SBM_MCMC_BETA
+        )
+        self.assertEqual(
+            inspect.signature(gt.PartitionModeState.__init__).parameters["relabel"].default, c.SBM_MODE_RELABEL
+        )
+
+    def test_leiden_family_passes_the_declared_constants(self) -> None:
+        from network import community as c
+
+        import leidenalg
+
+        graph = self._graph()
+        with patch.object(leidenalg, "find_partition", wraps=leidenalg.find_partition) as spy:
+            leiden, _ = c.detect_leiden(graph, "vaporwave")
+            directed, _ = c.detect_leiden_directed(graph, "vaporwave")
+            c.detect_leiden_cpm(graph, "vaporwave")
+            c.detect_consensus(graph, "vaporwave", {"leiden": leiden, "leiden_directed": directed}, 0.5)
+        self.assertEqual(spy.call_count, 4)
+        for call in spy.call_args_list:
+            self.assertEqual(call.kwargs["seed"], c.LEIDEN_SEED)
+            self.assertEqual(call.kwargs["n_iterations"], c.LEIDEN_N_ITERATIONS)
+            self.assertEqual(call.kwargs["max_comm_size"], c.LEIDEN_MAX_COMM_SIZE)
+        # MERGE_ISOLATED_NODES: the two isolated channels share one community.
+        self.assertTrue(c.MERGE_ISOLATED_NODES)
+        self.assertEqual(leiden["g"], leiden["h"])
+
+    def test_leiden_temporal_passes_the_declared_constants(self) -> None:
+        from network import community as c
+
+        import leidenalg
+
+        calls: dict[str, Any] = {}
+
+        class RecordingOptimiser(leidenalg.Optimiser):
+            def set_rng_seed(self, value: int) -> None:
+                calls["seed"] = value
+                super().set_rng_seed(value)
+
+            def optimise_partition_multiplex(
+                self, partitions: list, layer_weights: Any = None, n_iterations: int = 2, **kwargs: Any
+            ) -> float:
+                calls.update(
+                    layers=len(partitions),
+                    layer_weights=layer_weights,
+                    n_iterations=n_iterations,
+                    max_comm_size=self.max_comm_size,
+                )
+                return super().optimise_partition_multiplex(
+                    partitions, layer_weights=layer_weights, n_iterations=n_iterations, **kwargs
+                )
+
+        with (
+            patch.object(leidenalg, "Optimiser", RecordingOptimiser),
+            patch.object(leidenalg, "CPMVertexPartition", wraps=leidenalg.CPMVertexPartition) as cpm,
+        ):
+            c.detect_leiden_temporal({2020: self._graph(), 2021: self._graph()}, "vaporwave", None, 1.0)
+        self.assertEqual(calls["seed"], c.LEIDEN_SEED)
+        self.assertEqual(calls["n_iterations"], c.LEIDEN_N_ITERATIONS)
+        self.assertEqual(calls["max_comm_size"], c.LEIDEN_MAX_COMM_SIZE)
+        self.assertEqual(calls["layers"], 3)  # two year slices + the interslice layer
+        self.assertEqual(calls["layer_weights"], [c.TEMPORAL_LAYER_WEIGHT] * 3)
+        # The last CPM partition built is the interslice layer's.
+        self.assertEqual(cpm.call_args.kwargs["resolution_parameter"], c.TEMPORAL_INTERSLICE_RESOLUTION)
+
+    def test_louvain_passes_the_declared_constants(self) -> None:
+        from network import community as c
+
+        with patch.object(nx.community, "louvain_communities", wraps=nx.community.louvain_communities) as spy:
+            c.detect_louvain(self._graph(), "vaporwave")
+        kwargs = spy.call_args.kwargs
+        self.assertEqual(kwargs["resolution"], c.MODULARITY_RESOLUTION)
+        self.assertEqual(kwargs["threshold"], c.LOUVAIN_THRESHOLD)
+        self.assertEqual(kwargs["max_level"], c.LOUVAIN_MAX_LEVEL)
+        self.assertEqual(kwargs["seed"], c.LOUVAIN_SEED)
+
+    def test_sbm_family_passes_the_declared_constants(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+        from network import community as c
+
+        import graph_tool.all as gt
+
+        greedy_sweeps: list[dict[str, Any]] = []
+        original_sweep = gt.PPBlockState.multiflip_mcmc_sweep
+
+        def _record_sweep(state: Any, *args: Any, **kwargs: Any) -> Any:
+            greedy_sweeps.append(kwargs)
+            return original_sweep(state, *args, **kwargs)
+
+        with (
+            patch.object(gt, "seed_rng", wraps=gt.seed_rng) as seed,
+            patch.object(gt, "minimize_blockmodel_dl", wraps=gt.minimize_blockmodel_dl) as flat,
+            patch.object(gt, "minimize_nested_blockmodel_dl", wraps=gt.minimize_nested_blockmodel_dl) as nested,
+            patch.object(gt, "mcmc_equilibrate", wraps=gt.mcmc_equilibrate) as equilibrate,
+            patch.object(gt, "PartitionModeState", wraps=gt.PartitionModeState) as mode,
+            patch.object(gt.PPBlockState, "multiflip_mcmc_sweep", _record_sweep),
+        ):
+            c.detect_sbm(self._graph(), "vaporwave", "FLAT", refine="MCMC")
+            c.detect_sbm(self._graph(), "vaporwave", "NESTED")
+            c.detect_sbm_assortative(self._graph(), "vaporwave")
+
+        self.assertEqual({call.args[0] for call in seed.call_args_list}, {c.SBM_SEED})
+        fit_args = {"niter": c.SBM_FIT_NITER, "beta": c.SBM_FIT_BETA}
+        for fit in (flat, nested):
+            self.assertEqual(fit.call_args.kwargs["state_args"]["deg_corr"], c.SBM_DEGREE_CORRECTED)
+            self.assertEqual(fit.call_args.kwargs["multilevel_mcmc_args"], fit_args)
+        mcmc_args = {"niter": c.SBM_MCMC_SWEEP_NITER, "beta": c.SBM_MCMC_BETA}
+        equilibration, sampling = (call.kwargs for call in equilibrate.call_args_list)
+        self.assertEqual(equilibration["wait"], c.SBM_MCMC_WAIT)
+        self.assertEqual(equilibration["nbreaks"], c.SBM_MCMC_NBREAKS)
+        self.assertEqual(equilibration["epsilon"], c.SBM_MCMC_EPSILON)
+        self.assertEqual(sampling["force_niter"], c.SBM_MCMC_SAMPLES)
+        for kwargs in (equilibration, sampling):
+            self.assertEqual(kwargs["multiflip"], c.SBM_MCMC_MULTIFLIP)
+            self.assertEqual(kwargs["mcmc_args"], mcmc_args)
+        self.assertEqual(mode.call_args.kwargs, {"relabel": c.SBM_MODE_RELABEL, "converge": c.SBM_MODE_CONVERGE})
+        self.assertEqual(greedy_sweeps, [{"beta": c.PP_GREEDY_BETA, "niter": c.PP_GREEDY_NITER}])
+
+    def test_statistics_pass_the_declared_constants(self) -> None:
+        from network import community as c, community_stats as cs
+
+        import sklearn.metrics
+
+        graph = self._graph()
+        graph.remove_nodes_from(["g", "h"])  # connected, so algebraic connectivity is computed
+        with (
+            patch.object(nx, "algebraic_connectivity", wraps=nx.algebraic_connectivity) as algebraic,
+            patch.object(nx, "average_clustering", wraps=nx.average_clustering) as clustering,
+        ):
+            summary = cs._network_summary(graph)
+        self.assertIsNotNone(summary["algebraic_connectivity"])
+        self.assertEqual(
+            algebraic.call_args.kwargs,
+            {
+                "weight": cs.ALGEBRAIC_CONNECTIVITY_WEIGHT,
+                "normalized": cs.ALGEBRAIC_CONNECTIVITY_NORMALIZED,
+                "tol": cs.ALGEBRAIC_CONNECTIVITY_TOL,
+                "method": cs.ALGEBRAIC_CONNECTIVITY_METHOD,
+                "seed": cs.ALGEBRAIC_CONNECTIVITY_SEED,
+            },
+        )
+        self.assertEqual(
+            clustering.call_args.kwargs, {"weight": cs.CLUSTERING_WEIGHT, "count_zeros": cs.CLUSTERING_COUNT_ZEROS}
+        )
+
+        nodes = sorted(graph.nodes())
+        graph_data = {"nodes": [{"id": n, "communities": {"leiden": "x" if n in "abc" else "y"}} for n in nodes]}
+        strategy_data = {"groups": [("1", 3, "x", "#000000"), ("2", 3, "y", "#000000")]}
+        with patch.object(nx.community, "modularity", wraps=nx.community.modularity) as modularity:
+            cs._compute_strategy_entry("leiden", strategy_data, graph_data, graph, {}, {})
+        self.assertEqual(modularity.call_args.kwargs["resolution"], c.MODULARITY_RESOLUTION)
+
+        with (
+            patch.object(
+                sklearn.metrics, "adjusted_mutual_info_score", wraps=sklearn.metrics.adjusted_mutual_info_score
+            ) as ami,
+            patch.object(
+                sklearn.metrics, "normalized_mutual_info_score", wraps=sklearn.metrics.normalized_mutual_info_score
+            ) as nmi,
+        ):
+            cs._compare_partitions([1, 1, 2, 2], [1, 2, 2, 2])
+        for spy in (ami, nmi):
+            self.assertEqual(spy.call_args.kwargs["average_method"], cs.PARTITION_MI_AVERAGE_METHOD)
 
 
 # ---------------------------------------------------------------------------
@@ -2614,6 +2909,7 @@ class ExportNetworkCommandTests(TestCase):
             f"{_b}.exporter.write_meta_json",
             f"{_b}.exporter.write_robots_txt",
             f"{_b}.exporter.write_summary_json",
+            f"{_b}.parameters.write_parameters_md",
             f"{_b}.tables.write_index_html",
             f"{_b}.tables.write_network_metrics_json",
             f"{_b}.tables.write_community_metrics_json",
@@ -3311,6 +3607,366 @@ class ExportNetworkCommandTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# parameters.py — PARAMETERS.md (run options + fixed parameters of an export)
+# ---------------------------------------------------------------------------
+
+
+class ParametersDocumentTests(TestCase):
+    """PARAMETERS.md: which scopes a run activates, which fixed parameters it lists, how it renders,
+    and that the export publishes it."""
+
+    def _resolve(self, *argv: str) -> Any:
+        from django.core.management.base import OutputWrapper
+
+        from network.management.commands.structural_analysis import Command
+
+        cmd = Command()
+        cmd.stdout = OutputWrapper(io.StringIO())
+        parser = cmd.create_parser("manage.py", "structural_analysis")
+        return cmd._resolve_options(vars(parser.parse_args(list(argv))))
+
+    @staticmethod
+    def _param(name: str, scope: str, value: object = 1, source: str = "m.py: X") -> Any:
+        from network.parameters import FixedParameter
+
+        return FixedParameter(name, value, scope, f"{name} affects something.", source)
+
+    @staticmethod
+    def _assert_tables_well_formed(test: TestCase, text: str) -> None:
+        """Every row of every Markdown table has the header's number of (unescaped) cells."""
+        import re
+
+        width = None
+        for line in text.splitlines():
+            if not line.startswith("|"):
+                width = None
+                continue
+            cells = len(re.split(r"(?<!\\)\|", line)) - 2
+            if width is None:
+                width = cells
+            test.assertEqual(cells, width, line)
+
+    # ── scopes ──────────────────────────────────────────────────────────────
+
+    def test_active_scopes_follow_the_resolved_options(self) -> None:
+        from network.parameters import active_scopes
+
+        region = label_group("Region", is_primary=False)
+        opts = self._resolve(
+            "--measures",
+            "PAGERANK,HITSAUTH,MODULEROLE",
+            "--community-strategies",
+            f"LEIDEN_DIRECTED,LEIDEN_CPM,LABELGROUP{region.pk}",
+            "--community-backbone-alpha",
+            "0.05",
+            "--graph-3d",
+            "--html",
+            "--near-copy-edges",
+            "--robustness",
+            "--dominance",
+            "--vacancy-measures",
+            "AMPLIFIER_JACCARD",
+            "--interest-structural",
+        )
+        self.assertEqual(
+            active_scopes(opts),
+            {
+                "graph",
+                "near_copies",
+                "measure:PAGERANK",
+                "measure:HITSAUTH",  # HITSHUB not selected → not active
+                "measure:MODULEROLE",
+                "communities",
+                "strategy:LEIDEN_DIRECTED",
+                "strategy:LEIDEN_CPM",
+                "strategy:LABELGROUP",
+                "community_backbone",
+                "community_stats",  # --html computes the network / community tables
+                "layout_2d",  # the 3D map is seeded from the 2D pass
+                "layout_3d",
+                "robustness",
+                "dominance",
+                "vacancy",
+                "interest",
+            },
+        )
+        self.assertEqual(active_scopes(self._resolve("--measures", "PAGERANK")), {"graph", "measure:PAGERANK"})
+
+    def test_extra_layouts_are_active_only_with_their_map(self) -> None:
+        from network.parameters import active_scopes
+
+        layouts = ("--layouts-2d", "TSNE,CIRCULAR", "--layouts-3d", "UMAP")
+        both = active_scopes(self._resolve("--measures", "PAGERANK", "--graph-2d", "--graph-3d", *layouts))
+        self.assertTrue({"layout:TSNE", "layout:CIRCULAR", "layout:UMAP"} <= both)
+        only_2d = active_scopes(self._resolve("--measures", "PAGERANK", "--graph-2d", *layouts))
+        self.assertTrue({"layout:TSNE", "layout:CIRCULAR"} <= only_2d)
+        self.assertNotIn("layout:UMAP", only_2d)  # a 3D-only layout without the 3D map never runs
+        self.assertFalse(any(s.startswith("layout:") for s in active_scopes(self._resolve("--measures", "PAGERANK"))))
+
+    def test_active_scopes_coordination_timeline_and_label_group_backbone(self) -> None:
+        from network.parameters import active_scopes
+
+        region = label_group("Region", is_primary=False)
+        opts = self._resolve(
+            "--community-strategies",
+            f"LABELGROUP{region.pk}",
+            "--community-backbone-alpha",
+            "0.05",
+            "--coordination-3d",
+            "--timeline-step",
+            "year",
+            "--robustness",
+            "--robustness-replay",
+        )
+        expected = {
+            "graph",
+            "communities",
+            "strategy:LABELGROUP",  # no algorithmic strategy → no detection backbone
+            "coordination",
+            "layout_2d",  # the coordination map always gets its 2D layout
+            "layout_3d",
+            "community_stats",  # every timeline year computes the tables' statistics
+            "timeline",
+            "robustness",
+            "robustness_replay",
+        }
+        self.assertEqual(active_scopes(opts), expected)
+        # No coordination tie survived → the coordination maps were never laid out.
+        self.assertEqual(active_scopes(opts, coordination_laid_out=False), expected - {"layout_2d", "layout_3d"})
+
+    # ── fixed parameters ────────────────────────────────────────────────────
+
+    def test_collect_filters_by_scope_and_groups_by_section(self) -> None:
+        from network.parameters import collect_fixed_parameters
+
+        declared = [
+            self._param("Rescale", "graph"),
+            self._param("Damping", "measure:PAGERANK"),
+            self._param("Attack runs", "robustness"),
+            self._param("Leiden seed", "strategy:LEIDEN"),
+            self._param("Copy threshold", "near_copies"),
+        ]
+        grouped = collect_fixed_parameters({"graph", "measure:PAGERANK", "strategy:LEIDEN"}, declared=declared)
+        self.assertEqual(list(grouped), ["Graph & edges", "Measures", "Communities"])  # SECTION_ORDER
+        self.assertEqual([p.name for p in grouped["Graph & edges"]], ["Rescale"])
+        self.assertEqual([p.name for p in grouped["Measures"]], ["Damping"])
+        self.assertEqual(collect_fixed_parameters(set(), declared=declared), {})
+
+    def test_setting_shared_by_two_scopes_is_listed_once(self) -> None:
+        """HITS settings are declared under both HITS measures; with both selected they print once,
+        with one selected they still print (under the selected scope)."""
+        from network.parameters import collect_fixed_parameters, render_parameters_markdown
+
+        declared = [
+            self._param("HITS maximum iterations", "measure:HITSHUB", 100, "_centrality.py: HITS_MAX_ITER"),
+            self._param("HITS maximum iterations", "measure:HITSAUTH", 100, "_centrality.py: HITS_MAX_ITER"),
+            self._param("Damping", "measure:PAGERANK", 0.85, "_centrality.py: PAGERANK_ALPHA"),
+        ]
+        both = collect_fixed_parameters({"measure:HITSHUB", "measure:HITSAUTH", "measure:PAGERANK"}, declared)
+        hits = [p for p in both["Measures"] if p.name == "HITS maximum iterations"]
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].scopes, ("measure:HITSHUB", "measure:HITSAUTH"))
+
+        only_auth = collect_fixed_parameters({"measure:HITSAUTH"}, declared)
+        self.assertEqual(
+            [(p.name, p.scopes) for p in only_auth["Measures"]], [("HITS maximum iterations", ("measure:HITSAUTH",))]
+        )
+
+        text = render_parameters_markdown(
+            self._resolve("--measures", "HITSHUB,HITSAUTH,PAGERANK"), fixed=both, versions=[]
+        )
+        self.assertEqual(text.count("| HITS maximum iterations |"), 1)
+        self.assertIn("| HITSHUB, HITSAUTH | HITS maximum iterations | 100 |", text)
+
+    def test_declared_parameters_reads_modules_defensively(self) -> None:
+        import logging
+        import sys
+        import types
+
+        from network.parameters import declared_parameters
+
+        # The test settings silence logging (logging.disable), which assertLogs cannot bypass.
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
+        good = self._param("Good", "graph")
+        fake = types.ModuleType("pulpit_fake_parameters")
+        fake.FIXED_PARAMETERS = (good, good, self._param("Bad scope", "nonsense"), "not a parameter")
+        bare = types.ModuleType("pulpit_fake_bare")  # declares nothing
+        with (
+            patch.dict(sys.modules, {"pulpit_fake_parameters": fake, "pulpit_fake_bare": bare}),
+            self.assertLogs("network.parameters", level="WARNING") as logs,
+        ):
+            found = declared_parameters(("pulpit_fake_parameters", "pulpit_fake_bare", "pulpit_no_such_module"))
+        self.assertEqual(found, [good])  # duplicate listed once; invalid entries and missing modules skipped
+        self.assertEqual(len(logs.records), 3)
+
+    def test_every_declared_fixed_parameter_is_well_formed(self) -> None:
+        """Guards every analysis module's FIXED_PARAMETERS: a valid scope (with a known measure /
+        strategy token, or the parameter would never be listed) and the text the document needs."""
+        import importlib
+
+        from network.layout import EXTRA_LAYOUT_CHOICES_2D, EXTRA_LAYOUT_CHOICES_3D
+        from network.measures import VALID_MEASURES
+        from network.parameters import PARAMETER_MODULES, FixedParameter, is_valid_scope
+
+        for module_name in PARAMETER_MODULES:
+            module = importlib.import_module(module_name)
+            for entry in getattr(module, "FIXED_PARAMETERS", ()):
+                with self.subTest(module=module_name, parameter=getattr(entry, "name", entry)):
+                    self.assertIsInstance(entry, FixedParameter)
+                    self.assertTrue(is_valid_scope(entry.scope), entry.scope)
+                    if entry.scope.startswith("measure:"):
+                        self.assertIn(entry.scope.removeprefix("measure:"), VALID_MEASURES)
+                    if entry.scope.startswith("strategy:"):
+                        self.assertIn(entry.scope.removeprefix("strategy:"), VALID_STRATEGIES | {"LABELGROUP"})
+                    if entry.scope.startswith("layout:"):
+                        self.assertIn(
+                            entry.scope.removeprefix("layout:"),
+                            EXTRA_LAYOUT_CHOICES_2D | EXTRA_LAYOUT_CHOICES_3D,
+                        )
+                    self.assertTrue(entry.name.strip() and entry.affects.strip() and entry.source.strip())
+
+    # ── rendering ───────────────────────────────────────────────────────────
+
+    def test_format_value(self) -> None:
+        from network.parameters import format_value
+
+        self.assertEqual(format_value(0.1 + 0.2), "0.3")
+        self.assertEqual(format_value(1e-6), "1e-06")
+        self.assertEqual(format_value(np.float64(0.85)), "0.85")
+        self.assertEqual(format_value(np.int64(7)), "7")
+        self.assertEqual(format_value(True), "yes")
+        self.assertEqual(format_value(None), "none")
+        self.assertEqual(format_value("weight"), "`weight`")
+        self.assertEqual(format_value(("random", 2)), "`random`, 2")
+        self.assertEqual(format_value(frozenset({"b", "a"})), "`a`, `b`")
+        self.assertEqual(format_value({"alpha": 0.5}), "alpha = 0.5")
+        self.assertEqual(format_value(float("inf")), "∞")
+
+    def test_library_versions(self) -> None:
+        from network.parameters import _library_version, library_versions
+
+        versions = {name: version for name, version, _ in library_versions()}
+        self.assertEqual(versions["networkx"], nx.__version__)
+        self.assertEqual(versions["numpy"], np.__version__)
+        self.assertIn("graph-tool", versions)  # a version, or "not installed"
+        self.assertEqual(_library_version(("pulpit-no-such-dist",), "pulpit_no_such_module"), "not installed")
+
+    def test_render_shows_run_options_gamma_versions_and_escapes_pipes(self) -> None:
+        from network.parameters import RunFacts, collect_fixed_parameters, render_parameters_markdown
+
+        opts = self._resolve(
+            "--measures",
+            "PAGERANK,MODULEROLE",
+            "--community-strategies",
+            "LEIDEN_DIRECTED,LEIDEN_CPM,LEIDEN_CPM(resolution=0.05)",
+            "--timeline-step",
+            "year",
+            "--edge-weight-strategy",
+            "TOTAL",
+            "--name",
+            "my-run",
+        )
+        facts = RunFacts(
+            nodes=3,
+            edges=2,
+            community_resolutions={"leiden_cpm": 0.0123, "leiden_cpm_resolution_0_05": 0.05},
+            year_resolutions={
+                2023: {"leiden_cpm": 0.02, "leiden_cpm_resolution_0_05": 0.05},
+                2024: {"leiden_cpm": 0.031},
+            },
+            measure_notes={"MODULEROLE": "Community basis = Leiden directed (`leiden_directed`, auto-resolved)"},
+            timeline_years=[2023, 2024],
+        )
+        fixed = collect_fixed_parameters(
+            {"graph"}, [self._param("Cap | max", "graph", "a|b", "graph_builder.py: EDGE_WEIGHT_SCALE")]
+        )
+        text = render_parameters_markdown(
+            opts,
+            facts,
+            generated_at=datetime.datetime(2026, 1, 2, 3, 4, 5, tzinfo=datetime.UTC),
+            fixed=fixed,
+            versions=[("networkx", "9.9", "graph model")],
+        )
+        self.assertTrue(text.startswith("# Parameters — my-run\n"))
+        self.assertIn("Generated 2026-01-02 03:04:05 UTC by Pulpit", text)
+        self.assertIn("Full-range graph: 3 channels, 2 citation edges.", text)
+        self.assertIn("## How to read this", text)
+        # Run options, as resolved.
+        self.assertIn("| Edge-weight strategy | `TOTAL` | `--edge-weight-strategy` |", text)
+        self.assertIn("| `PAGERANK` | — | `--measures` |", text)
+        self.assertIn("| `MODULEROLE` | Community basis = Leiden directed (`leiden_directed`, auto-resolved) |", text)
+        # The γ actually used: the density for the bare token, the explicit value otherwise …
+        self.assertIn("| `LEIDEN_CPM` | Resolution γ = 0.0123 (the network's weighted edge density) |", text)
+        self.assertIn("| `LEIDEN_CPM(resolution=0.05)` | Resolution γ = 0.05 |", text)
+        # … and per timeline year, only for the auto-γ instance (the explicit one is constant).
+        self.assertIn("| Year | Leiden CPM |\n|---|---|\n| 2023 | 0.02 |\n| 2024 | 0.031 |", text)
+        self.assertIn("| Years exported | 2023–2024 (2 years) |", text)
+        self.assertIn("**Not computed in this run:**", text)
+        self.assertIn("robustness (`--robustness`)", text)
+        self.assertNotIn("### Robustness", text)
+        # Fixed parameters, pipes escaped in every cell.
+        self.assertIn(
+            "| Cap \\| max | `a\\|b` | Cap \\| max affects something. | `graph_builder.py: EDGE_WEIGHT_SCALE` | — |",
+            text,
+        )
+        # Software versions.
+        self.assertIn("| networkx | 9.9 | graph model |", text)
+        self.assertIn("| Pulpit |", text)
+        self._assert_tables_well_formed(self, text)
+
+    def test_render_without_declared_parameters(self) -> None:
+        from network.parameters import render_parameters_markdown
+
+        text = render_parameters_markdown(self._resolve("--measures", "PAGERANK"), fixed={}, versions=[])
+        self.assertIn("_No fixed parameters are declared for the parts of the analysis that ran._", text)
+        self._assert_tables_well_formed(self, text)
+
+    # ── export ──────────────────────────────────────────────────────────────
+
+    def test_export_publishes_parameters_md(self) -> None:
+        """A real structural_analysis run writes PARAMETERS.md into the published export."""
+        from pathlib import Path
+
+        from django.core.management import call_command
+
+        label = make_label("Org1", color="#FF0000")
+        ch1 = make_channel(telegram_id=1, label=label, title="Channel 1")
+        ch2 = make_channel(telegram_id=2, label=label, title="Channel 2")
+        ch3 = make_channel(telegram_id=3, label=label, title="Channel 3")
+        for telegram_id, (channel, source) in enumerate(((ch2, ch1), (ch3, ch1), (ch3, ch2), (ch1, ch3)), start=1):
+            Message.objects.create(telegram_id=telegram_id, channel=channel, forwarded_from=source)
+        for channel in (ch1, ch2, ch3):
+            channel.save()
+
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(BASE_DIR=Path(tmpdir)):
+            call_command(
+                "structural_analysis",
+                measures="PAGERANK",
+                community_strategies="LEIDEN",
+                edge_weight_strategy="TOTAL",
+                name="params-e2e",
+                stdout=out,
+                stderr=io.StringIO(),
+            )
+            export_dir = Path(tmpdir) / "exports" / "params-e2e"
+            self.assertFalse((Path(tmpdir) / "exports" / "params-e2e.tmp").exists())
+            self.assertTrue((export_dir / "summary.json").is_file())
+            text = (export_dir / "PARAMETERS.md").read_text(encoding="utf-8")
+
+        self.assertIn("- PARAMETERS.md", out.getvalue())
+        self.assertIn("# Parameters — params-e2e", text)
+        self.assertIn("| `PAGERANK` |", text)
+        self.assertIn("| `LEIDEN` |", text)
+        self.assertIn("| Edge-weight strategy | `TOTAL` |", text)
+        self.assertIn("Full-range graph: 3 channels", text)
+        self.assertIn("## Fixed parameters", text)
+        self.assertIn("| networkx |", text)
+        self._assert_tables_well_formed(self, text)
+
+
+# ---------------------------------------------------------------------------
 # measures/_centrality.py — apply_hits
 # ---------------------------------------------------------------------------
 
@@ -3688,6 +4344,133 @@ class ApplyContentOriginalityTests(TestCase):
         original = set(messages.filter(original_text_q()).values_list("telegram_id", flat=True))
         self.assertEqual(forwarded, {300, 301, 302, 303})
         self.assertEqual(original, {304})
+
+
+# ---------------------------------------------------------------------------
+# graph_builder / utils / near_copies / measures — FIXED_PARAMETERS (PARAMETERS.md)
+# ---------------------------------------------------------------------------
+
+
+class GraphAndMeasureFixedParametersTests(TestCase):
+    """The fixed values the graph, near-copy and measure modules declare are well-formed, are the very
+    constants the code passes, and — where they name a library default — equal that default."""
+
+    @staticmethod
+    def _modules() -> dict[str, Any]:
+        import importlib
+
+        names = (
+            "network.graph_builder",
+            "network.utils",
+            "network.near_copies",
+            "network.measures._base",
+            "network.measures._centrality",
+            "network.measures._content",
+        )
+        return {name: importlib.import_module(name) for name in names}
+
+    def test_every_entry_is_well_formed_and_is_the_live_constant(self) -> None:
+        from network.parameters import FixedParameter, is_valid_scope
+
+        for module_name, module in self._modules().items():
+            for parameter in module.FIXED_PARAMETERS:
+                with self.subTest(module=module_name, name=parameter.name):
+                    self.assertIsInstance(parameter, FixedParameter)
+                    self.assertTrue(is_valid_scope(parameter.scope), parameter.scope)
+                    self.assertTrue(parameter.name.strip())
+                    self.assertTrue(parameter.affects.strip())
+                    path, _, constant = parameter.source.partition(": ")
+                    self.assertEqual(path, module_name.replace(".", "/") + ".py")
+                    self.assertIs(getattr(module, constant), parameter.value)
+
+    def test_measures_package_aggregates_every_measure_module(self) -> None:
+        import network.measures
+        from network.measures import _base, _centrality, _content
+
+        self.assertEqual(
+            network.measures.FIXED_PARAMETERS,
+            _base.FIXED_PARAMETERS + _centrality.FIXED_PARAMETERS + _content.FIXED_PARAMETERS,
+        )
+        hits_scopes = {p.scope for p in _centrality.FIXED_PARAMETERS if p.name.startswith("HITS")}
+        self.assertEqual(hits_scopes, {"measure:HITSHUB", "measure:HITSAUTH"})
+
+    def test_named_library_defaults_equal_the_installed_defaults(self) -> None:
+        import inspect
+
+        from network.measures import _centrality as c
+
+        pagerank = inspect.signature(nx.pagerank).parameters
+        self.assertEqual(pagerank["alpha"].default, c.PAGERANK_ALPHA)
+        self.assertEqual(pagerank["max_iter"].default, c.PAGERANK_MAX_ITER)
+        self.assertEqual(pagerank["tol"].default, c.PAGERANK_TOL)
+        self.assertEqual(pagerank["weight"].default, c.PAGERANK_WEIGHT)
+        self.assertEqual(pagerank["personalization"].default, c.PAGERANK_PERSONALIZATION)
+        self.assertEqual(pagerank["dangling"].default, c.PAGERANK_DANGLING)
+        self.assertEqual(inspect.signature(nx.clustering).parameters["weight"].default, c.LOCAL_CLUSTERING_WEIGHT)
+        self.assertEqual(inspect.signature(np.std).parameters["ddof"].default, c.MODULE_Z_STD_DDOF)
+
+    def test_pagerank_hits_burt_and_clustering_pass_the_declared_constants(self) -> None:
+        from network.measures import _centrality as c
+
+        graph = nx.DiGraph([("1", "2"), ("2", "3"), ("3", "1"), ("1", "3")])
+        nx.set_edge_attributes(graph, 1.0, "weight")
+        graph_data: dict = {"nodes": [{"id": n} for n in graph], "edges": []}
+        with patch.object(c.nx, "pagerank", wraps=nx.pagerank) as pagerank:
+            apply_pagerank(graph_data, graph)
+        self.assertEqual(
+            pagerank.call_args.kwargs,
+            {
+                "alpha": c.PAGERANK_ALPHA,
+                "personalization": c.PAGERANK_PERSONALIZATION,
+                "max_iter": c.PAGERANK_MAX_ITER,
+                "tol": c.PAGERANK_TOL,
+                "weight": c.PAGERANK_WEIGHT,
+                "dangling": c.PAGERANK_DANGLING,
+            },
+        )
+        with patch.object(c, "compute_hits", wraps=c.compute_hits) as compute_hits:
+            apply_hits(graph_data, graph)
+        self.assertEqual(compute_hits.call_args.kwargs, {"max_iter": c.HITS_MAX_ITER, "tol": c.HITS_TOL})
+        with patch.object(c.nx, "constraint", wraps=nx.constraint) as constraint:
+            apply_burt_constraint(graph_data, graph)
+        self.assertEqual(constraint.call_args.kwargs, {"weight": c.BURT_CONSTRAINT_WEIGHT})
+        with patch.object(c.nx, "clustering", wraps=nx.clustering) as clustering:
+            apply_local_clustering(graph_data, graph)
+        self.assertEqual(clustering.call_args.kwargs, {"weight": c.LOCAL_CLUSTERING_WEIGHT})
+
+    def test_module_role_reads_the_hub_threshold(self) -> None:
+        from network.measures import _centrality as c
+
+        graph = nx.DiGraph([("a", "b"), ("b", "c"), ("c", "a")])
+        for node in graph:
+            graph.nodes[node]["data"] = {"communities": {"leiden": "1"}}
+        graph_data: dict = {"nodes": [{"id": n} for n in graph], "edges": []}
+        apply_module_role(graph_data, graph, "leiden")
+        self.assertEqual({n["module_role"] for n in graph_data["nodes"]}, {"Ultra-peripheral"})
+        with patch.object(c, "GA_Z_HUB", -1.0):
+            apply_module_role(graph_data, graph, "leiden")
+        self.assertEqual({n["module_role"] for n in graph_data["nodes"]}, {"Provincial hub"})
+
+    def test_build_graph_rescales_edges_to_the_declared_maximum(self) -> None:
+        from network import graph_builder
+
+        label = make_label("FixedParamsOrg", color="#FF0000")
+        source = make_channel(telegram_id=901, label=label, title="Source")
+        amplifier = make_channel(telegram_id=902, label=label, title="Amplifier")
+        Message.objects.create(telegram_id=1, channel=amplifier, forwarded_from=source)
+        graph, _, _, _ = build_graph(edge_weight_strategy="TOTAL")
+        self.assertEqual(max(w for _, _, w in graph.edges(data="weight")), graph_builder.EDGE_WEIGHT_SCALE)
+        with patch.object(graph_builder, "EDGE_WEIGHT_SCALE", 7):
+            graph, _, _, _ = build_graph(edge_weight_strategy="TOTAL")
+        self.assertEqual(max(w for _, _, w in graph.edges(data="weight")), 7)
+
+    def test_near_copy_normalisation_reads_the_declared_form(self) -> None:
+        from network import near_copies
+
+        # NFKC folds full-width letters to ASCII; NFC leaves them apart.
+        self.assertEqual(normalise_tokens("ＡＢＣ"), ["abc"])
+        with patch.object(near_copies, "UNICODE_NORMALISATION_FORM", "NFC"):
+            self.assertEqual(normalise_tokens("ＡＢＣ"), ["ａｂｃ"])
 
 
 # ---------------------------------------------------------------------------
@@ -6188,6 +6971,273 @@ class ResolveIterationsTests(TestCase):
         from network.layout import resolve_iterations
 
         self.assertEqual(resolve_iterations("3X", num_nodes=200), 600)
+
+
+# ---------------------------------------------------------------------------
+# FIXED_PARAMETERS — layout, robustness, dominance, coordination, vacancy, interest
+# ---------------------------------------------------------------------------
+
+
+class AnalysisLayerFixedParametersTests(TestCase):
+    """The fixed parameters declared by the layout and analysis-layer modules are well formed, are the
+    live module constants, and are the values the code actually passes."""
+
+    @staticmethod
+    def _declarations() -> dict[str, tuple]:
+        import importlib
+
+        from network import coordination, dominance, interest_structural, layout, robustness, vacancy_analysis
+
+        # By module path: the package re-exports the disparity_filter *function* under the submodule's name.
+        robustness_modules = ("attacks", "disparity_filter", "metrics", "modular", "null_model", "replay", "runner")
+        robustness_modules += ("scenarios",)
+        return {
+            "layout": layout.FIXED_PARAMETERS,
+            "robustness": robustness.FIXED_PARAMETERS,
+            **{
+                f"robustness.{name}": importlib.import_module(f"network.robustness.{name}").FIXED_PARAMETERS
+                for name in robustness_modules
+            },
+            "dominance": dominance.FIXED_PARAMETERS,
+            "coordination": coordination.FIXED_PARAMETERS,
+            "vacancy_analysis": vacancy_analysis.FIXED_PARAMETERS,
+            "interest_structural": interest_structural.FIXED_PARAMETERS,
+        }
+
+    @staticmethod
+    def _value(params: tuple, constant: str, scope: str | None = None) -> object:
+        matches = [p for p in params if p.source.endswith(f": {constant}") and (scope is None or p.scope == scope)]
+        assert matches, f"{constant} not declared"
+        return matches[0].value
+
+    def test_every_entry_is_well_formed(self) -> None:
+        from network.parameters import FixedParameter, is_valid_scope
+
+        for module, params in self._declarations().items():
+            self.assertIsInstance(params, tuple, module)
+            for p in params:
+                with self.subTest(module=module, name=p.name):
+                    self.assertIsInstance(p, FixedParameter)
+                    self.assertTrue(is_valid_scope(p.scope), p.scope)
+                    self.assertTrue(p.name.strip())
+                    self.assertTrue(p.affects.strip())
+                    self.assertRegex(p.source, r"^network/[\w/]+\.py: \w+$")
+        self.assertTrue(all(self._declarations()[m] for m in ("layout", "robustness", "dominance", "coordination")))
+
+    def test_declared_values_are_the_live_module_constants(self) -> None:
+        import importlib
+
+        for module, params in self._declarations().items():
+            for p in params:
+                path, constant = p.source.split(": ")
+                live = getattr(importlib.import_module(path.removesuffix(".py").replace("/", ".")), constant)
+                with self.subTest(module=module, name=p.name):
+                    self.assertIs(p.value, live)
+
+    def test_robustness_aggregate_gathers_every_module(self) -> None:
+        decl = self._declarations()
+        parts = [p for key, params in decl.items() if key.startswith("robustness.") for p in params]
+        self.assertCountEqual(decl["robustness"], parts)
+        # The disparity filter serves the community backbone as well as the robustness battery.
+        self.assertIn("community_backbone", {p.scope for p in decl["robustness.disparity_filter"]})
+
+    def test_layout_scopes_split_main_map_from_extra_layouts(self) -> None:
+        from network import layout
+
+        scopes = {p.scope for p in layout.FIXED_PARAMETERS}
+        extra_tokens = {s.removeprefix("layout:") for s in scopes if s.startswith("layout:")}
+        self.assertTrue({"layout_2d", "layout_3d"} <= scopes)
+        self.assertTrue(extra_tokens <= (layout.EXTRA_LAYOUT_CHOICES_2D | layout.EXTRA_LAYOUT_CHOICES_3D))
+        self.assertNotIn("FA2", extra_tokens)  # the primary layout is the layout_2d / layout_3d scope
+        main = {p.source for p in layout.FIXED_PARAMETERS if p.scope in ("layout_2d", "layout_3d")}
+        self.assertFalse(any("TSNE" in s or "UMAP" in s or "SPRING" in s for s in main))
+
+    def test_forceatlas2_gets_the_declared_settings(self) -> None:
+        from network import layout
+
+        params = layout.FIXED_PARAMETERS
+        g = nx.DiGraph([("a", "b"), ("b", "c")])
+        expected = {
+            "outboundAttractionDistribution": "FA2_OUTBOUND_ATTRACTION_DISTRIBUTION",
+            "linLogMode": "FA2_LINLOG_MODE",
+            "adjustSizes": "FA2_ADJUST_SIZES",
+            "edgeWeightInfluence": "FA2_EDGE_WEIGHT_INFLUENCE",
+            "normalizeEdgeWeights": "FA2_NORMALIZE_EDGE_WEIGHTS",
+            "invertedEdgeWeightsMode": "FA2_INVERTED_EDGE_WEIGHTS_MODE",
+            "jitterTolerance": "FA2_JITTER_TOLERANCE",
+            "barnesHutTheta": "FA2_BARNES_HUT_THETA",
+            "scalingRatio": "FA2_SCALING_RATIO",
+            "strongGravityMode": "FA2_STRONG_GRAVITY_MODE",
+            "gravity": "FA2_GRAVITY",
+            "backend": "FA2_BACKEND",
+        }
+        for dim, run, scope in (
+            (2, layout.forceatlas2_positions, "layout_2d"),
+            (3, layout.forceatlas2_positions_3d, "layout_3d"),
+        ):
+            with patch.object(layout, "ForceAtlas2") as fa2_cls:
+                fa2_cls.return_value.forceatlas2_networkx_layout.return_value = {}
+                run(g, dict.fromkeys(g, (0.0,) * dim), 7)
+            kwargs = fa2_cls.call_args.kwargs
+            with self.subTest(dim=dim):
+                for kwarg, constant in expected.items():
+                    self.assertEqual(kwargs[kwarg], self._value(params, constant, scope), kwarg)
+                self.assertEqual(kwargs["dim"], dim)
+                self.assertEqual(kwargs["barnesHutOptimize"], self._value(params, f"FA2_BARNES_HUT_{dim}D", scope))
+                call = fa2_cls.return_value.forceatlas2_networkx_layout.call_args
+                self.assertEqual(call.kwargs["iterations"], 7)
+                # The pass is weighted by the edge weight, on the W+Wᵀ projection.
+                self.assertEqual(call.kwargs["weight_attr"], "weight")
+                self.assertIs(call.kwargs["weight_attr"], self._value(params, "FA2_WEIGHT_ATTR", scope))
+
+    def test_kamada_kawai_gets_the_declared_settings(self) -> None:
+        from network import layout
+
+        g = nx.DiGraph()
+        g.add_edge("a", "b", weight=0.0)
+        g.add_edge("b", "c", weight=4.0)
+        with patch.object(layout.nx, "kamada_kawai_layout", return_value={}) as kk:
+            layout.kamada_kawai_positions(g)
+        kk_graph = kk.call_args.args[0]
+        self.assertEqual(kk.call_args.kwargs["scale"], layout.KK_SCALE)
+        self.assertEqual(kk_graph.edges["a", "b"]["weight"], layout.KK_ZERO_WEIGHT_LENGTH)
+        self.assertEqual(kk_graph.edges["b", "c"]["weight"], 0.25)
+        with (
+            patch.object(layout.nx, "random_layout", return_value={}) as start,
+            patch.object(layout.nx, "kamada_kawai_layout", return_value={}) as kk3,
+        ):
+            layout.kamada_kawai_positions_3d(g)
+        self.assertEqual(start.call_args.kwargs, {"dim": 3, "seed": layout.KK_SEED_3D})
+        self.assertEqual(kk3.call_args.kwargs["dim"], 3)
+        self.assertEqual(kk3.call_args.kwargs["scale"], layout.KK_SCALE)
+
+    def test_forceatlas2_lays_out_the_summed_weights(self) -> None:
+        # A mutual tie pulls with both directions' weights; to_undirected() would keep only one of them.
+        from network import layout
+
+        g = nx.DiGraph()
+        g.add_edge("a", "b", weight=1.0)
+        g.add_edge("b", "a", weight=2.0)
+        g.add_node("lonely")
+        fa2_graph = layout._fa2_graph(g)
+        self.assertEqual(fa2_graph.edges["a", "b"][layout.FA2_WEIGHT_ATTR], 3.0)
+        self.assertIn("lonely", fa2_graph)
+        with patch.object(layout, "ForceAtlas2") as fa2_cls:
+            fa2_cls.return_value.forceatlas2_networkx_layout.return_value = {}
+            layout.forceatlas2_positions(g, dict.fromkeys(g, (0.0, 0.0)), 5)
+        laid_out = fa2_cls.return_value.forceatlas2_networkx_layout.call_args.args[0]
+        self.assertEqual(laid_out.edges["a", "b"]["weight"], 3.0)
+
+    def test_3d_kamada_kawai_is_reproducible(self) -> None:
+        # The 3D pass starts from random positions: seeded, it ignores numpy's global state.
+        from network import layout
+
+        import numpy as np
+
+        self.assertIsNotNone(layout.KK_SEED_3D)
+        g = nx.gnp_random_graph(12, 0.3, seed=1, directed=True)
+        nx.set_edge_attributes(g, 1.0, "weight")
+        runs = []
+        for scramble in (1, 2):
+            np.random.seed(scramble)  # noqa: NPY002 — the global state an unseeded start would read
+            runs.append({node: tuple(xyz) for node, xyz in layout.kamada_kawai_positions_3d(g).items()})
+        self.assertEqual(runs[0], runs[1])
+
+    def test_attack_orders_get_the_declared_library_settings(self) -> None:
+        from network.robustness import attacks
+
+        g = nx.DiGraph()
+        g.add_edge("a", "b", weight=2.0)
+        with patch.object(attacks.nx, "pagerank", return_value={"a": 1.0, "b": 0.0}) as pagerank:
+            attacks.removal_order(g, "pagerank")
+        self.assertEqual(
+            pagerank.call_args.kwargs,
+            {
+                "alpha": attacks.ATTACK_PAGERANK_ALPHA,
+                "personalization": attacks.ATTACK_PAGERANK_PERSONALIZATION,
+                "max_iter": attacks.ATTACK_PAGERANK_MAX_ITER,
+                "tol": attacks.ATTACK_PAGERANK_TOL,
+                "weight": attacks.ATTACK_PAGERANK_WEIGHT,
+                "dangling": attacks.ATTACK_PAGERANK_DANGLING,
+            },
+        )
+        self.assertEqual((attacks.ATTACK_PAGERANK_ALPHA, attacks.ATTACK_PAGERANK_WEIGHT), (0.85, "weight"))
+        with patch.object(attacks.nx, "betweenness_centrality", return_value={"a": 0.0, "b": 0.0}) as btw:
+            attacks.removal_order(g, "betweenness")
+        self.assertEqual(btw.call_args.kwargs["k"], attacks.ATTACK_BETWEENNESS_K)
+        self.assertEqual(btw.call_args.kwargs["endpoints"], attacks.ATTACK_BETWEENNESS_ENDPOINTS)
+        self.assertEqual(btw.call_args.kwargs["normalized"], attacks.ATTACK_BETWEENNESS_NORMALIZED)
+
+    def test_robustness_runner_passes_the_declared_settings(self) -> None:
+        from network.robustness import metrics, runner, scenarios
+
+        g = nx.gnp_random_graph(12, 0.3, seed=1, directed=True)
+        for u, v in g.edges():
+            g.edges[u, v]["weight"] = float(1 + (u + v) % 4)
+        partition = {n: n % 2 for n in g}
+        config = runner.RobustnessConfig(alpha=None, strategies=["random", "pagerank"], n_random_runs=12, n_null=1)
+        with (
+            patch.object(runner, "critical_threshold", wraps=metrics.critical_threshold) as fc,
+            patch.object(runner, "efficiency_curve", wraps=metrics.efficiency_curve) as eff,
+            patch.object(runner, "ban_wave_rows", wraps=scenarios.ban_wave_rows) as waves,
+        ):
+            runner.run_robustness(g, partitions={"p": partition}, config=config)
+        self.assertTrue(all(c.kwargs["drop_to"] == metrics.CRITICAL_DROP_TO for c in fc.call_args_list))
+        self.assertTrue(all(c.kwargs["n_points"] == metrics.EFFICIENCY_GRID_POINTS for c in eff.call_args_list))
+        # The random strategy's 12 orders are capped for the efficiency curves (+ 1 pagerank order).
+        self.assertEqual(eff.call_count, runner._EFFICIENCY_ORDERS_CAP + 1)
+        self.assertEqual(waves.call_args.kwargs["min_block_size"], scenarios.BAN_WAVE_MIN_BLOCK_SIZE)
+
+    def test_null_model_swap_budget_is_the_declared_rate(self) -> None:
+        from network.robustness import null_model
+
+        g = nx.DiGraph([(0, 1), (2, 3), (4, 5)])
+        nx.set_edge_attributes(g, 1.0, "weight")
+        rng = MagicMock()
+        rng.integers.return_value = np.zeros(2 * null_model.SWAPS_PER_EDGE * 3, dtype=int)
+        null_model.rewire_strength_preserving(g, rng=rng)
+        self.assertEqual(rng.integers.call_args.kwargs["size"], 2 * null_model.SWAPS_PER_EDGE * 3)
+
+    def test_dominance_uses_the_declared_constants(self) -> None:
+        import inspect
+
+        from network import dominance
+
+        signature = inspect.signature(dominance.compute_dominance)
+        self.assertIs(signature.parameters["seed"].default, dominance.DOMINANCE_SEED)
+        self.assertIs(signature.parameters["q_threshold"].default, dominance.DEFAULT_Q_THRESHOLD)
+        graph = nx.DiGraph()
+        for u, v, c in (("a", "S", 40), ("d", "S", 20), ("b", "T", 10), ("c", "T", 30), ("T", "c", 25)):
+            graph.add_edge(u, v, weight=1.0, weight_forwards=float(c), weight_mentions=0.0)
+        for node in graph:
+            graph.nodes[node]["data"] = {"citing_messages": 50}
+        graph_data = {"nodes": [{"id": n, "label": n} for n in graph], "edges": []}
+        with patch.object(dominance, "springrank", wraps=dominance.springrank) as spring:
+            payload = dominance.compute_dominance(graph, graph_data, permutations=5)
+        self.assertTrue(spring.call_count > 1)
+        self.assertTrue(all(c.kwargs["alpha"] == dominance.SPRINGRANK_ALPHA for c in spring.call_args_list))
+        meta = payload["meta"]
+        self.assertEqual(meta["q_threshold"], dominance.DEFAULT_Q_THRESHOLD)
+        self.assertEqual(meta["satellite_share"], dominance.SATELLITE_SHARE)
+        self.assertEqual(meta["satellite_asymmetry"], dominance.SATELLITE_ASYMMETRY)
+
+    def test_origin_identity_is_shared_by_coordination_and_vacancy(self) -> None:
+        from network import coordination, vacancy_analysis
+
+        when = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+        self.assertEqual(coordination.ORIGIN_IDENTITY_FIELDS, ("fwd_from_channel_post", "fwd_from_date"))
+        self.assertEqual(vacancy_analysis._ORIGIN_VALUES, ("forwarded_from_id", *coordination.ORIGIN_IDENTITY_FIELDS))
+        self.assertEqual(vacancy_analysis._origin_key(7, 12, when), (7, 12))
+        self.assertEqual(vacancy_analysis._origin_key(7, None, when), (7, when))
+        self.assertIsNone(vacancy_analysis._origin_key(7, None, None))
+
+    def test_interest_payload_reports_the_declared_window_policy(self) -> None:
+        from network import interest_structural
+
+        payload = interest_structural._empty_payload(
+            community_strategy="leiden", authority_key="pagerank", window_days=30, include_mentions=False
+        )
+        self.assertEqual(payload["forwarder_window_policy"], interest_structural.FORWARDER_WINDOW_POLICY)
 
 
 class ComputeInterestStructuralWindowTests(TestCase):

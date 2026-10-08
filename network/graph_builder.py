@@ -12,6 +12,7 @@ from network.near_copies import (
     NearCopy,
     near_copies_for_channels,
 )
+from network.parameters import FixedParameter
 from network.utils import channel_cutoff_q, environment_channels, make_date_q
 from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
@@ -200,6 +201,37 @@ def resolve_window_label(
 
 VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_REFERENCES"}
 
+#: Every edge's ``weight`` is rescaled to ``EDGE_WEIGHT_SCALE · w / max(w)``, so the heaviest edge weighs this.
+EDGE_WEIGHT_SCALE = 10
+#: Dead-leaf criterion: an out-of-target channel cited (forwarded or mentioned) at least this many times by the
+#: in-target set, all time (``Channel.in_degree``).
+DEAD_LEAF_MIN_CITATIONS = 1
+
+_SOURCE = "network/graph_builder.py"
+
+#: The values fixed in this module that shape the graph (``PARAMETERS.md``). The edge-weight strategy, the
+#: window, the scope filters and the near-copy settings are run options, not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Edge-weight rescale maximum",
+        value=EDGE_WEIGHT_SCALE,
+        scope="graph",
+        affects="Each edge weight is rescaled so the heaviest edge of the graph weighs this much; it sets the "
+        "scale of the exported and laid-out weights, while the in/out-strength columns use the un-rescaled "
+        "weight and scale-invariant measures (PageRank, HITS) are unchanged.",
+        source=f"{_SOURCE}: EDGE_WEIGHT_SCALE",
+    ),
+    FixedParameter(
+        name="Dead-leaf minimum citations",
+        value=DEAD_LEAF_MIN_CITATIONS,
+        scope="graph",
+        affects="With dead leaves drawn, an out-of-target channel enters the graph when the in-target channels "
+        "cited it at least this many times over all time (Channel.in_degree); one cited only outside the "
+        "analysed periods is then dropped as isolated.",
+        source=f"{_SOURCE}: DEAD_LEAF_MIN_CITATIONS",
+    ),
+)
+
 
 def _filter_inactive_channels(
     channel_dict: dict[str, dict[str, Any]],
@@ -350,7 +382,7 @@ def build_graph(
         # Dead-leaf criterion: an out-of-target channel cited (forwarded or
         # mentioned) at least once by some in-target channel. The cited count
         # lives in in_degree under the citation orientation (amplifier→source).
-        dead_leaf_q = Q(in_degree__gt=0)
+        dead_leaf_q = Q(in_degree__gte=DEAD_LEAF_MIN_CITATIONS)
         if filter_labels:
             # Under a container-label filter, an in-target channel outside the
             # selection must not slip back in through the dead-leaf gate — its
@@ -578,8 +610,8 @@ def build_graph(
         graph.add_edge(
             edge[0],
             edge[1],
-            weight=10 * edge[2] / max_weight if max_weight else 0.0,
-            # Un-rescaled tie weight (before the ×10/max normalisation): portable across
+            weight=EDGE_WEIGHT_SCALE * edge[2] / max_weight if max_weight else 0.0,
+            # Un-rescaled tie weight (before the ×EDGE_WEIGHT_SCALE/max normalisation): portable across
             # exports and used for the displayed In-/Out-strength node measures.
             weight_raw=float(edge[2]),
             weight_forwards=edge[3],

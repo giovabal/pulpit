@@ -24,6 +24,7 @@ from network import (
     interest_structural,
     layout,
     measures,
+    parameters,
     robustness,
     tables,
     vacancy_analysis,
@@ -1671,6 +1672,7 @@ class Command(BaseCommand):
         do_3dgraph: bool,
         strategy_instances: "list[community.StrategyInstance] | None" = None,
         environment_depth: int | None = None,
+        notes_out: "dict[str, str] | None" = None,
     ) -> list[tuple[str, str]]:
         """Compute every requested measure instance in order, returning suffixed (key, label) pairs.
 
@@ -1678,7 +1680,11 @@ class Command(BaseCommand):
         node keys it writes are then rebound to parameter-suffixed keys (:func:`_rebind_measure_keys`)
         so a measure requested more than once (e.g. two DIFFUSIONLAG windows) keeps distinct
         columns. HITS is computed at most once.
+
+        ``notes_out``, when given, receives ``{instance token: note}`` for PARAMETERS.md: the
+        community basis a MODULEROLE instance resolved to, or why an instance was skipped.
         """
+        notes: dict[str, str] = notes_out if notes_out is not None else {}
         self.stdout.write("\nCalculations on the graph")
         self.stdout.write("- largest component … ", ending="")
         self.stdout.flush()
@@ -1724,8 +1730,12 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.WARNING(f"- {_MEASURE_PROGRESS[m]} … skipped (no community partition)")
                     )
+                    notes[inst.token()] = "skipped — no community partition"
                     continue
                 resolved = inst.resolved_with(basis=basis.upper())
+                basis_label = next((si.label for si in strategy_instances or [] if si.key == basis), basis)
+                auto = "" if inst.params_dict.get("basis") else ", auto-resolved"
+                notes[inst.token()] = f"Community basis = {basis_label} (`{basis}`{auto})"
                 # A bare MODULEROLE auto-resolves to the same basis an explicit
                 # instance may already name; the two would emit identical suffixed
                 # columns twice. Parse-time dedup can't see this (it runs before
@@ -1737,6 +1747,7 @@ class Command(BaseCommand):
                             "skipped (duplicate after basis resolution)"
                         )
                     )
+                    notes[inst.token()] += " — skipped: duplicate after basis resolution"
                     continue
                 resolved_seen.add(resolved.token())
 
@@ -1783,6 +1794,7 @@ class Command(BaseCommand):
                 labels = [(key, label) for key, label in hits_labels if key == wanted]
                 if not labels:
                     self.stdout.write(self.style.WARNING("skipped (HITS could not be computed)"))
+                    notes[inst.token()] = "skipped — HITS could not be computed"
                     continue
             elif m == "MODULEROLE":
                 labels = measures.apply_module_role(graph_data, graph, resolved.params_dict["basis"].lower())
@@ -2652,9 +2664,15 @@ class Command(BaseCommand):
             temporal_results=temporal_results,
             resolutions_out=community_resolutions,
         )
+        # Values resolved along the way, recorded in PARAMETERS.md next to the options behind them.
+        run_facts = parameters.RunFacts(
+            nodes=len(graph.nodes), edges=len(graph.edges), community_resolutions=community_resolutions
+        )
         positions, positions_3d = self._compute_layout(
             graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
         )
+        if opts.do_graph or opts.do_3dgraph:
+            run_facts.fa2_iterations = layout.resolve_iterations(opts.fa2_iterations, graph.number_of_nodes())
 
         fa2_in_2d = opts.do_graph and "FA2" in opts.extra_layout_names
         fa2_in_3d = opts.do_3dgraph and "FA2" in opts.extra_layout_names_3d
@@ -2696,6 +2714,7 @@ class Command(BaseCommand):
             opts.do_3dgraph,
             strategy_instances=opts.communities_strategy,
             environment_depth=opts.environment_depth,
+            notes_out=run_facts.measure_notes,
         )
 
         # Dominance runs on the finished graph_data (it reads the channel labels) and before the
@@ -2956,6 +2975,7 @@ class Command(BaseCommand):
             self.stdout.write("\nInterest structural")
             int_community = _pick_interest_community_strategy(opts.communities_strategy)
             int_authority = _pick_interest_authority_key({i.measure for i in opts.measure_instances})
+            run_facts.interest_community, run_facts.interest_authority = int_community, int_authority
             self.stdout.write(f"- basis: {int_community.lower()} communities, {int_authority} authority")
 
             def _int_progress(label: str) -> None:
@@ -3069,9 +3089,11 @@ class Command(BaseCommand):
                 environment_depth=opts.environment_depth,
             )
             self.stdout.write(f"{len(coord_result.edges)} ties among {len(coord_result.node_ids)} channels")
+            run_facts.coordination_ties = len(coord_result.edges)
             if coord_result.edges:
                 co_graph = coordination.build_nx_graph(coord_result, graph)
                 co_iterations = layout.resolve_iterations(opts.fa2_iterations, co_graph.number_of_nodes())
+                run_facts.coordination_fa2_iterations = co_iterations
                 self.stdout.write(f"- layout 2D (ForceAtlas2, {co_iterations} iterations) … ", ending="")
                 self.stdout.flush()
                 co_positions = layout.forceatlas2_positions(
@@ -3294,6 +3316,19 @@ class Command(BaseCommand):
         if opts.include_near_copies:
             near_copy_count = len(graph.graph.get("near_copies") or [])
             exporter.write_near_copies_csv(graph, graph_data, os.path.join(root_target, "data"))
+
+        # The reproducibility record: run options as resolved + the fixed parameters of the parts that
+        # ran. Written inside the staging dir, before summary.json, so it is published atomically.
+        run_facts.near_copies = near_copy_count
+        run_facts.timeline_years = [e["year"] for e in timeline_entries]
+        run_facts.year_resolutions = {
+            e["year"]: e["community_resolutions"] for e in timeline_entries if e.get("community_resolutions")
+        }
+        self.stdout.write(f"- {parameters.PARAMETERS_FILENAME}")
+        try:
+            parameters.write_parameters_md(root_target, parameters.render_parameters_markdown(opts, run_facts))
+        except Exception as exc:  # the record must never cost a finished analysis its whole export
+            self.stdout.write(self.style.WARNING(f"  {parameters.PARAMETERS_FILENAME} could not be written: {exc!r}"))
         exporter.write_summary_json(
             root_target,
             opts.export_name or None,

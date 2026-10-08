@@ -185,6 +185,8 @@ Before clicking Run, expand **Options** and choose which outputs you want:
 
 > **Tip:** tick at least **Structural 2D map** and **HTML tables** for a first run. That gives you the interactive map and a spreadsheet-style overview.
 
+Whatever you tick, every export also gets a `PARAMETERS.md` at its root: a plain-text record of every option the run used (as resolved, with automatic values such as a CPM resolution replaced by the value actually used), every value fixed in Pulpit's code for the parts of the analysis that ran, and the library versions — the methods appendix for that export. See [Export formats § PARAMETERS.md](export-formats.md#parametersmd--the-parameters-of-the-run).
+
 ### Choosing how channels are grouped
 
 The map can group and colour channels two complementary ways. Pick from either or both — every selection becomes a colour-by option you can switch between in the map without re-exporting:

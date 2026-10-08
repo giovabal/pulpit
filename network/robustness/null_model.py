@@ -76,13 +76,42 @@ References:
 from collections.abc import Iterator
 from typing import Literal
 
+from network.parameters import FixedParameter
+
 import networkx as nx
 import numpy as np
 
 type NullModel = Literal["configuration", "reciprocal"]
 _VALID_NULL_MODELS: frozenset[str] = frozenset({"configuration", "reciprocal"})
 
+# Rounds of iterative proportional fitting that pull the rewired weights back onto the observed
+# in/out strength sequence.
 _IPF_ITERATIONS = 50
+# Default swap budget: this many Maslov–Sneppen swap *attempts* per edge.
+SWAPS_PER_EDGE = 10
+
+_SOURCE = "network/robustness/null_model.py"
+
+#: The values fixed in this module (``PARAMETERS.md``).  The number of null graphs and the null
+#: model are run options (``--robustness-null`` / ``--robustness-null-model``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Null model: swap attempts per edge",
+        value=SWAPS_PER_EDGE,
+        scope="robustness",
+        affects="Each null graph is rewired with this many × |E| degree-preserving swap attempts "
+        "(Maslov–Sneppen; within dyad classes for the reciprocal null), so its wiring is randomised.",
+        source=f"{_SOURCE}: SWAPS_PER_EDGE",
+    ),
+    FixedParameter(
+        name="Null model: strength-fitting rounds",
+        value=_IPF_ITERATIONS,
+        scope="robustness",
+        affects="Rounds of iterative proportional fitting that rescale each null graph's weights back onto "
+        "the observed in/out strength sequence.",
+        source=f"{_SOURCE}: _IPF_ITERATIONS",
+    ),
+)
 
 
 def rewire_strength_preserving(
@@ -130,7 +159,7 @@ def rewire_strength_preserving(
     if rng is None:
         rng = np.random.default_rng()
     if n_swaps is None:
-        n_swaps = 10 * m
+        n_swaps = SWAPS_PER_EDGE * m
 
     # ── Stage 1: degree-preserving edge swaps ─────────────────────────────────
     # Self-loops stay put (see docstring); only inter-channel edges are swapped.
@@ -200,7 +229,7 @@ def rewire_reciprocity_preserving(
     if rng is None:
         rng = np.random.default_rng()
     if n_swaps is None:
-        n_swaps = 10 * m
+        n_swaps = SWAPS_PER_EDGE * m
 
     # Partition the directed edges into reciprocated dyads (each unordered pair
     # once) and single edges.  Self-loops join neither class: they are held fixed,

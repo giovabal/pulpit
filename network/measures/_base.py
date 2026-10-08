@@ -3,11 +3,38 @@ from typing import Any
 
 from django.db.models import Count, F, Max, Min, Q
 
+from network.parameters import FixedParameter
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 from webapp.utils.dates import fmt_month_year
 
 import networkx as nx
+
+#: A channel whose latest message (or creation) is less than this many days old at export time is still
+#: active: its activity period is shown open-ended ("Jan 2024 - ").
+ACTIVITY_ONGOING_DAYS = 30
+#: Edge attribute the participation coefficient weighs a node's ties by (the rescaled run edge weight).
+PARTICIPATION_WEIGHT = "weight"
+
+#: The values fixed in this module (``PARAMETERS.md``); the base node measures are always computed.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Ongoing-activity horizon (days)",
+        value=ACTIVITY_ONGOING_DAYS,
+        scope="graph",
+        affects="A channel whose latest message is less than this many days before the export date gets an "
+        "open-ended activity period; an older one gets a closed start - end period.",
+        source="network/measures/_base.py: ACTIVITY_ONGOING_DAYS",
+    ),
+    FixedParameter(
+        name="Participation coefficient edge weight",
+        value=PARTICIPATION_WEIGHT,
+        scope="measure:MODULEROLE",
+        affects="The participation coefficient weighs each tie by this edge attribute — the run's edge weight, "
+        "so it follows --edge-weight-strategy — while the within-module z-score counts neighbours unweighted.",
+        source="network/measures/_base.py: PARTICIPATION_WEIGHT",
+    ),
+)
 
 
 def channel_pks_from_graph_data(graph_data: GraphData, channel_dict: dict[str, Any]) -> list[int]:
@@ -66,14 +93,14 @@ def compute_neighbour_community_participation(
             if pred == node:
                 continue  # self-loop: excluded so it isn't double-counted (node is in both
                 # predecessors and successors), matching the `- {node}` of the within-module z axis
-            w = graph.edges[pred, node].get("weight", 1.0)
+            w = graph.edges[pred, node].get(PARTICIPATION_WEIGHT, 1.0)
             c = partition.get(pred)
             if c is not None:
                 weights[c] = weights.get(c, 0.0) + w
         for succ in graph.successors(node):
             if succ == node:
                 continue  # ditto
-            w = graph.edges[node, succ].get("weight", 1.0)
+            w = graph.edges[node, succ].get(PARTICIPATION_WEIGHT, 1.0)
             c = partition.get(succ)
             if c is not None:
                 weights[c] = weights.get(c, 0.0) + w
@@ -216,7 +243,7 @@ def apply_base_node_measures(
         else:
             node["activity_period"] = (
                 f"{fmt_month_year(start)} - {fmt_month_year(end)}"
-                if end < now - datetime.timedelta(days=30)
+                if end < now - datetime.timedelta(days=ACTIVITY_ONGOING_DAYS)
                 else f"{fmt_month_year(start)} - "
             )
             node["activity_start"] = start.strftime("%Y-%m")

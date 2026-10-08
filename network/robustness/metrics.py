@@ -53,11 +53,42 @@ References:
 from collections.abc import Iterable
 from typing import Any, Literal
 
+from network.parameters import FixedParameter
+
 import networkx as nx
 import numpy as np
 
 type ResidualMetric = Literal["WCC", "SCC", "REACH", "STRENGTH"]
 _VALID_METRICS: frozenset[str] = frozenset({"WCC", "SCC", "REACH", "STRENGTH"})
+
+# f_c is the first removed fraction at which S(f) falls below this share of S(0).
+CRITICAL_DROP_TO = 0.05
+# The weighted-efficiency curve is evaluated at this many + 1 evenly spaced removal counts.
+EFFICIENCY_GRID_POINTS = 20
+
+_SOURCE = "network/robustness/metrics.py"
+
+#: The values fixed in this module (``PARAMETERS.md``).  The REACH source sample is a run option
+#: (``--robustness-sample``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Critical-threshold drop",
+        value=CRITICAL_DROP_TO,
+        scope="robustness",
+        affects="The critical threshold f_c of each attack curve is the first fraction of removed nodes at "
+        "which the residual size falls below this share of its initial value.",
+        source=f"{_SOURCE}: CRITICAL_DROP_TO",
+    ),
+    FixedParameter(
+        name="Efficiency-curve grid points",
+        value=EFFICIENCY_GRID_POINTS,
+        scope="robustness",
+        affects="The weighted global efficiency is evaluated at this many + 1 evenly spaced removal counts "
+        "(always including none and all removed), not after every removal.",
+        source=f"{_SOURCE}: EFFICIENCY_GRID_POINTS",
+        note="Each evaluation costs an all-pairs Dijkstra over the largest SCC.",
+    ),
+)
 
 
 def attack_curve(
@@ -128,7 +159,7 @@ def r_index(curve: list[float]) -> float:
     return float(sum(curve[1:]) / n)
 
 
-def critical_threshold(curve: list[float], drop_to: float = 0.05) -> float | None:
+def critical_threshold(curve: list[float], drop_to: float = CRITICAL_DROP_TO) -> float | None:
     """First fraction ``f_c = q / N`` at which ``S(q)`` drops below
     ``drop_to × S(0)``.  Returns ``None`` if the threshold is never reached or
     if the initial size is zero.
@@ -263,7 +294,7 @@ def efficiency_curve(
     removal_order: list[Any],
     *,
     weight: str = "weight",
-    n_points: int = 20,
+    n_points: int = EFFICIENCY_GRID_POINTS,
 ) -> tuple[list[float], list[float]]:
     """Weighted global efficiency along *removal_order*, sampled on a coarse grid.
 

@@ -59,6 +59,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from network.parameters import FixedParameter
 from network.robustness.null_model import bh_adjust
 from network.utils import GraphData
 
@@ -68,6 +69,7 @@ from scipy import sparse
 from scipy.sparse.linalg import spsolve
 from scipy.stats import hypergeom
 
+# FDR level (Benjamini–Hochberg q) under which a directed link counts as validated.
 DEFAULT_Q_THRESHOLD = 0.05
 # Evidence floor, in citation events. A directed link below it is listed but not tested (on one-off
 # citations the hypergeometric test rewards uniqueness rather than preference); a channel with
@@ -87,9 +89,17 @@ SATELLITE_ASYMMETRY = 0.25
 DOMINANT_MIN_SATELLITES = 2
 # Weak spring to the origin (the regularised SpringRank form) — makes the system positive-definite.
 SPRINGRANK_ALPHA = 0.01
+# SpringRank is refitted on at most this many of the null draws (one sparse solve each).
 SPRINGRANK_MAX_NULLS = 100
-# Above this many ranked nodes the permutation count is cut (dense N×N null draws).
+# Above this many ranked nodes the permutation count is cut (dense N×N null draws) to
+# max(LARGE_N_MIN_PERMUTATIONS, permutations // LARGE_N_PERMUTATION_DIVISOR).
 LARGE_N = 3000
+LARGE_N_PERMUTATION_DIVISOR = 10
+LARGE_N_MIN_PERMUTATIONS = 20
+# Probability that the orientation-shuffled null swaps a dyad's two counts (a fair coin).
+NULL_FLIP_PROBABILITY = 0.5
+# Seed of the orientation-shuffled null (``compute_dominance``'s default; the command does not override it).
+DOMINANCE_SEED = 42
 
 RELATION_DEPENDENCE = "dependence"
 RELATION_ALLIANCE = "alliance"
@@ -111,6 +121,103 @@ SHARE_BASIS_EVENTS = "graph_events"
 # Node-attribute key injected into the channel table / map when the analysis is on.
 DAVID_SCORE_KEY = "david_score"
 DAVID_SCORE_LABEL = "David's score"
+
+_SOURCE = "network/dominance.py"
+
+#: The values fixed in this module that shape the dominance analysis (``PARAMETERS.md``). The
+#: evidence floor and the permutation count are run options (``--dominance-min-events`` /
+#: ``--dominance-permutations``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Link validation FDR level q",
+        value=DEFAULT_Q_THRESHOLD,
+        scope="dominance",
+        affects="A directed link is validated when its Benjamini–Hochberg-adjusted hypergeometric p-value is "
+        "below this; validation decides each pair's relation (alliance / dependence / unvalidated) and the "
+        "allied role.",
+        source=f"{_SOURCE}: DEFAULT_Q_THRESHOLD",
+        note="Statistically validated networks: Tumminello et al. 2011; directed form Hatzopoulos et al. 2015.",
+    ),
+    FixedParameter(
+        name="Satellite share",
+        value=SATELLITE_SHARE,
+        scope="dominance",
+        affects="A partner is a channel's satellite when it depends on it for at least this share of its content "
+        "or of its reach; a channel relying that much on one partner is dependent.",
+        source=f"{_SOURCE}: SATELLITE_SHARE",
+        note="The majority criterion — tie-free (docs/dominance.md).",
+    ),
+    FixedParameter(
+        name="Satellite asymmetry",
+        value=SATELLITE_ASYMMETRY,
+        scope="dominance",
+        affects="A satellite tie also needs the pair's Bascompte asymmetry to reach this, so two channels that "
+        "are each other's main source and outlet read as allies, not as two dependents.",
+        source=f"{_SOURCE}: SATELLITE_ASYMMETRY",
+    ),
+    FixedParameter(
+        name="Dominant: minimum satellites",
+        value=DOMINANT_MIN_SATELLITES,
+        scope="dominance",
+        affects="A channel needs at least this many satellites to be dominant (or, if itself dependent, a broker).",
+        source=f"{_SOURCE}: DOMINANT_MIN_SATELLITES",
+    ),
+    FixedParameter(
+        name="SpringRank regularising spring α",
+        value=SPRINGRANK_ALPHA,
+        scope="dominance",
+        affects="Weak spring pulling every SpringRank score toward 0, which makes the linear system "
+        "positive-definite; it slightly shrinks the scores of weakly connected channels.",
+        source=f"{_SOURCE}: SPRINGRANK_ALPHA",
+        note="The regularised SpringRank form (De Bacco, Larremore & Moore 2018).",
+    ),
+    FixedParameter(
+        name="SpringRank null draws",
+        value=SPRINGRANK_MAX_NULLS,
+        scope="dominance",
+        affects="The SpringRank-energy p-value is computed on at most this many of the orientation-shuffled "
+        "null networks; transitivity and rank consistency use all of them.",
+        source=f"{_SOURCE}: SPRINGRANK_MAX_NULLS",
+    ),
+    FixedParameter(
+        name="Large-network threshold",
+        value=LARGE_N,
+        scope="dominance",
+        affects="Above this many ranked channels the permutation count of the hierarchy tests is cut.",
+        source=f"{_SOURCE}: LARGE_N",
+        note="Each null draw is a dense N×N matrix.",
+    ),
+    FixedParameter(
+        name="Large-network permutation divisor",
+        value=LARGE_N_PERMUTATION_DIVISOR,
+        scope="dominance",
+        affects="Above the large-network threshold the hierarchy tests run --dominance-permutations divided by this.",
+        source=f"{_SOURCE}: LARGE_N_PERMUTATION_DIVISOR",
+    ),
+    FixedParameter(
+        name="Large-network minimum permutations",
+        value=LARGE_N_MIN_PERMUTATIONS,
+        scope="dominance",
+        affects="Above the large-network threshold the hierarchy tests still run at least this many permutations.",
+        source=f"{_SOURCE}: LARGE_N_MIN_PERMUTATIONS",
+    ),
+    FixedParameter(
+        name="Null orientation flip probability",
+        value=NULL_FLIP_PROBABILITY,
+        scope="dominance",
+        affects="In each null network every dyad keeps both of its counts and swaps which side holds the "
+        "larger one with this probability.",
+        source=f"{_SOURCE}: NULL_FLIP_PROBABILITY",
+        note="A fair coin: the orientation-shuffled null of docs/dominance.md.",
+    ),
+    FixedParameter(
+        name="Null-model random seed",
+        value=DOMINANCE_SEED,
+        scope="dominance",
+        affects="Seeds the orientation-shuffled null networks, so the hierarchy-test p-values are reproducible.",
+        source=f"{_SOURCE}: DOMINANCE_SEED",
+    ),
+)
 
 
 def _edge_count(data: dict) -> int:
@@ -237,7 +344,7 @@ def _null_wins(wins: np.ndarray, iu: tuple[np.ndarray, np.ndarray], rng: np.rand
     """One orientation-shuffled draw: every dyad keeps both of its counts (so its reciprocity), and
     which side holds the larger one is decided by a fair coin."""
     upper, lower = wins[iu], wins.T[iu]
-    flip = rng.random(len(upper)) < 0.5
+    flip = rng.random(len(upper)) < NULL_FLIP_PROBABILITY
     out = np.zeros_like(wins)
     out[iu] = np.where(flip, lower, upper)
     out.T[iu] = np.where(flip, upper, lower)
@@ -261,7 +368,7 @@ def compute_dominance(
     q_threshold: float = DEFAULT_Q_THRESHOLD,
     min_events: int = DEFAULT_MIN_EVENTS,
     permutations: int = DEFAULT_PERMUTATIONS,
-    seed: int = 42,
+    seed: int = DOMINANCE_SEED,
 ) -> dict:
     """Per pair: two-sided dependence, validation, net balance and relation. Per node: David's score
     (raw, normalised, rank), SpringRank, satellites, own dependence, reach concentration, role.
@@ -402,13 +509,15 @@ def compute_dominance(
     ds_vec, norm_vec = david_scores(wins)
     order = sorted(range(n), key=lambda i: (-ds_vec[i], ranked[i]))
     david_rank = {ranked[i]: r + 1 for r, i in enumerate(order)}
-    spring, energy = springrank(wins)
+    spring, energy = springrank(wins, alpha=SPRINGRANK_ALPHA)
     spring_order = sorted(range(n), key=lambda i: (-spring[i], ranked[i]))
     spring_rank = {ranked[i]: r + 1 for r, i in enumerate(spring_order)}
 
     # Shared orientation-shuffled null for the three whole-network tests.
     rng = np.random.default_rng(seed)
-    effective = permutations if n <= LARGE_N else max(20, permutations // 10)
+    effective = (
+        permutations if n <= LARGE_N else max(LARGE_N_MIN_PERMUTATIONS, permutations // LARGE_N_PERMUTATION_DIVISOR)
+    )
     iu = np.triu_indices(n, 1)
     n_upper = (wins + wins.T)[iu]
     observed_consistency = rank_consistency(wins, ds_vec)
@@ -427,7 +536,7 @@ def compute_dominance(
             if t_null is not None:
                 null_transitivity.append(t_null)
         if trial < SPRINGRANK_MAX_NULLS:
-            null_energy.append(springrank(nw)[1])
+            null_energy.append(springrank(nw, alpha=SPRINGRANK_ALPHA)[1])
     unknown = int((n_upper == 0).sum())
     hierarchy = {
         "n_ranked": n,

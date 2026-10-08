@@ -25,12 +25,29 @@ Reference:
 
 from typing import Any
 
+from network.parameters import FixedParameter
 from network.robustness.metrics import residual_sizes
 
 import networkx as nx
 import numpy as np
 
 _BAN_WAVE_METRICS: tuple[str, ...] = ("wcc", "scc", "reach", "strength")
+
+# Communities with fewer members than this in the attacked graph get no ban-wave scenario.
+BAN_WAVE_MIN_BLOCK_SIZE = 2
+
+#: The values fixed in this module (``PARAMETERS.md``).
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Ban wave: minimum block size",
+        value=BAN_WAVE_MIN_BLOCK_SIZE,
+        scope="robustness",
+        affects="A community gets a ban-wave scenario (whole-block removal vs the equal-q random baseline) "
+        "only when at least this many of its members are in the attacked graph; a block covering the "
+        "whole graph is skipped too.",
+        source="network/robustness/scenarios.py: BAN_WAVE_MIN_BLOCK_SIZE",
+    ),
+)
 
 
 def ban_wave_rows(
@@ -40,7 +57,7 @@ def ban_wave_rows(
     *,
     reach_sample: int | None = 500,
     rng: np.random.Generator | None = None,
-    min_block_size: int = 2,
+    min_block_size: int = BAN_WAVE_MIN_BLOCK_SIZE,
 ) -> list[dict[str, Any]]:
     """One scenario row per community of *partition* with ≥ *min_block_size* members in *G*.
 

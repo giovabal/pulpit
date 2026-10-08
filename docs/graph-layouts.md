@@ -28,7 +28,7 @@ Every layout answers a different question about the same network. Switching betw
 
 *Channels that cite each other heavily are pulled together; channels that ignore each other are pushed apart — producing spatial blobs that correspond to the ideological communities in the data.*
 
-ForceAtlas2 is a continuous force-directed layout. Every node repels every other node (like charged particles), and every edge pulls its two endpoint nodes together with a force proportional to edge weight. The simulation runs until forces balance. Pulpit seeds each run with a Kamada-Kawai initial placement to improve reproducibility.
+ForceAtlas2 is a continuous force-directed layout. Every node repels every other node (like charged particles), and every edge pulls its two endpoint nodes together with a force proportional to edge weight — the run's `--edge-weight-strategy` weight, with a mutual tie's two directions added together. The simulation runs until forces balance. Pulpit seeds each run with a Kamada-Kawai initial placement (channels at their shortest-path distance, each edge as long as 1/weight, so strongly tied channels start close), and both passes are seeded, so a map comes out the same on every run.
 
 Pulpit uses **log-linear mode** (`linLogMode`), which replaces the usual linear attraction with a logarithmic one. This is specifically designed for scale-free networks — networks where a small number of hubs have orders of magnitude more connections than the majority of nodes. Without log-linear mode, hubs drag everything so strongly toward themselves that the rest of the network collapses into undifferentiated mass around them. Log-linear mode lets the peripheral channels spread out while still anchoring hubs visually.
 

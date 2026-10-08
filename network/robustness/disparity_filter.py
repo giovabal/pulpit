@@ -35,9 +35,47 @@ import logging
 import math
 from typing import Any
 
+from network.parameters import FixedParameter
+
 import networkx as nx
 
 logger = logging.getLogger(__name__)
+
+# Relative / absolute tolerance under which two edge weights count as equal for the uniform-weight
+# check (:func:`has_uniform_weights`) — loose enough that a float round-off in the ×10/max rescale
+# cannot hide a uniform graph.
+UNIFORM_WEIGHT_REL_TOL = 1e-9
+UNIFORM_WEIGHT_ABS_TOL = 1e-12
+
+_SOURCE = "network/robustness/disparity_filter.py"
+
+
+def _uniform_tolerance_parameters(scope: str) -> tuple[FixedParameter, ...]:
+    return (
+        FixedParameter(
+            name="Disparity filter: uniform-weight relative tolerance",
+            value=UNIFORM_WEIGHT_REL_TOL,
+            scope=scope,
+            affects="Edge weights equal within this relative tolerance count as uniform; on a uniform graph the "
+            "disparity test is uninformative and the backbone is skipped (the full graph is used).",
+            source=f"{_SOURCE}: UNIFORM_WEIGHT_REL_TOL",
+        ),
+        FixedParameter(
+            name="Disparity filter: uniform-weight absolute tolerance",
+            value=UNIFORM_WEIGHT_ABS_TOL,
+            scope=scope,
+            affects="Absolute companion of the relative tolerance, for weights near zero.",
+            source=f"{_SOURCE}: UNIFORM_WEIGHT_ABS_TOL",
+        ),
+    )
+
+
+#: The values fixed in this module (``PARAMETERS.md``).  The filter serves both the robustness
+#: backbone and the community-detection backbone, so each scope lists them; the threshold α is a run
+#: option (``--robustness-alpha`` / ``--community-backbone-alpha``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = _uniform_tolerance_parameters(
+    "robustness"
+) + _uniform_tolerance_parameters("community_backbone")
 
 
 def disparity_filter(
@@ -98,7 +136,7 @@ def has_uniform_weights(G: nx.DiGraph, weight: str = "weight") -> bool:
         w = float(data.get(weight, 1.0))
         if first is None:
             first = w
-        elif not math.isclose(w, first, rel_tol=1e-9, abs_tol=1e-12):
+        elif not math.isclose(w, first, rel_tol=UNIFORM_WEIGHT_REL_TOL, abs_tol=UNIFORM_WEIGHT_ABS_TOL):
             return False
     return True
 

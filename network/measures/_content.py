@@ -10,10 +10,56 @@ from network.measures._base import (
     per_channel_message_counts,
 )
 from network.near_copies import forward_header_q
+from network.parameters import FixedParameter
 from network.utils import GraphData, channel_cutoff_q, make_date_q
 from webapp.models import Message
 
 import networkx as nx
+
+#: Decimal places the amplification factor is reported to.
+AMPLIFICATION_DECIMALS = 4
+#: Decimal places content originality is reported to.
+CONTENT_ORIGINALITY_DECIMALS = 4
+#: Forward (or near-copy) lags below this many hours — a forward dated before its original — are discarded.
+DIFFUSION_LAG_MIN_HOURS = 0
+#: Decimal places the diffusion lag (hours) is reported to.
+DIFFUSION_LAG_DECIMALS = 1
+
+_SOURCE = "network/measures/_content.py"
+
+#: The values fixed in this module that shape the content measures (``PARAMETERS.md``). The diffusion
+#: reaction window is a run option (``DIFFUSIONLAG(window=…)`` / ``--diffusion-window``), not listed here.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Amplification factor decimals",
+        value=AMPLIFICATION_DECIMALS,
+        scope="measure:AMPLIFICATION",
+        affects="Decimal places the amplification factor is reported to; channels equal at this precision tie.",
+        source=f"{_SOURCE}: AMPLIFICATION_DECIMALS",
+    ),
+    FixedParameter(
+        name="Content originality decimals",
+        value=CONTENT_ORIGINALITY_DECIMALS,
+        scope="measure:CONTENTORIGINALITY",
+        affects="Decimal places content originality is reported to; channels equal at this precision tie.",
+        source=f"{_SOURCE}: CONTENT_ORIGINALITY_DECIMALS",
+    ),
+    FixedParameter(
+        name="Minimum diffusion lag (hours)",
+        value=DIFFUSION_LAG_MIN_HOURS,
+        scope="measure:DIFFUSIONLAG",
+        affects="Forwards and near-copies whose lag from the original post is below this are left out of the "
+        "median, so a forward dated before its original never counts.",
+        source=f"{_SOURCE}: DIFFUSION_LAG_MIN_HOURS",
+    ),
+    FixedParameter(
+        name="Diffusion lag decimals",
+        value=DIFFUSION_LAG_DECIMALS,
+        scope="measure:DIFFUSIONLAG",
+        affects="Decimal places the median lag in hours is reported to; channels equal at this precision tie.",
+        source=f"{_SOURCE}: DIFFUSION_LAG_DECIMALS",
+    ),
+)
 
 
 def _near_copy_counts(graph: nx.DiGraph) -> tuple[dict[int, int], dict[int, int]]:
@@ -63,7 +109,7 @@ def apply_amplification_factor(
         pk = channel_entry["channel"].pk
         mc = message_counts.get(pk, 0)
         fr = forwards_received.get(pk, 0) + copies_received.get(pk, 0)
-        node[key] = round(fr / mc, 4) if mc > 0 else 0.0
+        node[key] = round(fr / mc, AMPLIFICATION_DECIMALS) if mc > 0 else 0.0
 
     return [(key, "Amplification Factor")]
 
@@ -105,7 +151,7 @@ def apply_content_originality(
         pk = channel_entry["channel"].pk
         mc = message_counts.get(pk, 0)
         not_original = forwarded_counts.get(pk, 0) + copies_made.get(pk, 0)
-        node[key] = round(1 - not_original / mc, 4) if mc > 0 else None
+        node[key] = round(1 - not_original / mc, CONTENT_ORIGINALITY_DECIMALS) if mc > 0 else None
 
     return [(key, "Content Originality")]
 
@@ -143,7 +189,7 @@ def apply_diffusion_lag(
     accum: dict[int, list[float]] = {}
     for row in Message.objects.alive().filter(fwd_q).values("channel_id", "date", "fwd_from_date").iterator():
         lag_h = (row["date"] - row["fwd_from_date"]).total_seconds() / 3600
-        if lag_h < 0:
+        if lag_h < DIFFUSION_LAG_MIN_HOURS:
             continue
         if window_h is not None and lag_h > window_h:
             continue
@@ -153,11 +199,11 @@ def apply_diffusion_lag(
         if link.is_self_copy or link.copy_channel_id not in channel_pk_set:
             continue
         lag_h = link.lag_hours
-        if lag_h < 0 or (window_h is not None and lag_h > window_h):
+        if lag_h < DIFFUSION_LAG_MIN_HOURS or (window_h is not None and lag_h > window_h):
             continue
         accum.setdefault(link.copy_channel_id, []).append(lag_h)
 
-    lag_dict = {pk: round(statistics.median(v), 1) for pk, v in accum.items()}
+    lag_dict = {pk: round(statistics.median(v), DIFFUSION_LAG_DECIMALS) for pk, v in accum.items()}
 
     for node in graph_data["nodes"]:
         entry = channel_dict.get(node["id"])

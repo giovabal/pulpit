@@ -7,9 +7,15 @@ from typing import Any
 
 from django.db.models import Count, F, Q, QuerySet
 
-from network.community import UNDIRECTED_BASIS_STRATEGIES, canonical_strategy_key, labelgroup_display_labels
+from network.community import (
+    MODULARITY_RESOLUTION,
+    UNDIRECTED_BASIS_STRATEGIES,
+    canonical_strategy_key,
+    labelgroup_display_labels,
+)
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.near_copies import forward_header_q
+from network.parameters import FixedParameter
 from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
 from webapp.models import Message
 
@@ -43,9 +49,202 @@ PARTITION_COMPARISON_METRICS: tuple[tuple[str, str, str, bool], ...] = (
     ("vi", "VI", "Variation of Information", True),
 )
 
-# Natural-log → bits conversion, so Variation of Information is reported in bits with the intuitive
-# upper bound log2(N) (mutual information and entropies are computed in nats).
-_LOG2 = float(np.log(2.0))
+#: Logarithm base Variation of Information is reported in: 2 = bits, with the intuitive upper bound log2(N).
+VI_LOG_BASE = 2.0
+# Natural-log → bits conversion (mutual information and entropies are computed in nats).
+_LOG2 = float(np.log(VI_LOG_BASE))
+#: Normalisation of AMI and NMI — the arithmetic mean of the two partitions' entropies (scikit-learn's own
+#: default, passed explicitly).
+PARTITION_MI_AVERAGE_METHOD = "arithmetic"
+#: Average clustering (whole network and per community): unweighted (``weight=None``) and averaged over every
+#: node, those with zero clustering included — networkx's own defaults, passed explicitly.
+CLUSTERING_WEIGHT = None
+CLUSTERING_COUNT_ZEROS = True
+#: Algebraic connectivity (Fiedler value) of the largest connected component of the W+Wᵀ projection:
+#: eigensolver, its seed and tolerance, Laplacian normalisation and the edge attribute weighting it. The
+#: tolerance, normalisation and weight are networkx's own defaults, passed explicitly.
+ALGEBRAIC_CONNECTIVITY_METHOD = "tracemin_pcg"
+ALGEBRAIC_CONNECTIVITY_SEED = 42
+ALGEBRAIC_CONNECTIVITY_TOL = 1e-08
+ALGEBRAIC_CONNECTIVITY_NORMALIZED = False
+ALGEBRAIC_CONNECTIVITY_WEIGHT = "weight"
+#: Delta degrees of freedom of the standard deviation in the in/out-degree coefficient of variation
+#: (0 = population standard deviation, numpy's own default, passed explicitly).
+DEGREE_CV_DDOF = 0
+#: Where the whole-network path lengths are measured (``_network_summary``).
+PATH_COMPONENT_RULE = (
+    "average path length and diameter on the largest weakly connected component, edges taken as undirected; "
+    "directed average path length and diameter on the largest strongly connected component"
+)
+#: Centralisation index computed for each centrality measure (``_freeman_centralization``).
+CENTRALIZATION_FORMULA = (
+    "Σ_i (C_max − C_i) / ((n − 1) · C_max), over the nodes with a value; undefined when n < 2 or C_max = 0"
+)
+#: How a partition that leaves some nodes unassigned (label groups, LEIDEN_TEMPORAL's plurality column) is read.
+UNASSIGNED_NODE_RULE = (
+    "modularity: each unassigned node is a singleton community; inter-community edge ratio: an edge with an "
+    "unassigned endpoint is a crossing edge; partition comparison: each pair of partitions is compared on the "
+    "nodes both assign"
+)
+#: Behavioural equivalence: how missing feature values are imputed before normalisation
+#: (``_compute_behavioural_equivalence``).
+BEHAVIOURAL_IMPUTATION_RULE = "column median of the channels with a value (0 when no channel has one)"
+# Behavioural features that are heavy-tailed volume counts (not bounded rates): they
+# are log1p-scaled before normalisation so a few very large channels don't dominate.
+_VOLUME_BEHAVIOURAL_KEYS: frozenset[str] = frozenset({"fans", "messages_count"})
+
+_SOURCE = "network/community_stats.py"
+
+#: The values fixed in this module (and the community-detection constants it reports against) that shape
+#: the whole-network and per-community statistics (``PARAMETERS.md``).
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Minimum community size for path lengths",
+        value=_PATH_LENGTH_MIN_NODES,
+        scope="community_stats",
+        affects="A community's average path length and diameter are computed only when it has at least this "
+        "many channels; smaller communities report none.",
+        source=f"{_SOURCE}: _PATH_LENGTH_MIN_NODES",
+    ),
+    FixedParameter(
+        name="Reported modularity resolution γ",
+        value=MODULARITY_RESOLUTION,
+        scope="community_stats",
+        affects="Resolution of the reported modularity, headline and per-community contributions alike; 1 = "
+        "standard modularity, the objective LEIDEN, LEIDEN_DIRECTED and LOUVAIN optimise.",
+        source="network/community.py: MODULARITY_RESOLUTION",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Strategies reported against the undirected null",
+        value=UNDIRECTED_BASIS_STRATEGIES,
+        scope="community_stats",
+        affects="These strategies' modularity is computed on the undirected W+Wᵀ projection (null k_i·k_j/2m), "
+        "the graph they were optimised on; every other partition against the directed null (k_out_i·k_in_j/m).",
+        source="network/community.py: UNDIRECTED_BASIS_STRATEGIES",
+    ),
+    FixedParameter(
+        name="Unassigned-node convention",
+        value=UNASSIGNED_NODE_RULE,
+        scope="community_stats",
+        affects="How modularity, the inter-community edge ratio and the partition-comparison matrices treat "
+        "channels a partition leaves without a community (label groups, LEIDEN_TEMPORAL's full-range column).",
+        source=f"{_SOURCE}: UNASSIGNED_NODE_RULE",
+    ),
+    FixedParameter(
+        name="Average clustering weight",
+        value=CLUSTERING_WEIGHT,
+        scope="community_stats",
+        affects="Average clustering, whole network and per community, counts directed triangles unweighted "
+        "(None), so it is invariant to --edge-weight-strategy.",
+        source=f"{_SOURCE}: CLUSTERING_WEIGHT",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Average clustering counts zeros",
+        value=CLUSTERING_COUNT_ZEROS,
+        scope="community_stats",
+        affects="Channels with zero clustering, those with fewer than two neighbours included, enter the average.",
+        source=f"{_SOURCE}: CLUSTERING_COUNT_ZEROS",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Path-length components",
+        value=PATH_COMPONENT_RULE,
+        scope="community_stats",
+        affects="Whole-network path lengths describe the largest component only (marked † / ‡ when it is not "
+        "the whole graph), so unreachable pairs never enter the averages.",
+        source=f"{_SOURCE}: PATH_COMPONENT_RULE",
+    ),
+    FixedParameter(
+        name="Algebraic connectivity eigensolver",
+        value=ALGEBRAIC_CONNECTIVITY_METHOD,
+        scope="community_stats",
+        affects="Method networkx uses to find the Fiedler value of the largest connected component.",
+        source=f"{_SOURCE}: ALGEBRAIC_CONNECTIVITY_METHOD",
+    ),
+    FixedParameter(
+        name="Algebraic connectivity seed",
+        value=ALGEBRAIC_CONNECTIVITY_SEED,
+        scope="community_stats",
+        affects="Seeds the eigensolver's random starting vectors, so the Fiedler value is reproducible.",
+        source=f"{_SOURCE}: ALGEBRAIC_CONNECTIVITY_SEED",
+    ),
+    FixedParameter(
+        name="Algebraic connectivity tolerance",
+        value=ALGEBRAIC_CONNECTIVITY_TOL,
+        scope="community_stats",
+        affects="Convergence tolerance of the eigensolver computing the Fiedler value.",
+        source=f"{_SOURCE}: ALGEBRAIC_CONNECTIVITY_TOL",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Algebraic connectivity normalised Laplacian",
+        value=ALGEBRAIC_CONNECTIVITY_NORMALIZED,
+        scope="community_stats",
+        affects="The Fiedler value is taken from the unnormalised Laplacian L = D − W (False), not the normalised one.",
+        source=f"{_SOURCE}: ALGEBRAIC_CONNECTIVITY_NORMALIZED",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Algebraic connectivity edge weight",
+        value=ALGEBRAIC_CONNECTIVITY_WEIGHT,
+        scope="community_stats",
+        affects="The Laplacian is weighted by this edge attribute — the per-graph rescaled tie weight "
+        "(10·w/max), summed over both directions — so the Fiedler value is on that scale.",
+        source=f"{_SOURCE}: ALGEBRAIC_CONNECTIVITY_WEIGHT",
+        note="networkx's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Degree CV standard deviation ddof",
+        value=DEGREE_CV_DDOF,
+        scope="community_stats",
+        affects="The in/out-degree coefficient of variation divides the population standard deviation (ddof 0) "
+        "by the mean degree.",
+        source=f"{_SOURCE}: DEGREE_CV_DDOF",
+        note="numpy's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Centralisation formula",
+        value=CENTRALIZATION_FORMULA,
+        scope="community_stats",
+        affects="The centralisation reported for each centrality measure.",
+        source=f"{_SOURCE}: CENTRALIZATION_FORMULA",
+        note="Equals Freeman's (1978) centralisation only when the least-central node can reach 0 (e.g. "
+        "in/out-degree on a star); otherwise a conservative lower bound, hence 'approx.'.",
+    ),
+    FixedParameter(
+        name="AMI / NMI normalisation",
+        value=PARTITION_MI_AVERAGE_METHOD,
+        scope="community_stats",
+        affects="AMI and NMI divide mutual information by the arithmetic mean of the two partitions' entropies.",
+        source=f"{_SOURCE}: PARTITION_MI_AVERAGE_METHOD",
+        note="Arithmetic-mean NMI: Kvalseth (1987); scikit-learn's own default, passed explicitly.",
+    ),
+    FixedParameter(
+        name="Variation of Information log base",
+        value=VI_LOG_BASE,
+        scope="community_stats",
+        affects="Variation of Information is reported in bits, with upper bound log2 N.",
+        source=f"{_SOURCE}: VI_LOG_BASE",
+    ),
+    FixedParameter(
+        name="Behavioural equivalence log-scaled features",
+        value=_VOLUME_BEHAVIOURAL_KEYS,
+        scope="community_stats",
+        affects="These heavy-tailed volume features (followers, message count) are log1p-scaled before min-max "
+        "normalisation, so a few very large channels do not compress everyone else.",
+        source=f"{_SOURCE}: _VOLUME_BEHAVIOURAL_KEYS",
+    ),
+    FixedParameter(
+        name="Behavioural equivalence missing values",
+        value=BEHAVIOURAL_IMPUTATION_RULE,
+        scope="community_stats",
+        affects="A channel missing a behavioural measure (e.g. diffusion lag without dated forwards) gets this "
+        "neutral value instead of an extreme 0.",
+        source=f"{_SOURCE}: BEHAVIOURAL_IMPUTATION_RULE",
+    ),
+)
 
 # Exceptions networkx routines may raise on graphs that are too small, empty,
 # or disconnected for a given metric. Centralised so a new "expected failure"
@@ -105,7 +304,7 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
         with _swallow_metric("reciprocity"):
             reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
         with _swallow_metric("avg_clustering"):
-            avg_clustering = nx.average_clustering(graph)
+            avg_clustering = nx.average_clustering(graph, weight=CLUSTERING_WEIGHT, count_zeros=CLUSTERING_COUNT_ZEROS)
 
     need_wcc = _sel("PATHS") or _sel("COMPONENTS")
     need_scc = _sel("PATHS") or _sel("COMPONENTS")
@@ -169,15 +368,25 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
                 lcc_nodes = max(nx.connected_components(ug_ac), key=len)
                 lcc_ac = ug_ac.subgraph(lcc_nodes)
                 if len(lcc_ac) >= 2:
-                    algebraic_connectivity = round(nx.algebraic_connectivity(lcc_ac, method="tracemin_pcg", seed=42), 6)
+                    algebraic_connectivity = round(
+                        nx.algebraic_connectivity(
+                            lcc_ac,
+                            weight=ALGEBRAIC_CONNECTIVITY_WEIGHT,
+                            normalized=ALGEBRAIC_CONNECTIVITY_NORMALIZED,
+                            tol=ALGEBRAIC_CONNECTIVITY_TOL,
+                            method=ALGEBRAIC_CONNECTIVITY_METHOD,
+                            seed=ALGEBRAIC_CONNECTIVITY_SEED,
+                        ),
+                        6,
+                    )
             in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
             out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
             in_mean = float(in_arr.mean())
             out_mean = float(out_arr.mean())
             if in_mean > 0:
-                in_degree_cv = round(float(in_arr.std() / in_mean), 4)
+                in_degree_cv = round(float(in_arr.std(ddof=DEGREE_CV_DDOF) / in_mean), 4)
             if out_mean > 0:
-                out_degree_cv = round(float(out_arr.std() / out_mean), 4)
+                out_degree_cv = round(float(out_arr.std(ddof=DEGREE_CV_DDOF) / out_mean), 4)
 
     # ── DEGCORRELATION — directed degree assortativity ─────────────────────────
     assortativity: dict[str, float | None] = {
@@ -255,7 +464,7 @@ def _subgraph_metrics(
     with _swallow_metric("reciprocity (subgraph)"):
         reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
     with _swallow_metric("avg_clustering (subgraph)"):
-        avg_clustering = nx.average_clustering(subgraph)
+        avg_clustering = nx.average_clustering(subgraph, weight=CLUSTERING_WEIGHT, count_zeros=CLUSTERING_COUNT_ZEROS)
     if n >= _PATH_LENGTH_MIN_NODES:
         with _swallow_metric("wcc/path_length/diameter (subgraph)"):
             wccs = list(nx.weakly_connected_components(subgraph))
@@ -276,10 +485,10 @@ def _subgraph_metrics(
         if mg.is_directed():
             s_out = sum(d for _, d in mg.out_degree(nodes_set, weight="weight"))
             s_in = sum(d for _, d in mg.in_degree(nodes_set, weight="weight"))
-            modularity_contribution = round(l_c / m - (s_out * s_in) / (m * m), 6)
+            modularity_contribution = round(l_c / m - MODULARITY_RESOLUTION * (s_out * s_in) / (m * m), 6)
         else:
             k_c = sum(d for _, d in mg.degree(nodes_set, weight="weight"))
-            modularity_contribution = round(l_c / m - (k_c / (2 * m)) ** 2, 6)
+            modularity_contribution = round(l_c / m - MODULARITY_RESOLUTION * (k_c / (2 * m)) ** 2, 6)
     # ── E-I Index — Krackhardt & Stern (1988) ────────────────────────────────
     # (external_ties − internal_ties) / (external_ties + internal_ties)
     # Range −1 (fully cohesive) to +1 (fully competitive/peripheral).
@@ -415,8 +624,8 @@ def _compare_partitions(labels_a: list, labels_b: list) -> "dict[str, float] | N
     # ``round(...) or 0.0`` normalises -0.0 (and exact 0.0) to a clean 0.0 for JSON/XLSX.
     return {
         "ari": round(float(adjusted_rand_score(a, b)), 4) or 0.0,
-        "ami": round(float(adjusted_mutual_info_score(a, b, average_method="arithmetic")), 4) or 0.0,
-        "nmi": round(float(normalized_mutual_info_score(a, b, average_method="arithmetic")), 4) or 0.0,
+        "ami": round(float(adjusted_mutual_info_score(a, b, average_method=PARTITION_MI_AVERAGE_METHOD)), 4) or 0.0,
+        "nmi": round(float(normalized_mutual_info_score(a, b, average_method=PARTITION_MI_AVERAGE_METHOD)), 4) or 0.0,
         "vi": round(vi_bits, 4) or 0.0,
     }
 
@@ -475,11 +684,6 @@ def _compute_structural_equivalence(
         ),
         "cells_lower": _lower_triangle(sim, n),
     }
-
-
-# Behavioural features that are heavy-tailed volume counts (not bounded rates): they
-# are log1p-scaled before normalisation so a few very large channels don't dominate.
-_VOLUME_BEHAVIOURAL_KEYS: frozenset[str] = frozenset({"fans", "messages_count"})
 
 
 def _compute_behavioural_equivalence(
@@ -713,7 +917,12 @@ def _compute_strategy_entry(
     modularity = None
     if label_to_nodes:
         with _swallow_metric(f"modularity (strategy {strategy_key})", ValueError):
-            modularity = nx.community.modularity(mod_graph, _modularity_partition(mod_graph, label_to_nodes))
+            modularity = nx.community.modularity(
+                mod_graph,
+                _modularity_partition(mod_graph, label_to_nodes),
+                weight="weight",
+                resolution=MODULARITY_RESOLUTION,
+            )
 
     # ── Inter-community edge ratio ────────────────────────────────────────────
     # Fraction of all directed edges whose source and target belong to different

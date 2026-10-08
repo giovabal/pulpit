@@ -59,6 +59,7 @@ References:
 
 from typing import Any
 
+from network.parameters import FixedParameter
 from network.robustness.metrics import component_sizes, residual_sizes
 from network.utils import tie_weight_key
 
@@ -66,6 +67,10 @@ import networkx as nx
 import numpy as np
 
 _METRICS: tuple[str, ...] = ("wcc", "scc", "reach", "strength")
+
+#: Nothing is fixed here: the random-baseline runs, the REACH sample and the seed are the
+#: ``--robustness-*`` run options, and the backbone/metric values are declared by their modules.
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = ()
 
 
 def ban_replay_rows(
