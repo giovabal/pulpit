@@ -131,6 +131,8 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 
 
 _LOST_MODES = ("exclude", "include", "only")
+# A reply is a message posted as an answer to another one (Telegram's reply_to header).
+_REPLY_MODES = ("include", "exclude", "only")
 
 _DEFAULT_SORT = "date_desc"
 # Accepted aliases for the bare asc/desc sort vocabulary in URLs.
@@ -303,6 +305,11 @@ def _one_message_per_post(qs: QuerySet) -> QuerySet:
     ).filter(post_rank=1)
 
 
+def _reply_mode(params: Any) -> str:
+    replies = params.get("replies", "include")
+    return replies if replies in _REPLY_MODES else "include"
+
+
 def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> QuerySet:
     text = _message_query(params, user)[0]
     if text:
@@ -334,6 +341,11 @@ def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> Query
     # after Telegram unpins it — pinning is the editorial signal of interest.
     if params.get("pinned"):
         qs = qs.filter(has_been_pinned=True)
+    replies = _reply_mode(params)
+    if replies == "exclude":
+        qs = qs.filter(reply_to_msg_id__isnull=True)
+    elif replies == "only":
+        qs = qs.filter(reply_to_msg_id__isnull=False)
     qs = _exclude_album_tails(qs)
     if params.get("unique"):
         # Last, so the copies it chooses between are the ones the other options kept.
@@ -352,6 +364,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
     if lost not in _LOST_MODES:
         lost = "exclude"
     pinned = bool(params.get("pinned"))
+    replies = _reply_mode(params)
     unique = bool(params.get("unique"))
     any_tag, tag_ids = _selected_tags(params, user)
     options_active = (
@@ -361,6 +374,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         or set(selected) != set(_CONTENT_TYPES)
         or lost != "exclude"
         or pinned
+        or replies != "include"
         or unique
         or any_tag
         or bool(tag_ids)
@@ -381,6 +395,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         extra["lost"] = lost
     if pinned:
         extra["pinned"] = "1"
+    if replies != "include":
+        extra["replies"] = replies
     if unique:
         extra["unique"] = "1"
     if any_tag or tag_ids:
@@ -398,6 +414,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "all_types": _CONTENT_TYPES,
         "lost": lost,
         "pinned": pinned,
+        "replies": replies,
         "unique": unique,
         "all_tags": all_tags,
         "any_tag": any_tag,

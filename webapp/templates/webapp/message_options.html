@@ -84,6 +84,25 @@
       <div class="msg-options-divider"></div>
 
       <div class="msg-options-section">
+        <div class="msg-options-label">Replies</div>
+        <label class="msg-options-item">
+          <input type="radio" name="replies" value="include" class="msg-opt-input"
+                 {% if replies == "include" %}checked{% endif %}> Include
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="replies" value="exclude" class="msg-opt-input"
+                 {% if replies == "exclude" %}checked{% endif %}> Exclude
+        </label>
+        <label class="msg-options-item">
+          <input type="radio" name="replies" value="only" class="msg-opt-input"
+                 {% if replies == "only" %}checked{% endif %}> Only
+        </label>
+        <p class="msg-options-note">A reply is a message posted in answer to another one.</p>
+      </div>
+
+      <div class="msg-options-divider"></div>
+
+      <div class="msg-options-section">
         <div class="msg-options-label">Shares</div>
         <label class="msg-options-item">
           <input type="checkbox" name="unique" value="1" class="msg-opt-input"
