@@ -1377,6 +1377,51 @@ class PinnedMessageFilterTests(TestCase):
         self.assertFalse(_message_options_context(QueryDict(""))["options_active"])
 
 
+class ReplyMessageFilterTests(TestCase):
+    """``?replies=include|exclude|only`` filters on the message's reply header."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, label=self.org)
+        self.post = Message.objects.create(telegram_id=1, channel=self.channel)
+        self.reply = Message.objects.create(telegram_id=2, channel=self.channel, reply_to_msg_id=1)
+
+    def _visible(self, query: str) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        return set(_apply_message_options(qs, QueryDict(query)).values_list("id", flat=True))
+
+    def test_replies_included_by_default(self) -> None:
+        self.assertEqual(self._visible(""), {self.post.id, self.reply.id})
+        self.assertEqual(self._visible("replies=bogus"), {self.post.id, self.reply.id})
+
+    def test_exclude_and_only(self) -> None:
+        self.assertEqual(self._visible("replies=exclude"), {self.post.id})
+        self.assertEqual(self._visible("replies=only"), {self.reply.id})
+
+    def test_replies_marks_options_active_and_survives_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict("replies=exclude"))
+        self.assertEqual(ctx["replies"], "exclude")
+        self.assertTrue(ctx["options_active"])
+        self.assertIn("replies=exclude", ctx["original_query"])
+        default = _message_options_context(QueryDict(""))
+        self.assertEqual(default["replies"], "include")
+        self.assertNotIn("replies", default["original_query"])
+
+    def test_search_page_renders_and_filters(self) -> None:
+        response = self.client.get(reverse("message-search") + "?replies=only")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([m.id for m in response.context["object_list"]], [self.reply.id])
+        self.assertContains(response, 'name="replies" value="only"')
+
+
 class ChannelListViewTests(TestCase):
     def test_label_filter_excludes_container_group_labels(self) -> None:
         # Even when the primary group is a container, its labels can never be held
