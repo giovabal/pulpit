@@ -153,7 +153,9 @@ var METRIC_TOOLTIPS = {
 };
 
 var STRATEGY_COL_TOOLTIPS = {
-    "Modularity": "Newman & Girvan (2004): fraction of edges within communities minus the expected fraction under a random null model. Range −0.5–1; >0.3 is conventionally considered meaningful community structure.",
+    "Modularity": "Newman & Girvan (2004): fraction of edges within communities minus the expected fraction under a random null model. Range −0.5–1. A high value alone is not evidence of communities — sparse random graphs reach 0.3–0.8 too (Guimerà et al. 2004); read it with the z column.",
+    "Modularity z": "How many standard deviations this modularity lies above the best modularity Leiden reaches on random graphs with the same in/out-degrees and strengths but no community structure. Large and positive → real community structure; near 0 or negative → no more modular than chance. Shown for the modularity-maximising strategies (Leiden, Leiden directed, Louvain) only.",
+    "p (random)": "One-sided Monte-Carlo p-value of the modularity against those random graphs: (number of random graphs at least as modular + 1) / (random graphs + 1). Its floor is set by the number of random graphs.",
     "Inter-comm. Ratio": "Fraction of all directed edges whose endpoints belong to different communities. 0 = all edges internal; 1 = all edges cross community boundaries. High values indicate fragmented, competitive structure.",
     "Mean E-I Index": "Weighted mean of community E-I indices (Krackhardt & Stern 1988): (external − internal) / (external + internal) per community, aggregated by connection volume. Range −1 (fully cohesive) to +1 (fully competitive).",
 };
@@ -268,7 +270,7 @@ function _render_modularity(data) {
     table.className = "table table-sm table-hover sortable";
     var thead = document.createElement("thead");
     var htr = document.createElement("tr");
-    ["Strategy", "Modularity", "Inter-comm. Ratio", "Mean E-I Index"].forEach(function(lbl, i) {
+    ["Strategy", "Modularity", "Modularity z", "p (random)", "Inter-comm. Ratio", "Mean E-I Index"].forEach(function(lbl, i) {
         var th = document.createElement("th");
         th.scope = "col";
         if (i > 0) th.className = "number";
@@ -298,6 +300,12 @@ function _render_modularity(data) {
             td2.appendChild(inner);
             td2.setAttribute("data-sort-value", row.modularity);
         } else { td2.textContent = row.modularity; }
+        var tdZ = document.createElement("td");
+        tdZ.className = "number";
+        tdZ.textContent = row.modularity_z || "—";
+        var tdP = document.createElement("td");
+        tdP.className = "number";
+        tdP.textContent = row.modularity_p || "—";
         var td3 = document.createElement("td");
         td3.className = "number";
         td3.textContent = row.inter_community_ratio || "—";
@@ -306,6 +314,8 @@ function _render_modularity(data) {
         td4.textContent = row.mean_ei || "—";
         tr.appendChild(td1);
         tr.appendChild(td2);
+        tr.appendChild(tdZ);
+        tr.appendChild(tdP);
         tr.appendChild(td3);
         tr.appendChild(td4);
         tbody.appendChild(tr);

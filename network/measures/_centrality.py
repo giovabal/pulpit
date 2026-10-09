@@ -1,9 +1,9 @@
 import logging
 from math import isnan
 
-from network.measures._base import apply_measure, compute_neighbour_community_participation
+from network.measures._base import PARTICIPATION_WEIGHT, apply_measure, compute_neighbour_community_participation
 from network.parameters import FixedParameter
-from network.utils import GraphData
+from network.utils import GraphData, dead_leaf_ids, without_self_loops
 
 import networkx as nx
 import numpy as np
@@ -26,8 +26,10 @@ PAGERANK_WEIGHT = "weight"
 PAGERANK_PERSONALIZATION = None
 #: PageRank dangling-node redistribution: ``None`` = the teleport distribution, i.e. uniform (NetworkX default).
 PAGERANK_DANGLING = None
-#: HITS power-iteration cap; the last iterate is used if it has not converged by then.
-HITS_MAX_ITER = 100
+#: HITS power-iteration cap; the last iterate is used (with a logged warning) if it has not converged by then.
+#: NetworkX's 100 is too few on sparse citation graphs whose leading eigenvalues sit close together (a 2,000-node
+#: graph with dead leaves needed ~300); an iteration is one sparse matrix-vector product, so the cap is generous.
+HITS_MAX_ITER = 1000
 #: HITS convergence tolerance: iteration stops once the L1 change of the max-scaled hub vector is below it.
 HITS_TOL = 1.0e-8
 #: Edge attribute the HITS adjacency is weighted by (the run's edge weight).
@@ -56,6 +58,20 @@ MODULE_Z_STD_DDOF = 0
 MODULE_ROLE_DECIMALS = 4
 
 
+def _censor_dead_leaves(graph: nx.DiGraph, values: dict) -> dict:
+    """``values`` with every dead leaf (:func:`network.utils.dead_leaf_ids`) set to ``None``.
+
+    A dead leaf is drawn only because a monitored channel cited it; its own messages — and so its outgoing
+    citations — are never read. A measure built on a channel's outgoing ties would score it 0 (out-degree, hub,
+    reciprocity) or from its incoming side alone (Burt's constraint, clustering): a boundary artefact, not a
+    finding, so the value is reported as undefined instead.
+    """
+    dead = dead_leaf_ids(graph)
+    if not dead:
+        return values
+    return {node: (None if node in dead else value) for node, value in values.items()}
+
+
 def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add the PageRank score to each node.
 
@@ -72,8 +88,9 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     ``nx.pagerank`` is called with its default settings passed explicitly
     (``PAGERANK_ALPHA`` = 0.85 damping, uniform teleport, dangling nodes
     redistributed uniformly, edge weight = ``"weight"``); the random walk
-    is scale-invariant to ``build_graph``'s global max-10 rescaling. See
-    `docs/network-measures.md#pagerank` for the prose write-up.
+    is scale-invariant to ``build_graph``'s global max-10 rescaling. Self-loops
+    (``--self-references``) are left out: a channel's citation of itself is no
+    vote of prestige. See `docs/network-measures.md#pagerank` for the prose write-up.
 
     Refs: Brin & Page 1998, *Computer Networks* 30(1–7); Page, Brin, Motwani &
     Winograd 1999, "The PageRank citation ranking", Stanford TR.
@@ -81,7 +98,7 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     key = "pagerank"
     try:
         pagerank_values: dict[str, float] = nx.pagerank(
-            graph,
+            without_self_loops(graph),
             alpha=PAGERANK_ALPHA,
             personalization=PAGERANK_PERSONALIZATION,
             max_iter=PAGERANK_MAX_ITER,
@@ -121,7 +138,8 @@ def compute_hits(
     self-loops, near-empty backbones).
 
     Returns ``(hubs, authorities)`` keyed by node id; ``({}, {})`` for an empty
-    graph.
+    graph. A warning is logged when ``max_iter`` passes without convergence (the
+    last iterate is then used).
     """
     nodes = list(graph.nodes())
     n = len(nodes)
@@ -130,6 +148,8 @@ def compute_hits(
     a_mat = nx.to_scipy_sparse_array(graph, nodelist=nodes, weight=HITS_WEIGHT, dtype=float, format="csr")
     at_mat = a_mat.T.tocsr()
     hub = np.full(n, 1.0 / n)
+    converged = False
+    change = float("nan")
     for _ in range(max_iter):
         auth = at_mat @ hub
         auth_max = auth.max() if auth.size else 0.0
@@ -139,10 +159,19 @@ def compute_hits(
         hub_max = new_hub.max() if new_hub.size else 0.0
         if hub_max > 0:
             new_hub = new_hub / hub_max
-        if float(np.abs(new_hub - hub).sum()) < tol:
-            hub = new_hub
-            break
+        change = float(np.abs(new_hub - hub).sum())
         hub = new_hub
+        if change < tol:
+            converged = True
+            break
+    if not converged and graph.number_of_edges():
+        logger.warning(
+            "HITS did not converge in %d iterations (last L1 change %.3g > tolerance %.1g); "
+            "using the last iterate — read small hub/authority differences with care",
+            max_iter,
+            change,
+            tol,
+        )
     auth = at_mat @ hub
     hub_sum = float(hub.sum())
     auth_sum = float(auth.sum())
@@ -157,16 +186,22 @@ def compute_hits(
 
 
 def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
-    """Add weighted HITS hub and authority scores to each node."""
+    """Add weighted HITS hub and authority scores to each node.
+
+    Computed without self-loops (a channel citing itself is neither its own hub nor its own authority); the
+    hub score of a dead leaf is ``None`` — its outgoing citations are outside the analysis (see
+    :func:`_censor_dead_leaves`).
+    """
     try:
-        hubs, authorities = compute_hits(graph, max_iter=HITS_MAX_ITER, tol=HITS_TOL)
+        hubs, authorities = compute_hits(without_self_loops(graph), max_iter=HITS_MAX_ITER, tol=HITS_TOL)
     except Exception as exc:  # noqa: BLE001
         # Degrade gracefully on degenerate graphs (e.g. a lone self-referencing
         # channel) instead of aborting the whole export.
         logger.warning("HITS could not be computed (%s); skipping hub/authority scores", exc)
         return []
+    dead = dead_leaf_ids(graph)
     for node in graph_data["nodes"]:
-        node["hits_hub"] = hubs.get(node["id"], 0.0)
+        node["hits_hub"] = None if node["id"] in dead else hubs.get(node["id"], 0.0)
         node["hits_authority"] = authorities.get(node["id"], 0.0)
     return [("hits_hub", "HITS Hub"), ("hits_authority", "HITS Authority")]
 
@@ -189,9 +224,13 @@ def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
     has no comparable theoretical maximum and is excluded there. See
     `docs/network-measures.md#in-degree-centrality` for the prose write-up.
 
+    Self-loops are left out (a channel citing itself is not one of its citers), so the star bound
+    stays exact.
+
     Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
     """
-    return apply_measure(graph_data, nx.in_degree_centrality(graph), "in_degree_centrality", "In-degree Centrality")
+    values = nx.in_degree_centrality(without_self_loops(graph))
+    return apply_measure(graph_data, values, "in_degree_centrality", "In-degree Centrality")
 
 
 def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -213,9 +252,13 @@ def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> lis
     no comparable theoretical maximum and is excluded there. See
     `docs/network-measures.md#out-degree-centrality` for the prose write-up.
 
+    Self-loops are left out; a dead leaf gets ``None`` — its own citations are outside the analysis, so
+    its out-degree is unobserved, not zero (:func:`_censor_dead_leaves`).
+
     Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
     """
-    return apply_measure(graph_data, nx.out_degree_centrality(graph), "out_degree_centrality", "Out-degree Centrality")
+    values = _censor_dead_leaves(graph, nx.out_degree_centrality(without_self_loops(graph)))
+    return apply_measure(graph_data, values, "out_degree_centrality", "Out-degree Centrality", default=None)
 
 
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -244,10 +287,16 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     ``--edge-weight-strategy`` affects rankings via the row-normalised mutual
     weight.
 
+    Self-loops are left out — with them a channel would count as its own contact
+    (raising a triangle's 1.125 to 1.5). A dead leaf gets ``None``: its ego network is
+    only seen from the citing side (:func:`_censor_dead_leaves`).
+
     See ``docs/network-measures.md#burts-constraint`` for the prose write-up.
     """
     key = "burt_constraint"
-    values: dict[str, float] = nx.constraint(graph, weight=BURT_CONSTRAINT_WEIGHT)
+    values: dict[str, float] = _censor_dead_leaves(
+        graph, nx.constraint(without_self_loops(graph), weight=BURT_CONSTRAINT_WEIGHT)
+    )
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
         node[key] = None if (val is None or isnan(val)) else round(val, BURT_CONSTRAINT_DECIMALS)
@@ -266,12 +315,15 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     ``weight=`` argument, so it is unweighted — ``--edge-weight-strategy`` does not
     affect the ranking. The formula sums all 8 directed triangle orientations
     symmetrically, so the score is also direction-invariant (same value on ``G`` and
-    ``G.reverse()``).
+    ``G.reverse()``). A dead leaf gets ``None``: the triangles its own citations would
+    close are outside the analysis (:func:`_censor_dead_leaves`).
     """
     # float(): nx.clustering yields int 0 for nodes with degree < 2 and float
     # elsewhere; mixed types corrupt GEXF/GraphML attribute typing on export.
     values = {node: float(value) for node, value in nx.clustering(graph, weight=LOCAL_CLUSTERING_WEIGHT).items()}
-    return apply_measure(graph_data, values, "local_clustering", "Local Clustering")
+    return apply_measure(
+        graph_data, _censor_dead_leaves(graph, values), "local_clustering", "Local Clustering", default=None
+    )
 
 
 def apply_reciprocity(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -284,7 +336,8 @@ def apply_reciprocity(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[st
     the other — a mutual-amplification relationship rather than one-way audience.
 
     Range [0, 1]; ``None`` for isolated nodes (no partners → undefined, matching Burt's
-    constraint's convention). **Unweighted by design**, like the Freeman degree
+    constraint's convention) and for dead leaves, whose return citations are outside the
+    analysis (:func:`_censor_dead_leaves`). **Unweighted by design**, like the Freeman degree
     centralities: mutuality is about *whether* a return tie exists, not how heavy it
     is, so the ranking is invariant to ``--edge-weight-strategy``. Direction-invariant
     (predecessors and successors swap under ``G.reverse()``, the overlap does not).
@@ -302,7 +355,7 @@ def apply_reciprocity(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[st
         succ = set(graph.successors(node)) - {node}
         total = len(pred) + len(succ)
         values[node] = round(2 * len(pred & succ) / total, RECIPROCITY_DECIMALS) if total else None
-    return apply_measure(graph_data, values, "reciprocity", "Reciprocity", default=None)
+    return apply_measure(graph_data, _censor_dead_leaves(graph, values), "reciprocity", "Reciprocity", default=None)
 
 
 def _ga_role(z: float, participation: float) -> str:
@@ -337,7 +390,11 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
     * **participation coefficient** ``P`` (Guimerà & Amaral 2005) — how evenly the node's ties
       spread across communities: 0 = every tie inside one community, → 1 = ties spread evenly
       across many. Emitted as the sortable numeric measure ``participation`` — the continuous
-      cross-community bridging score the seven role labels quantise.
+      cross-community bridging score the seven role labels quantise. Like ``z`` it counts
+      distinct neighbours, unweighted: Guimerà & Amaral's definition, on which the role
+      thresholds were calibrated. A weighted variant — each neighbour's tie weight summed over
+      both directions — is emitted alongside as ``participation_weighted`` for reading the
+      intensity of bridging; it does not drive the role.
 
     The (z, P) pair maps to one of seven canonical roles (ultra-peripheral, peripheral,
     connector, kinless; and provincial / connector / kinless hub), written as the categorical
@@ -345,8 +402,10 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
     cross-community connector?" — the embeddedness-versus-brokerage distinction, read off the
     community partitions Pulpit already produces. Within-module degree counts distinct
     same-module neighbours (predecessors ∪ successors), following the undirected, unweighted
-    neighbour convention. Nodes with no community assignment (e.g. dead leaves) receive
-    ``None``.
+    neighbour convention. Nodes with no community assignment (e.g. dead leaves under a
+    label-group basis) and nodes with no neighbour at all receive ``None`` — an isolated
+    channel holds no position inside or across modules — and isolated nodes are left out of
+    their module's degree mean and standard deviation.
     """
     community_map: dict[str, str] = {
         node_id: node_data["communities"][strategy_key]
@@ -359,6 +418,8 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
         if module is None:
             continue
         neighbours = (set(graph.predecessors(node)) | set(graph.successors(node))) - {node}
+        if not neighbours:
+            continue  # isolated: no role, and kept out of its module's degree statistics
         module_degree[node] = sum(1 for nb in neighbours if community_map.get(nb) == module)
 
     by_module: dict[str, list[int]] = {}
@@ -368,20 +429,30 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
         m: (float(np.mean(degs)), float(np.std(degs, ddof=MODULE_Z_STD_DDOF))) for m, degs in by_module.items()
     }
     participation = compute_neighbour_community_participation(graph, community_map)
+    participation_weighted = compute_neighbour_community_participation(
+        graph, community_map, weight=PARTICIPATION_WEIGHT
+    )
 
     for node in graph_data["nodes"]:
         nid = node["id"]
         if nid not in module_degree:
             node["within_module_z"] = None
             node["participation"] = None
+            node["participation_weighted"] = None
             node["module_role"] = None
             continue
         mean, std = module_stats[community_map[nid]]
         z = (module_degree[nid] - mean) / std if std > 0 else 0.0
+        p = participation.get(nid, 0.0)
         node["within_module_z"] = round(z, MODULE_ROLE_DECIMALS)
-        node["participation"] = round(participation.get(nid, 0.0), MODULE_ROLE_DECIMALS)
-        node["module_role"] = _ga_role(z, participation.get(nid, 0.0))
-    return [("within_module_z", "Within-module z"), ("participation", "Participation Coefficient")]
+        node["participation"] = round(p, MODULE_ROLE_DECIMALS)
+        node["participation_weighted"] = round(participation_weighted.get(nid, 0.0), MODULE_ROLE_DECIMALS)
+        node["module_role"] = _ga_role(z, p)
+    return [
+        ("within_module_z", "Within-module z"),
+        ("participation", "Participation Coefficient"),
+        ("participation_weighted", "Participation (weighted)"),
+    ]
 
 
 _SOURCE = "network/measures/_centrality.py"
@@ -424,8 +495,42 @@ def _hits_parameters() -> tuple[FixedParameter, ...]:
     )
 
 
+#: Rule of the measures that read the graph without self-loops (``without_self_loops``).
+SELF_LOOP_RULE = "self-citations (--self-references) are removed before the measure is computed"
+#: Rule of the measures left undefined on dead leaves (``_censor_dead_leaves``).
+DEAD_LEAF_RULE = "None on dead leaves (their own outgoing citations are outside the analysis)"
+_SELF_LOOP_FREE_MEASURES = ("PAGERANK", "HITSHUB", "HITSAUTH", "INDEGCENTRALITY", "OUTDEGCENTRALITY", "BURTCONSTRAINT")
+_DEAD_LEAF_CENSORED_MEASURES = ("OUTDEGCENTRALITY", "HITSHUB", "BURTCONSTRAINT", "LOCALCLUSTERING", "RECIPROCITY")
+
+
+def _rule_parameters() -> tuple[FixedParameter, ...]:
+    """The self-loop and dead-leaf rules, once per measure they apply to."""
+    return tuple(
+        FixedParameter(
+            name="Self-citations",
+            value=SELF_LOOP_RULE,
+            scope=f"measure:{token}",
+            affects="A channel citing itself is not a vote of prestige nor a contact of its own, so the measure "
+            "ignores those self-loops even when --self-references keeps them in the graph.",
+            source=f"{_SOURCE}: SELF_LOOP_RULE",
+        )
+        for token in _SELF_LOOP_FREE_MEASURES
+    ) + tuple(
+        FixedParameter(
+            name="Dead leaves",
+            value=DEAD_LEAF_RULE,
+            scope=f"measure:{token}",
+            affects="A dead leaf is drawn only because a monitored channel cited it; the measure needs the "
+            "channel's own citations, which are never read, so it is reported as undefined rather than 0.",
+            source=f"{_SOURCE}: DEAD_LEAF_RULE",
+        )
+        for token in _DEAD_LEAF_CENSORED_MEASURES
+    )
+
+
 #: The values fixed in this module that shape the structural measures (``PARAMETERS.md``).
 FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    *_rule_parameters(),
     FixedParameter(
         name="PageRank damping factor α",
         value=PAGERANK_ALPHA,
@@ -457,7 +562,9 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         value=PAGERANK_WEIGHT,
         scope="measure:PAGERANK",
         affects="Each channel's vote is split across the channels it cites in proportion to this edge "
-        "attribute, the run's edge weight, so PageRank follows --edge-weight-strategy.",
+        "attribute, the run's edge weight. PageRank re-normalises each channel's outgoing weights, so TOTAL, "
+        "PARTIAL_MESSAGES and PARTIAL_REFERENCES (which scale a channel's ties by one constant) give the same "
+        "ranking; only NONE differs.",
         source=f"{_SOURCE}: PAGERANK_WEIGHT",
         note=_NX_DEFAULT,
     ),

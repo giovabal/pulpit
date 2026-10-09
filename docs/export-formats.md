@@ -196,7 +196,7 @@ For a full explanation of the metrics, see [Whole-network statistics](whole-netw
 
 Generated with `--structural-similarity`. (The filename is retained for saved-config and URL compatibility; the page shows true structural equivalence.)
 
-A lower-triangle SVG heatmap where each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity of their weighted *tie profiles* — each channel's weighted out-citations to, and in-citations from, every other channel (`P = [A | Aᵀ]`, self-ties dropped). Two channels score high when they cite, and are cited by, the same channels.
+A lower-triangle SVG heatmap where each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity of their weighted *tie profiles* — each channel's weighted out-citations to, and in-citations from, every other channel (`P = [A | Aᵀ]`, self-ties dropped), compared over third channels (the tie between the two channels compared is left out). Two channels score high when they cite, and are cited by, the same channels.
 
 Color scale: white (similarity = 0, no shared neighbours) → steel-blue (similarity = 1, identical neighbourhood). Diagonal is always 1 and is marked in grey. Hover a cell for a tooltip: "Channel A × Channel B: 0.8742."
 
@@ -214,7 +214,7 @@ See [Whole-network statistics § Structural equivalence matrix](whole-network-st
 
 Generated with `--behavioural-equivalence`.
 
-A lower-triangle SVG heatmap where each cell (i, j) shows the cosine similarity of channels i and j's **behavioural-measure profiles**: amplification factor, content originality, diffusion lag, and audience/activity volume (followers, message count) — whichever were computed. Measures are min-max normalised per column; missing values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the column median rather than 0. Two channels score high when they behave alike, independent of their network position.
+A lower-triangle SVG heatmap where each cell (i, j) shows the Gower similarity (1 − mean absolute difference) of channels i and j's **behavioural-measure profiles**: amplification factor, content originality, diffusion lag, and audience/activity volume (followers, message count, log-scaled) — whichever were computed. Measures are min-max normalised per column; missing values (e.g. diffusion lag for a channel with no dated forwards) are imputed to the column median rather than 0. Two channels score high when they behave alike, independent of their network position.
 
 Color scale, sort controls, and rendering match the structural equivalence matrix. Pre-computed data is stored in `data/behavioural_equivalence.json`.
 
@@ -395,7 +395,7 @@ Both files include all node attributes (channel name, organization, subscriber c
 
 ## summary.json / meta.json — machine-readable metadata
 
-`summary.json` records the name, creation timestamp, node and edge counts (plus `near_copies`, the number of copy → origin links the graph was built with, `null` when that option was off), and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology. It also records `community_resolutions`: the CPM resolution γ each `LEIDEN_CPM` partition of the full-range graph was computed with (its explicit value, or the network density for a bare token), and for each `LEIDEN_TEMPORAL` partition a `{"<year>": γ}` object over its year slices — `{}` when neither strategy ran. On a timeline export each year's entry in `data/timeline.json` carries the same `community_resolutions` object for that year's partitions (present only when a CPM-family strategy ran). See [Leiden CPM](community-detection.md#leiden-cpm).
+`summary.json` records the name, creation timestamp, node and edge counts (plus `near_copies`, the number of copy → origin links the graph was built with, `null` when that option was off), and every CLI option used to generate this export. Useful for reproducing an export or documenting methodology. It also records `community_resolutions`: the CPM resolution γ each `LEIDEN_CPM` partition of the full-range graph was computed with (its explicit value, or the network density for a bare token), and for each `LEIDEN_TEMPORAL` partition a `{"<year>": γ}` object over its year slices — `{}` when neither strategy ran. On a timeline export each year's entry in `data/timeline.json` carries the same `community_resolutions` object for that year's partitions (present only when a CPM-family strategy ran). See [Leiden CPM](community-detection.md#leiden-cpm). `community_fits` records, per partition key, how each stochastic strategy was fitted: `objective`, `runs` (seeded fits), `best` and `worst` objective value, `stability` (mean Adjusted Rand Index of the other fits to the reported partition) and `identical_share` (share of fits that found exactly it); a `LEIDEN_TEMPORAL` entry adds `interslice_weight`, the absolute identity-link weight its relative ω resolved to. Each `data/timeline.json` year entry carries its own `community_fits`. See [Best of many fits](community-detection.md#best-of-many-fits-and-how-stable-the-answer-is).
 
 `meta.json` records export date, project title, edge direction description, edge weight strategy, date range, total node/edge counts, and configuration flags.
 

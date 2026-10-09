@@ -10,13 +10,23 @@ from django.db.models import Count, F, Q, QuerySet
 from network.community import (
     MODULARITY_RESOLUTION,
     UNDIRECTED_BASIS_STRATEGIES,
+    best_modularity,
     canonical_strategy_key,
     labelgroup_display_labels,
 )
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.near_copies import forward_header_q
 from network.parameters import FixedParameter
-from network.utils import CommunityTableData, GraphData, channel_cutoff_q, make_date_q, to_undirected_sum
+from network.robustness.null_model import rewire_strength_preserving, z_score
+from network.utils import (
+    CommunityTableData,
+    GraphData,
+    channel_cutoff_q,
+    dead_leaf_ids,
+    make_date_q,
+    to_undirected_sum,
+    without_self_loops,
+)
 from webapp.models import Message
 
 import networkx as nx
@@ -86,9 +96,43 @@ UNASSIGNED_NODE_RULE = (
     "unassigned endpoint is a crossing edge; partition comparison: each pair of partitions is compared on the "
     "nodes both assign"
 )
+#: Which channels the partition-comparison matrices compare (``compute_community_metrics``).
+PARTITION_COMPARISON_NODE_RULE = (
+    "the channels with at least one tie in the graph the detections ran on; channels without one sit in a shared "
+    "residual community in every algorithmic partition, which would read as agreement"
+)
+#: Transitivity: the global clustering coefficient of the undirected projection (``_transitivity``).
+TRANSITIVITY_FORMULA = (
+    "Σ_v triangles(v) / Σ_v d_v(d_v − 1)/2 on the undirected projection without self-loops, over the triples "
+    "centred on observed channels (= 3 × triangles / connected triples when there are no dead leaves)"
+)
+#: Whole-network and per-community statistics that skip dead leaves (``_network_summary``, ``_subgraph_metrics``).
+DEAD_LEAF_STATS_RULE = (
+    "reciprocity on the subgraph of observed channels; average clustering and transitivity over observed channels; "
+    "out-degree CV over observed channels; degree assortativity over ties between observed channels — a dead leaf's "
+    "own citations are never read, so it would add one-way ties and zero out-degrees by construction"
+)
+#: Modularity significance (``_modularity_significance``): random graphs per test, the Leiden runs each null's
+#: best modularity is taken from, and the generator seed.
+MODULARITY_NULL_SAMPLES = 20
+MODULARITY_NULL_RUNS = 5
+MODULARITY_NULL_SEED = 42
+#: The strategies whose modularity is tested: those that maximise it, so the data's best modularity is compared
+#: with the random graphs' best. CPM, the SBM family, KCORE, CONSENSUS and the label groups optimise (or encode)
+#: something else; against the random graphs' *best* modularity they would always look insignificant.
+MODULARITY_SIGNIFICANCE_STRATEGIES: frozenset[str] = frozenset({"leiden", "leiden_directed", "louvain"})
 #: Behavioural equivalence: how missing feature values are imputed before normalisation
 #: (``_compute_behavioural_equivalence``).
 BEHAVIOURAL_IMPUTATION_RULE = "column median of the channels with a value (0 when no channel has one)"
+#: Behavioural equivalence: the similarity of two normalised feature profiles (``_compute_behavioural_equivalence``).
+BEHAVIOURAL_SIMILARITY_FORMULA = (
+    "Gower similarity: 1 − mean over features of |x_i − x_j|, each feature min-max normalised to [0, 1]"
+)
+#: Structural equivalence: how the pair's own ties enter its comparison (``_compute_structural_equivalence``).
+STRUCTURAL_EQUIVALENCE_PAIR_RULE = (
+    "cosine of the in + out tie profiles over third channels only: the entries for the tie between the two "
+    "channels being compared are left out of both profiles"
+)
 # Behavioural features that are heavy-tailed volume counts (not bounded rates): they
 # are log1p-scaled before normalisation so a few very large channels don't dominate.
 _VOLUME_BEHAVIOURAL_KEYS: frozenset[str] = frozenset({"fans", "messages_count"})
@@ -244,6 +288,82 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         "neutral value instead of an extreme 0.",
         source=f"{_SOURCE}: BEHAVIOURAL_IMPUTATION_RULE",
     ),
+    FixedParameter(
+        name="Behavioural equivalence similarity",
+        value=BEHAVIOURAL_SIMILARITY_FORMULA,
+        scope="community_stats",
+        affects="Two channels score 1 only when every behavioural feature matches; unlike a cosine it tells a "
+        "uniformly low profile from a uniformly high one.",
+        source=f"{_SOURCE}: BEHAVIOURAL_SIMILARITY_FORMULA",
+        note="Gower (1971).",
+    ),
+    FixedParameter(
+        name="Structural equivalence: the pair's own tie",
+        value=STRUCTURAL_EQUIVALENCE_PAIR_RULE,
+        scope="community_stats",
+        affects="Two channels that cite each other are compared on their ties to everyone else, so the mutual tie "
+        "neither lowers nor raises their equivalence.",
+        source=f"{_SOURCE}: STRUCTURAL_EQUIVALENCE_PAIR_RULE",
+        note="Burt (1976); Wasserman & Faust (1994) §9.4.",
+    ),
+    FixedParameter(
+        name="Transitivity",
+        value=TRANSITIVITY_FORMULA,
+        scope="community_stats",
+        affects="The whole-network transitivity (global clustering coefficient), comparable with the undirected "
+        "values reported in the literature.",
+        source=f"{_SOURCE}: TRANSITIVITY_FORMULA",
+        note="Newman (2003); Wasserman & Faust (1994).",
+    ),
+    FixedParameter(
+        name="Dead leaves in network statistics",
+        value=DEAD_LEAF_STATS_RULE,
+        scope="community_stats",
+        affects="With dead leaves drawn, the statistics that read a channel's own citations describe the observed "
+        "channels only; path lengths, efficiency, components and density keep every node.",
+        source=f"{_SOURCE}: DEAD_LEAF_STATS_RULE",
+    ),
+    FixedParameter(
+        name="Partition-comparison channels",
+        value=PARTITION_COMPARISON_NODE_RULE,
+        scope="community_stats",
+        affects="Which channels the ARI / AMI / NMI / VI matrices compare.",
+        source=f"{_SOURCE}: PARTITION_COMPARISON_NODE_RULE",
+    ),
+    FixedParameter(
+        name="Modularity significance: random graphs",
+        value=MODULARITY_NULL_SAMPLES,
+        scope="community_stats",
+        affects="The modularity of each tested strategy is compared with the best modularity Leiden reaches on this "
+        "many random graphs that keep every channel's in/out-degree (exactly) and strength (approximately); more "
+        "graphs = finer p-values (floor 1/(K+1)).",
+        source=f"{_SOURCE}: MODULARITY_NULL_SAMPLES",
+        note="Guimerà, Sales-Pardo & Amaral (2004): random graphs reach high modularity too; Reichardt & "
+        "Bornholdt (2006).",
+    ),
+    FixedParameter(
+        name="Modularity significance: strategies tested",
+        value=MODULARITY_SIGNIFICANCE_STRATEGIES,
+        scope="community_stats",
+        affects="Only these modularity-maximising strategies get a z-score and p-value: their best modularity is "
+        "compared like for like with the best modularity of the random graphs. The other strategies' modularity "
+        "stays descriptive.",
+        source=f"{_SOURCE}: MODULARITY_SIGNIFICANCE_STRATEGIES",
+    ),
+    FixedParameter(
+        name="Modularity significance: Leiden runs per random graph",
+        value=MODULARITY_NULL_RUNS,
+        scope="community_stats",
+        affects="Each random graph's modularity is the best of this many seeded Leiden runs.",
+        source=f"{_SOURCE}: MODULARITY_NULL_RUNS",
+    ),
+    FixedParameter(
+        name="Modularity significance: seed",
+        value=MODULARITY_NULL_SEED,
+        scope="community_stats",
+        affects="Seeds the rewiring of the random graphs, so the z-scores and p-values are reproducible.",
+        source=f"{_SOURCE}: MODULARITY_NULL_SEED",
+    ),
 )
 
 # Exceptions networkx routines may raise on graphs that are too small, empty,
@@ -272,11 +392,31 @@ def _swallow_metric(label: str, *extra_excs: type[BaseException]) -> Iterator[No
         logger.debug("%s unavailable: %s", label, exc)
 
 
+def _transitivity(graph: nx.DiGraph, centres: "list[str]") -> float:
+    """Global clustering coefficient of ``graph``'s undirected projection, over the triples centred on ``centres``.
+
+    ``Σ_v triangles(v) / Σ_v d_v(d_v − 1)/2`` for v in ``centres`` — with every node as a centre this is the
+    classic ``3 × triangles / connected triples`` (Newman 2003), the value the literature reports.
+    ``nx.transitivity`` cannot be used on the citation graph itself: on a DiGraph it reads successors only,
+    measuring how often two channels cited by the same channel cite each other (a directed 3-cycle scores 0).
+    ``graph`` must be free of self-loops.
+    """
+    undirected = nx.Graph(graph)
+    triangles = nx.triangles(undirected, nodes=centres)
+    triples = sum(d * (d - 1) / 2 for _, d in undirected.degree(centres))
+    return sum(triangles.values()) / triples if triples else 0.0
+
+
 def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None" = None) -> dict[str, Any]:
     """Compute structural metrics for the whole graph.
 
     ``selected_groups`` controls which metric groups are computed.
     ``None`` means all groups (backward-compatible default).
+
+    Self-loops (``--self-references``) are left out of the statistics that describe ties between channels
+    (reciprocity, clustering, transitivity, degree CV, assortativity). Dead leaves — whose own citations are
+    never read — are left out of those that read a channel's outgoing ties (``DEAD_LEAF_STATS_RULE``);
+    ``dead_leaves`` reports how many there are.
     """
 
     def _sel(key: str) -> bool:
@@ -285,6 +425,10 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     n = graph.number_of_nodes()
     e = graph.number_of_edges()
     density = nx.density(graph)
+    dead = dead_leaf_ids(graph)
+    loop_free = without_self_loops(graph)
+    observed = [node for node in graph if node not in dead]
+    observed_graph = loop_free.subgraph(observed) if dead else loop_free
 
     # ── PATHS — reciprocity, clustering, WCC/SCC path lengths ─────────────────
     reciprocity: float | None = None
@@ -302,9 +446,14 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
 
     if _sel("PATHS"):
         with _swallow_metric("reciprocity"):
-            reciprocity = nx.overall_reciprocity(graph) if e > 0 else 0.0
+            reciprocity = nx.overall_reciprocity(observed_graph) if observed_graph.number_of_edges() > 0 else 0.0
         with _swallow_metric("avg_clustering"):
-            avg_clustering = nx.average_clustering(graph, weight=CLUSTERING_WEIGHT, count_zeros=CLUSTERING_COUNT_ZEROS)
+            avg_clustering = nx.average_clustering(
+                graph,
+                nodes=observed if dead else None,
+                weight=CLUSTERING_WEIGHT,
+                count_zeros=CLUSTERING_COUNT_ZEROS,
+            )
 
     need_wcc = _sel("PATHS") or _sel("COMPONENTS")
     need_scc = _sel("PATHS") or _sel("COMPONENTS")
@@ -337,8 +486,8 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
 
     # ── COHESION — transitivity, global efficiency, algebraic connectivity ─────
     # Transitivity — fraction of closed triads (O(m))
-    # Global clustering coefficient (Watts & Strogatz 1998): closed triangles /
-    # connected triples.  Complements avg_clustering (per-node average).
+    # Global clustering coefficient (Newman 2003): 3 × triangles / connected triples of the
+    # undirected projection. Complements avg_clustering (per-node average).
     transitivity: float | None = None
     # Global Efficiency — mean reciprocal path length (O(n*(n+m)))
     # Latora & Marchiori (2001): E = (1/n(n-1)) * Σ_{i≠j} 1/d(i,j).
@@ -353,7 +502,7 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     out_degree_cv: float | None = None
     if _sel("COHESION"):
         with _swallow_metric("transitivity"):
-            transitivity = round(nx.transitivity(graph), 6)
+            transitivity = round(_transitivity(loop_free, observed), 6)
         if n >= 2:
             with _swallow_metric("global_efficiency"):
                 total_inv_dist = 0.0
@@ -379,10 +528,12 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
                         ),
                         6,
                     )
-            in_arr = np.array([d for _, d in graph.in_degree()], dtype=float)
-            out_arr = np.array([d for _, d in graph.out_degree()], dtype=float)
-            in_mean = float(in_arr.mean())
-            out_mean = float(out_arr.mean())
+            # In-degrees are observed for every node (a dead leaf's citers are monitored); out-degrees
+            # only for observed channels — a dead leaf's 0 is a boundary fact, not a degree.
+            in_arr = np.array([d for _, d in loop_free.in_degree()], dtype=float)
+            out_arr = np.array([d for _, d in loop_free.out_degree(observed)], dtype=float)
+            in_mean = float(in_arr.mean()) if in_arr.size else 0.0
+            out_mean = float(out_arr.mean()) if out_arr.size else 0.0
             if in_mean > 0:
                 in_degree_cv = round(float(in_arr.std(ddof=DEGREE_CV_DDOF) / in_mean), 4)
             if out_mean > 0:
@@ -395,14 +546,17 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
         "out_in": None,
         "out_out": None,
     }
-    if _sel("DEGCORRELATION") and e >= 2:
+    # Ties between observed channels, each endpoint at its loop-free degree in the whole graph (a dead
+    # leaf's out-degree is unobserved, so a tie to one cannot enter the out-degree correlations).
+    assort_edges = list(observed_graph.edges())
+    if _sel("DEGCORRELATION") and len(assort_edges) >= 2:
         try:
-            in_deg = dict(graph.in_degree())
-            out_deg = dict(graph.out_degree())
-            src_in = np.array([in_deg[u] for u, v in graph.edges()], dtype=float)
-            src_out = np.array([out_deg[u] for u, v in graph.edges()], dtype=float)
-            tgt_in = np.array([in_deg[v] for u, v in graph.edges()], dtype=float)
-            tgt_out = np.array([out_deg[v] for u, v in graph.edges()], dtype=float)
+            in_deg = dict(loop_free.in_degree())
+            out_deg = dict(loop_free.out_degree())
+            src_in = np.array([in_deg[u] for u, v in assort_edges], dtype=float)
+            src_out = np.array([out_deg[u] for u, v in assort_edges], dtype=float)
+            tgt_in = np.array([in_deg[v] for u, v in assort_edges], dtype=float)
+            tgt_out = np.array([out_deg[v] for u, v in assort_edges], dtype=float)
             for key, x, y in [
                 ("in_in", src_in, tgt_in),
                 ("in_out", src_in, tgt_out),
@@ -436,12 +590,16 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
         "in_degree_cv": in_degree_cv,
         "out_degree_cv": out_degree_cv,
         "assortativity": assortativity,
+        "dead_leaves": len(dead),
         "_selected_groups": selected_groups,
     }
 
 
 def _subgraph_metrics(
-    nodes_set: set[str], graph: nx.DiGraph, mod_graph: "nx.DiGraph | nx.Graph | None" = None
+    nodes_set: set[str],
+    graph: nx.DiGraph,
+    mod_graph: "nx.DiGraph | nx.Graph | None" = None,
+    dead_leaves: "frozenset[str]" = frozenset(),
 ) -> dict[str, Any]:
     """Compute structural metrics for a community defined by nodes_set.
 
@@ -450,6 +608,11 @@ def _subgraph_metrics(
     directed graph (the default when ``None``). All other metrics always describe
     the directed community, so the contribution stays consistent with the overall
     modularity reported for the same strategy.
+
+    ``dead_leaves`` (:func:`network.utils.dead_leaf_ids`) are left out of the reciprocity
+    and the average clustering, which read a channel's own citations — as in the
+    whole-network statistics (``DEAD_LEAF_STATS_RULE``); self-loops never count as
+    reciprocated ties.
     """
     subgraph = graph.subgraph(nodes_set)
     n = subgraph.number_of_nodes()
@@ -461,10 +624,17 @@ def _subgraph_metrics(
     avg_clustering: float | None = None
     avg_path_length = None
     diameter = None
+    observed_members = [nd for nd in nodes_set if nd not in dead_leaves]
     with _swallow_metric("reciprocity (subgraph)"):
-        reciprocity = nx.overall_reciprocity(subgraph) if internal_edges > 0 else 0.0
+        observed_sub = without_self_loops(nx.DiGraph(subgraph.subgraph(observed_members)))
+        reciprocity = nx.overall_reciprocity(observed_sub) if observed_sub.number_of_edges() > 0 else 0.0
     with _swallow_metric("avg_clustering (subgraph)"):
-        avg_clustering = nx.average_clustering(subgraph, weight=CLUSTERING_WEIGHT, count_zeros=CLUSTERING_COUNT_ZEROS)
+        avg_clustering = nx.average_clustering(
+            subgraph,
+            nodes=observed_members if len(observed_members) < n else None,
+            weight=CLUSTERING_WEIGHT,
+            count_zeros=CLUSTERING_COUNT_ZEROS,
+        )
     if n >= _PATH_LENGTH_MIN_NODES:
         with _swallow_metric("wcc/path_length/diameter (subgraph)"):
             wccs = list(nx.weakly_connected_components(subgraph))
@@ -649,7 +819,14 @@ def _compute_structural_equivalence(
     intensity. This is genuinely relational (it uses the ties themselves), unlike the
     earlier "centrality fingerprint" cosine it replaces, where two channels could score
     1.0 while sharing no neighbours. Built with sparse linear algebra
-    (``P = [A | Aᵀ]``, ``S = P̂ · P̂ᵀ``) so it stays cheap on large graphs.
+    (``P = [A | Aᵀ]``, ``S_ij = P_i·P_j / (‖P_i‖‖P_j‖)``) so it stays cheap on large graphs.
+
+    Two channels are compared on their ties to *third* channels only (Burt 1976;
+    Wasserman & Faust 1994 §9.4): the entries for the tie between ``i`` and ``j`` sit at
+    different positions in the two profiles (``i``'s profile holds it at ``j``, ``j``'s at
+    ``i``), so they never add to the dot product but would inflate both norms — two
+    channels that cite each other would look *less* equivalent for it. They are removed
+    from both norms: ``‖P_i‖² − A_ij² − A_ji²``.
 
     ``measures_labels`` is carried through only to populate the page's sort-by-measure
     control. Returns None for fewer than two nodes.
@@ -665,12 +842,21 @@ def _compute_structural_equivalence(
     adj = adj.tocsr()
     adj.eliminate_zeros()
 
-    # Profile = [out-ties | in-ties]; row-normalise to unit length for cosine.
+    # Profile = [out-ties | in-ties]. The dot product of two profiles already skips the pair's own tie
+    # (it meets a zero diagonal entry); the squared norms drop it here (see docstring). In-place array
+    # arithmetic keeps the dense n×n working set to three matrices.
     profile = sparse.hstack([adj, adj.transpose().tocsr()], format="csr")
-    norms = np.sqrt(np.asarray(profile.multiply(profile).sum(axis=1)).ravel())
-    norms[norms == 0.0] = 1.0
-    unit = sparse.diags(1.0 / norms) @ profile
-    sim = np.clip((unit @ unit.transpose()).toarray(), 0.0, 1.0)
+    sq_norms = np.asarray(profile.multiply(profile).sum(axis=1)).ravel()
+    dot = (profile @ profile.transpose()).toarray()
+    adj_sq = adj.multiply(adj)
+    pair_sq = (adj_sq + adj_sq.transpose()).toarray()
+    denom = np.clip(sq_norms[:, None] - pair_sq, 0.0, None)
+    np.subtract(sq_norms[None, :], pair_sq, out=pair_sq)
+    np.clip(pair_sq, 0.0, None, out=pair_sq)
+    np.multiply(denom, pair_sq, out=denom)
+    np.sqrt(denom, out=denom)
+    sim = np.divide(dot, denom, out=np.zeros_like(dot), where=denom > 0.0)
+    np.clip(sim, 0.0, 1.0, out=sim)
     np.fill_diagonal(sim, 1.0)
 
     return {
@@ -679,7 +865,8 @@ def _compute_structural_equivalence(
         "measures": measures_labels,
         "note": (
             "Structural equivalence (Lorrain & White 1971): cosine similarity of each channel's "
-            "weighted in + out tie profile. 1.0 = identical neighbours with identical tie strengths; "
+            "weighted in + out tie profile, over third channels (the tie between the two channels "
+            "compared is left out). 1.0 = identical neighbours with identical tie strengths; "
             "0 = no shared neighbours. Lower triangle; diagonal = 1 (self)."
         ),
         "cells_lower": _lower_triangle(sim, n),
@@ -690,7 +877,7 @@ def _compute_behavioural_equivalence(
     graph_data: GraphData,
     measures_labels: "list[tuple[str, str]]",
 ) -> "dict | None":
-    """Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles.
+    """Behavioural equivalence: Gower similarity of channels' behavioural-measure profiles.
 
     Features are the behavioural measures present in ``measures_labels`` (amplification,
     content originality, diffusion lag, plus audience/activity volume — followers and
@@ -700,8 +887,11 @@ def _compute_behavioural_equivalence(
     originality, instant diffusion). The
     heavy-tailed volume features (followers, message count; see
     ``_VOLUME_BEHAVIOURAL_KEYS``) are then log1p-scaled so a few very large channels don't
-    compress everyone else; columns are min-max normalised, rows normalised to unit length,
-    similarity = U·Uᵀ in [0, 1].
+    compress everyone else; columns are min-max normalised to [0, 1] and the similarity of
+    two channels is Gower's (1971): ``1 − mean_k |x_ik − x_jk|``, in [0, 1]. Unlike the
+    cosine it replaces — which compares only the *direction* of the profiles, so a channel
+    low on every feature scored 1.0 against one high on every feature, and an all-zero
+    profile 0 against everyone — it reads 1 only when the features themselves match.
 
     Returns None for fewer than two nodes or when no behavioural measure was computed.
     """
@@ -751,10 +941,12 @@ def _compute_behavioural_equivalence(
     safe_ranges = np.where(col_max - col_min > 0, col_max - col_min, 1.0)
     normed = (raw - col_min) / safe_ranges
 
-    norms = np.linalg.norm(normed, axis=1, keepdims=True)
-    safe_norms = np.where(norms > 0, norms, 1.0)
-    unit_vecs = normed / safe_norms
-    sim = np.clip(unit_vecs @ unit_vecs.T, 0.0, 1.0)
+    # Gower similarity: 1 − the mean, over features, of the absolute difference of [0, 1] values.
+    distance = np.zeros((n, n), dtype=float)
+    for j in range(m):
+        column = normed[:, j]
+        distance += np.abs(column[:, None] - column[None, :])
+    sim = np.clip(1.0 - distance / m, 0.0, 1.0)
     np.fill_diagonal(sim, 1.0)
 
     return {
@@ -762,9 +954,9 @@ def _compute_behavioural_equivalence(
         "node_labels": [node.get("label") or node["id"] for node in nodes],
         "measures": behavioural,
         "note": (
-            "Behavioural equivalence: cosine similarity of channels' behavioural-measure profiles "
-            "(volume features log-scaled, then min-max normalised per measure; missing values "
-            "imputed to the median). 1.0 = same "
+            "Behavioural equivalence: Gower similarity of channels' behavioural-measure profiles — 1 minus "
+            "the mean absolute difference of the features (volume features log-scaled, then min-max "
+            "normalised per measure; missing values imputed to the median). 1.0 = same "
             "behavioural fingerprint, regardless of network position. Lower triangle; diagonal = 1 (self)."
         ),
         "cells_lower": _lower_triangle(sim, n),
@@ -847,6 +1039,57 @@ def _modularity_partition(mod_graph: "nx.DiGraph | nx.Graph", label_to_nodes: di
     return communities
 
 
+def _null_modularities(graph: nx.DiGraph, *, directed: bool) -> list[float]:
+    """Best modularity Leiden reaches on ``MODULARITY_NULL_SAMPLES`` random versions of ``graph``.
+
+    Each random graph keeps every channel's in/out-degree exactly and its in/out-strength approximately
+    (``rewire_strength_preserving``: Maslov–Sneppen swaps, then strength fitting; self-loops held in place) but
+    no community structure; its modularity is the best of ``MODULARITY_NULL_RUNS`` seeded Leiden runs, directed or
+    on the undirected projection. Empty when the graph is too small to rewire (fewer than 3 nodes or 2 edges).
+    """
+    if graph.number_of_nodes() < 3 or graph.number_of_edges() < 2:
+        return []
+    base = nx.DiGraph()
+    base.add_nodes_from(graph.nodes())
+    base.add_weighted_edges_from((u, v, float(data.get("weight", 1.0))) for u, v, data in graph.edges(data=True))
+    rng = np.random.default_rng(MODULARITY_NULL_SEED)
+    return [
+        best_modularity(
+            rewire_strength_preserving(base, weight="weight", rng=rng), directed=directed, runs=MODULARITY_NULL_RUNS
+        )
+        for _ in range(MODULARITY_NULL_SAMPLES)
+    ]
+
+
+def _modularity_significance(
+    modularity: float, graph: nx.DiGraph, *, directed: bool, cache: "dict[tuple[int, bool], list[float]]"
+) -> dict[str, float | None]:
+    """How far a partition's modularity exceeds what random graphs with the same degrees can be made to reach.
+
+    Sparse, tree-like graphs score high modularity even without community structure — random graphs with
+    the degrees of a real network routinely reach 0.3–0.8 (Guimerà, Sales-Pardo & Amaral 2004) — so a raw Q
+    says little on its own. The partition's Q is set against the null distribution of the *best* modularity
+    on degree- and strength-preserving random versions of ``graph`` (:func:`_null_modularities`, computed
+    once per graph and objective and cached): ``modularity_z`` = (Q − mean) / sd, ``modularity_p`` the
+    one-sided add-one Monte-Carlo p-value (#null ≥ Q + 1) / (K + 1), ``modularity_null_mean`` the mean. Run only
+    for the modularity-maximising strategies (``MODULARITY_SIGNIFICANCE_STRATEGIES``), where the data's best
+    modularity is compared like for like with the random graphs' best.
+    """
+    key = (id(graph), directed)
+    if key not in cache:
+        cache[key] = _null_modularities(graph, directed=directed)
+    null = cache[key]
+    if not null:
+        return {"modularity_z": None, "modularity_p": None, "modularity_null_mean": None}
+    z, mean, _sd = z_score(modularity, null)
+    p_value = (1 + sum(1 for q in null if q >= modularity)) / (len(null) + 1)
+    return {
+        "modularity_z": round(z, 2) if np.isfinite(z) else None,
+        "modularity_p": round(p_value, 4),
+        "modularity_null_mean": round(mean, 4),
+    }
+
+
 def _compute_strategy_entry(
     strategy_key: str,
     strategy_data: dict[str, Any],
@@ -856,6 +1099,7 @@ def _compute_strategy_entry(
     pk_to_org: dict[str, str],
     label_group_labels: "dict[str, str] | None" = None,
     detection_graph: "nx.DiGraph | None" = None,
+    null_cache: "dict[tuple[int, bool], list[float]] | None" = None,
 ) -> dict[str, Any]:
     """Compute metrics for a single community-detection strategy.
 
@@ -865,6 +1109,9 @@ def _compute_strategy_entry(
     describes the objective the algorithms optimised; every other metric keeps describing the
     full graph. Manual label-group partitions are not detections, so their modularity stays on
     the full graph.
+
+    The modularity is also tested against random graphs with the same degrees and strengths
+    (:func:`_modularity_significance`; ``null_cache`` shares the random graphs across strategies).
     """
     label_to_nodes: dict[str, set[str]] = defaultdict(set)
     for node in graph_data["nodes"]:
@@ -879,18 +1126,16 @@ def _compute_strategy_entry(
     # contributions so they stay consistent with the overall value.
     is_labelgroup = strategy_key in (label_group_labels or {})
     det_graph = graph if (detection_graph is None or is_labelgroup) else detection_graph
-    mod_graph: "nx.DiGraph | nx.Graph" = (
-        to_undirected_sum(det_graph)
-        if canonical_strategy_key(strategy_key) in UNDIRECTED_BASIS_STRATEGIES
-        else det_graph
-    )
+    undirected_basis = canonical_strategy_key(strategy_key) in UNDIRECTED_BASIS_STRATEGIES
+    mod_graph: "nx.DiGraph | nx.Graph" = to_undirected_sum(det_graph) if undirected_basis else det_graph
+    dead_leaves = dead_leaf_ids(graph)
 
     rows = []
     for group in strategy_data["groups"]:
         _community_id, _count, label, _hex_color = group
         nodes_set = label_to_nodes.get(str(label), set())
         metrics = (
-            _subgraph_metrics(nodes_set, graph, mod_graph)
+            _subgraph_metrics(nodes_set, graph, mod_graph, dead_leaves)
             if nodes_set
             else {
                 "internal_edges": 0,
@@ -962,6 +1207,16 @@ def _compute_strategy_entry(
         "mean_ei_index": mean_ei_index,
         "rows": rows,
     }
+    if modularity is not None and canonical_strategy_key(strategy_key) in MODULARITY_SIGNIFICANCE_STRATEGIES:
+        with _swallow_metric(f"modularity significance (strategy {strategy_key})", ValueError):
+            entry.update(
+                _modularity_significance(
+                    modularity,
+                    det_graph,
+                    directed=not undirected_basis,
+                    cache=null_cache if null_cache is not None else {},
+                )
+            )
     # Distribution cross-tabs shown under the strategy table: Organisation first, then one per
     # label-group partition (Area, Nation, …) so the analyst sees how this strategy's communities
     # overlap each grouping. Skipped for the label-group partitions themselves — cross-tabbing a
@@ -1063,6 +1318,8 @@ def compute_community_metrics(
     label_group_labels = {k: v for k, v in labelgroup_display_labels().items() if k in strategy_set}
     if status_callback:
         status_callback("network")
+    # Random graphs behind the modularity significance, shared by every strategy reported on the same graph.
+    null_cache: dict[tuple[int, bool], list[float]] = {}
     for strategy_key in strategies:
         strategy_data = communities_data.get(strategy_key)
         if not strategy_data:
@@ -1070,7 +1327,15 @@ def compute_community_metrics(
                 status_callback(strategy_key)
             continue
         result["strategies"][strategy_key] = _compute_strategy_entry(
-            strategy_key, strategy_data, graph_data, graph, id_to_node, pk_to_org, label_group_labels, detection_graph
+            strategy_key,
+            strategy_data,
+            graph_data,
+            graph,
+            id_to_node,
+            pk_to_org,
+            label_group_labels,
+            detection_graph,
+            null_cache=null_cache,
         )
         if status_callback:
             status_callback(strategy_key)
@@ -1080,13 +1345,20 @@ def compute_community_metrics(
     # four indices in PARTITION_COMPARISON_METRICS (ARI, AMI, NMI, VI). Each pair is computed on the
     # nodes assigned by *both* partitions (their intersection); this matters for partitions that leave
     # some nodes unassigned — e.g. a label group only a subset of channels carry — whose unassigned
-    # nodes are silently skipped for that pair but not for others. KCORE is a shell decomposition, not
+    # nodes are silently skipped for that pair but not for others. Channels without a tie in the graph
+    # the detections ran on are left out for every pair (PARTITION_COMPARISON_NODE_RULE): each algorithm
+    # parks them in one shared residual community, which would read as agreement. KCORE is a shell decomposition, not
     # a community detection, so partition-similarity against it is uninformative — dropped, matching
     # the consensus matrix. Label-group partitions are deliberately *kept*: validating detected
     # communities against the analyst's manual labels is exactly what these matrices are for.
     comparison_strategies = [s for s in strategies if s not in _COMPARISON_EXCLUDED_STRATEGIES]
     if len(comparison_strategies) >= 2:
-        node_comms: dict[str, dict[str, Any]] = {n["id"]: (n.get("communities") or {}) for n in graph_data["nodes"]}
+        reference_graph = detection_graph if detection_graph is not None else graph
+        node_comms: dict[str, dict[str, Any]] = {
+            n["id"]: (n.get("communities") or {})
+            for n in graph_data["nodes"]
+            if n["id"] in reference_graph and reference_graph.degree(n["id"]) > 0
+        }
         k = len(comparison_strategies)
         # Self-comparison is the identity: 1 for the similarity indices, 0 for the VI distance.
         matrices: dict[str, list[list[float | None]]] = {}
@@ -1152,6 +1424,10 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
         rows.append(("Nodes", summary["n"], "Size"))
         for type_name, count in summary.get("channel_type_counts", {}).items():
             rows.append((_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size"))
+        if summary.get("dead_leaves"):
+            # Their own citations are never read: reciprocity, clustering, transitivity, out-degree CV and
+            # assortativity describe the other channels (DEAD_LEAF_STATS_RULE).
+            rows.append(("Dead leaves (own citations not observed)", summary["dead_leaves"], "Size"))
         rows += [
             ("Edges", summary["e"], "Size"),
             ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),

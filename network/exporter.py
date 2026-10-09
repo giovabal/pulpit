@@ -710,6 +710,7 @@ def write_summary_json(
     edges: int,
     near_copies: int | None = None,
     community_resolutions: dict[str, Any] | None = None,
+    community_fits: dict[str, Any] | None = None,
 ) -> None:
     """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
 
@@ -719,6 +720,11 @@ def write_summary_json(
     γ, or the network density when the token omits it), ``{"<year>": γ}`` for a LEIDEN_TEMPORAL
     instance (one per year slice). Written as ``{}`` when no such strategy ran; the per-year
     LEIDEN_CPM values travel in each ``data/timeline.json`` entry instead.
+    ``community_fits`` — per partition key, the fit summary of each stochastic community strategy
+    (``community.detect``'s ``diagnostics_out``): ``objective``, ``runs`` (seeded fits), ``best`` /
+    ``worst`` objective value, ``stability`` (mean Adjusted Rand Index of the other fits to the reported
+    partition) and ``identical_share``; LEIDEN_TEMPORAL's adds the absolute ``interslice_weight``. The
+    per-year summaries travel in each ``data/timeline.json`` entry.
     """
     _OPTION_KEYS = (
         "graph",
@@ -800,6 +806,7 @@ def write_summary_json(
         "edges": edges,
         "near_copies": near_copies,
         "community_resolutions": community_resolutions or {},
+        "community_fits": community_fits or {},
         "options": opts,
     }
     os.makedirs(graph_dir, exist_ok=True)

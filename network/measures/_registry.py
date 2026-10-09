@@ -124,10 +124,13 @@ def _basis_param(default: str) -> MeasureParam:
         "basis",
         "str",
         default,
-        choices=tuple(ALL_STRATEGIES),  # UI hint only (str is not enum-validated); LABELGROUP<id> also valid
+        # UI hint only (str is not enum-validated); LABELGROUP<id> also valid. KCORE is no module basis: its
+        # k-shells are nested connectivity layers (the command rejects it).
+        choices=tuple(s for s in ALL_STRATEGIES if s != "KCORE"),
         label="Community basis",
         help="Community partition the measure is read against (a strategy name or LABELGROUP<id>); "
-        "must also be in --community-strategies.",
+        "must also be in --community-strategies. Auto picks the first cohesive partition (LEIDEN_DIRECTED, "
+        "LEIDEN, LOUVAIN, SBM_ASSORTATIVE, CONSENSUS, LEIDEN_CPM, LEIDEN_TEMPORAL), then a label group.",
     )
 
 
@@ -152,7 +155,7 @@ PARAMETERISED_MEASURES: dict[str, MeasureSpec] = {
         "MODULEROLE",
         "Module Role",
         params=(_basis_param(""),),
-        primary_keys=("within_module_z", "participation"),
+        primary_keys=("within_module_z", "participation", "participation_weighted"),
         aux_keys=("module_role",),
     ),
 }
