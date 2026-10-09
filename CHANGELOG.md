@@ -1,6 +1,6 @@
 # Changelog
-## [0.28] - To be announced
-*Exploring environment by snowball strategy.*
+## [0.28] - 2026-10-09
+*Exploring environment by snowball strategy. Dominance analysis. Message tags.*
 
 ### New features
 - **The crawler can now fetch the environment of your corpus — the channels it cites — without putting them in target.** A new **Environment** fieldset on Crawl Channels (CLI: `--environment`, `--environment-depth N`, `--environment-download-*`) extends the crawl to the out-of-scope channels your monitored channels forward from or link via `t.me/`, up to *N* citation hops away: full channel details plus every message dated inside your channels' in-target window, with message holes filled when that option is on, and its own media-type toggles independent of the main ones. Reached channels are tagged with their distance (a badge on the channel page, an `env N` tag and status filter in Manage → Channels), their messages survive `purge_out_of_target_messages`, and they stay out of the network map — the analysis is unchanged, you just get to read what your corpus amplifies. See [Workflow § Environment](docs/workflow.md#step-4--collect-messages).
