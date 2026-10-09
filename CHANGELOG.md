@@ -1,4 +1,6 @@
 # Changelog
+## [1.0] - To be announced
+
 ## [0.28] - 2026-10-09
 *Exploring environment by snowball strategy. Dominance analysis. Message tags.*
 
