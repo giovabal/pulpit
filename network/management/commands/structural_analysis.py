@@ -181,6 +181,24 @@ def _rebind_measure_keys(
     return [(k + suffix, f"{lbl}{annotation}") for k, lbl in returned_labels]
 
 
+#: MODULEROLE's automatic basis: the first selected partition of these cohesive (assortative) families, in this
+#: order, then a label-group partition. Guimerà & Amaral's roles read a channel against *modules* — groups denser
+#: inside than out — so KCORE (nested k-shells) and SBM (role classes, possibly disassortative) are never picked.
+_MODULE_ROLE_AUTO_BASES: tuple[str, ...] = (
+    "leiden_directed",
+    "leiden",
+    "louvain",
+    "sbm_assortative",
+    "consensus",
+    "leiden_cpm",
+    "leiden_temporal",
+)
+#: Partitions a module role cannot be read against at all: k-shells are connectivity layers, not modules.
+_MODULE_ROLE_INVALID_BASES: frozenset[str] = frozenset({"kcore"})
+#: Partitions that need not be cohesive: an explicit basis is honoured, with a warning.
+_MODULE_ROLE_NON_COHESIVE_BASES: frozenset[str] = frozenset({"sbm"})
+
+
 def _resolve_community_basis(
     instance: "measures.MeasureInstance",
     available_bases: "list[str]",
@@ -190,8 +208,9 @@ def _resolve_community_basis(
     ``available_bases`` is the ordered list of partition keys present on the graph (selection order).
     An explicit ``basis`` is matched first as an exact instance key, then as a strategy *family* —
     resolving to the first selected instance of that family (e.g. ``basis=LEIDEN_CPM`` →
-    ``leiden_cpm_resolution_0_01`` when that is the first CPM instance). An empty/auto basis falls
-    through to LEIDEN_DIRECTED, then any available partition. Returns None when none is available.
+    ``leiden_cpm_resolution_0_01`` when that is the first CPM instance). An empty/auto basis takes the
+    first available cohesive family in ``_MODULE_ROLE_AUTO_BASES`` order, then a label-group partition —
+    never KCORE or SBM. Returns None when no usable partition is available (KCORE is never one).
     """
 
     def _family_match(family: str) -> str | None:
@@ -201,11 +220,15 @@ def _resolve_community_basis(
 
     explicit = (instance.params_dict.get("basis") or "").lower()
     if explicit:
-        return _family_match(explicit)
-    match = _family_match("leiden_directed")
-    if match:
+        match = _family_match(explicit)
+        if match is not None and community.canonical_strategy_key(match) in _MODULE_ROLE_INVALID_BASES:
+            return None
         return match
-    return available_bases[0] if available_bases else None
+    for family in _MODULE_ROLE_AUTO_BASES:
+        match = _family_match(family)
+        if match:
+            return match
+    return next((b for b in available_bases if community.is_metadata_strategy(b)), None)
 
 
 def _date_window_filter(start_date: datetime.date | None, end_date: datetime.date | None) -> dict[str, Any]:
@@ -1372,6 +1395,12 @@ class Command(BaseCommand):
         for inst in measure_instances:
             if inst.measure == "MODULEROLE":
                 basis = inst.params_dict.get("basis") or ""
+                if basis.lower() in _MODULE_ROLE_INVALID_BASES:
+                    raise CommandError(
+                        f"{inst.token()}: a module role cannot be read against KCORE — its k-shells are nested "
+                        "connectivity layers, not communities. Pick a community partition (LEIDEN_DIRECTED, "
+                        "LEIDEN, SBM_ASSORTATIVE, …) or clear the basis to auto-resolve."
+                    )
                 if basis and basis not in strategy_names:
                     raise CommandError(
                         f"{inst.token()} community basis {basis!r} is not in --community-strategies. "
@@ -1425,6 +1454,7 @@ class Command(BaseCommand):
         temporal_results: "dict[str, tuple] | None" = None,
         year: "int | None" = None,
         resolutions_out: "dict[str, Any] | None" = None,
+        fits_out: "dict[str, Any] | None" = None,
     ) -> tuple[dict[str, tuple], "nx.DiGraph | None"]:
         """Run all community detection strategies and apply results to the graph.
 
@@ -1446,6 +1476,11 @@ class Command(BaseCommand):
         density of the graph it ran on — the backbone when one is set), and for LEIDEN_TEMPORAL
         ``{"<year>": γ}`` over every slice on the full-range pass or the year's slice γ on a
         per-year pass. The caller writes it to ``summary.json`` / the ``timeline.json`` entry.
+
+        ``fits_out``, when given, receives each stochastic partition's fit summary, keyed by partition key
+        (:func:`community.detect`'s ``diagnostics_out``: seeded fits run, best / worst objective, and the
+        fits' mean agreement with the reported partition). LEIDEN_TEMPORAL's comes from the precompute and
+        also carries the absolute identity-link weight its relative ω resolved to.
         """
         strategy_results: dict[str, tuple] = {}
         detection_graph: "nx.DiGraph | None" = None
@@ -1476,9 +1511,19 @@ class Command(BaseCommand):
         direct = [inst for inst in communities_strategy if inst.name not in _special]
         temporal_instances = [inst for inst in communities_strategy if inst.name == "LEIDEN_TEMPORAL"]
         consensus_instances = [inst for inst in communities_strategy if inst.name == "CONSENSUS"]
+
+        def _fit_note(fit: dict[str, Any]) -> str:
+            """``best of N, stability s`` for a stochastic detector's progress line."""
+            if not fit.get("runs"):
+                return ""
+            stability = fit.get("stability")
+            agreement = f", stability {stability:.2f}" if stability is not None else ""
+            return f"; best of {fit['runs']} fits{agreement}"
+
         for instance in direct:
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
+            fit: dict[str, Any] = {}
             try:
                 # The parameterised strategy (LEIDEN_CPM γ) reads its tunable value
                 # from the instance; the global flags only seed bare-token defaults at parse time.
@@ -1488,9 +1533,12 @@ class Command(BaseCommand):
                     detect_on,
                     channel_dict,
                     reverse=options["community_palette_reversed"],
+                    diagnostics_out=fit,
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
+            if fit and fits_out is not None:
+                fits_out[instance.key] = fit
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
@@ -1499,9 +1547,11 @@ class Command(BaseCommand):
                 # Same γ detect() used: explicit, else the density of the graph it ran on.
                 gamma = community.cpm_resolution(instance, detect_on)
                 auto = community.instance_resolution(instance) is None
-                note = f" (γ={gamma:.4g}{', network density' if auto else ''})"
+                note = f" (γ={gamma:.4g}{', network density' if auto else ''}{_fit_note(fit)})"
                 if resolutions_out is not None:
                     resolutions_out[instance.key] = gamma
+            elif fit:
+                note = f" ({_fit_note(fit)[2:]})"
             self.stdout.write(f"{n_communities} communities{note}")
             self.stdout.flush()
         for instance in temporal_instances:
@@ -1513,7 +1563,9 @@ class Command(BaseCommand):
                 # so a missing entry means the precompute was skipped upstream.
                 self.stdout.write(self.style.WARNING("skipped (no temporal precompute available)"))
                 continue
-            per_year_maps, plurality_map, community_palette, slice_resolutions = entry
+            per_year_maps, plurality_map, community_palette, slice_resolutions, temporal_fit = entry
+            if temporal_fit and fits_out is not None:
+                fits_out[instance.key] = temporal_fit
             if year is None:
                 community_map = plurality_map
                 note = f" (plurality across {len(per_year_maps)} slices)"
@@ -1542,6 +1594,7 @@ class Command(BaseCommand):
             }
             self.stdout.write(f"- {instance.label} … ", ending="")
             self.stdout.flush()
+            fit = {}
             try:
                 community_map, community_palette = community.detect_consensus(
                     detect_on,
@@ -1549,9 +1602,12 @@ class Command(BaseCommand):
                     input_maps,
                     float(instance.params_dict.get("threshold", community.CONSENSUS_DEFAULT_THRESHOLD)),
                     reverse=options["community_palette_reversed"],
+                    diagnostics_out=fit,
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
+            if fit and fits_out is not None:
+                fits_out[instance.key] = fit
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
@@ -1728,14 +1784,26 @@ class Command(BaseCommand):
                 basis = _resolve_community_basis(inst, available_bases)
                 if basis is None:
                     self.stdout.write(
-                        self.style.WARNING(f"- {_MEASURE_PROGRESS[m]} … skipped (no community partition)")
+                        self.style.WARNING(
+                            f"- {_MEASURE_PROGRESS[m]} … skipped (no cohesive community partition — KCORE and "
+                            "SBM are not module bases)"
+                        )
                     )
-                    notes[inst.token()] = "skipped — no community partition"
+                    notes[inst.token()] = "skipped — no cohesive community partition"
                     continue
                 resolved = inst.resolved_with(basis=basis.upper())
                 basis_label = next((si.label for si in strategy_instances or [] if si.key == basis), basis)
                 auto = "" if inst.params_dict.get("basis") else ", auto-resolved"
                 notes[inst.token()] = f"Community basis = {basis_label} (`{basis}`{auto})"
+                if community.canonical_strategy_key(basis) in _MODULE_ROLE_NON_COHESIVE_BASES:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"- {_MEASURE_PROGRESS[m]}: basis {basis_label} is a set of citation-role classes, not "
+                            "cohesive modules — within-module hubs and connectors are only meaningful for blocks "
+                            "denser inside than out"
+                        )
+                    )
+                    notes[inst.token()] += " — SBM blocks are role classes, not cohesive modules: read with care"
                 # A bare MODULEROLE auto-resolves to the same basis an explicit
                 # instance may already name; the two would emit identical suffixed
                 # columns twice. Parse-time dedup can't see this (it runs before
@@ -1822,11 +1890,13 @@ class Command(BaseCommand):
         use (so slices and year exports always agree), applies the ``--community-backbone-alpha``
         filter when set (matching what per-year detection would see), and runs
         :func:`community.detect_leiden_temporal` per instance. Returns
-        ``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions)}`` for
+        ``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions, fit)}`` for
         ``_compute_communities`` to apply by lookup — ``slice_resolutions`` being ``{year: γ}``, the
         CPM resolution each slice ran with (the explicit γ, or that slice's own network density when
-        the token omits it). Raises ``CommandError`` when fewer than two years yield a non-empty
-        graph — the coupling needs at least two slices.
+        the token omits it), and ``fit`` the multislice fit summary (best of the seeded runs, their
+        agreement, and the absolute identity-link weight ``interslice_weight`` the relative ω resolved
+        to). Raises ``CommandError`` when fewer than two years yield a non-empty graph — the coupling
+        needs at least two slices.
         """
         year_range = _timeline_year_range(opts.start_date, opts.end_date)
         years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
@@ -1868,6 +1938,7 @@ class Command(BaseCommand):
             self.stdout.flush()
             params = instance.params_dict
             resolution = community.instance_resolution(instance)
+            fit: dict[str, Any] = {}
             try:
                 per_year, plurality, palette = community.detect_leiden_temporal(
                     year_graphs,
@@ -1875,18 +1946,23 @@ class Command(BaseCommand):
                     resolution,
                     float(params.get("interslice", community.TEMPORAL_DEFAULT_INTERSLICE)),
                     reverse=opts.community_palette_reversed,
+                    diagnostics_out=fit,
                 )
             except ValueError as e:
                 raise CommandError(str(e)) from e
             # The γ each slice ran with — the same helper detect_leiden_temporal resolves them with.
             slice_resolutions = community.temporal_slice_resolutions(year_graphs, resolution)
-            temporal_results[instance.key] = (per_year, plurality, palette, slice_resolutions)
+            temporal_results[instance.key] = (per_year, plurality, palette, slice_resolutions, fit)
             n_communities = len({cid for cmap in per_year.values() for cid in cmap.values()})
             if resolution is None:
                 gammas = ", ".join(f"{y} {g:.4g}" for y, g in sorted(slice_resolutions.items()))
                 note = f"γ = each slice's network density: {gammas}"
             else:
                 note = f"γ={resolution:.4g}"
+            if "interslice_weight" in fit:
+                note += f"; identity-link weight {fit['interslice_weight']:.4g}"
+            if fit.get("stability") is not None:
+                note += f"; best of {fit['runs']} fits, stability {fit['stability']:.2f}"
             self.stdout.write(f"{n_communities} communities across {len(per_year)} slices ({note})")
             self.stdout.flush()
         return temporal_results
@@ -2040,6 +2116,8 @@ class Command(BaseCommand):
         # γ each CPM-family partition of this year ran with — a bare LEIDEN_CPM resolves it from this
         # year's graph — returned in the timeline.json entry next to the year's node/edge counts.
         year_resolutions: dict[str, Any] = {}
+        # Fit summary (best of N seeded fits, their agreement) of each stochastic partition of this year.
+        year_fits: dict[str, Any] = {}
         strategy_results, detection_graph = self._compute_communities(
             graph,
             channel_dict,
@@ -2049,6 +2127,7 @@ class Command(BaseCommand):
             temporal_results=temporal_results,
             year=year,
             resolutions_out=year_resolutions,
+            fits_out=year_fits,
         )
         positions, positions_3d = self._compute_layout(
             graph,
@@ -2258,6 +2337,8 @@ class Command(BaseCommand):
             "coordination_ties": coordination_ties,
             # {partition key: γ} for the CPM-family strategies (LEIDEN_CPM, LEIDEN_TEMPORAL) of this year.
             **({"community_resolutions": year_resolutions} if year_resolutions else {}),
+            # {partition key: fit summary} for the stochastic strategies of this year (see community.detect).
+            **({"community_fits": year_fits} if year_fits else {}),
             # Returned to the caller so it can assemble multi-sheet XLSX workbooks.
             "_xlsx_graph_data": graph_data if do_xlsx else None,
             "_xlsx_community_data": community_table_data if do_xlsx else None,
@@ -2655,6 +2736,9 @@ class Command(BaseCommand):
         # γ each CPM-family partition ran with (bare LEIDEN_CPM / LEIDEN_TEMPORAL resolve it from the
         # graph's density), written to summary.json so the run records the resolution actually used.
         community_resolutions: dict[str, Any] = {}
+        # Fit summary of each stochastic partition (best of N seeded fits and how far they agree), written to
+        # summary.json and PARAMETERS.md so the export records how reproducible every partition is.
+        community_fits: dict[str, Any] = {}
         strategy_results, detection_graph = self._compute_communities(
             graph,
             channel_dict,
@@ -2663,10 +2747,14 @@ class Command(BaseCommand):
             options,
             temporal_results=temporal_results,
             resolutions_out=community_resolutions,
+            fits_out=community_fits,
         )
         # Values resolved along the way, recorded in PARAMETERS.md next to the options behind them.
         run_facts = parameters.RunFacts(
-            nodes=len(graph.nodes), edges=len(graph.edges), community_resolutions=community_resolutions
+            nodes=len(graph.nodes),
+            edges=len(graph.edges),
+            community_resolutions=community_resolutions,
+            community_fits=community_fits,
         )
         positions, positions_3d = self._compute_layout(
             graph, opts.do_graph, opts.do_3dgraph, opts.fa2_iterations, opts.target_layout
@@ -3337,6 +3425,7 @@ class Command(BaseCommand):
             len(graph.edges),
             near_copies=near_copy_count,
             community_resolutions=community_resolutions,
+            community_fits=community_fits,
         )
 
         _atomic_publish(root_target, _final_target)

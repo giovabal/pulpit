@@ -484,7 +484,9 @@ class RunFacts:
     """Values the command resolves while it runs, recorded next to the options that led to them.
 
     ``community_resolutions`` is the full-range ``{partition key: γ}`` (a ``{"<year>": γ}`` dict for a
-    LEIDEN_TEMPORAL instance) and ``year_resolutions`` the same per timeline year; ``measure_notes``
+    LEIDEN_TEMPORAL instance) and ``year_resolutions`` the same per timeline year; ``community_fits`` the
+    full-range ``{partition key: fit summary}`` of the stochastic strategies (best of N seeded fits, their
+    agreement with the reported partition — ``community.detect``'s ``diagnostics_out``); ``measure_notes``
     maps a measure token to what became of it (``MODULEROLE``'s resolved basis, a skipped instance).
     The ``fa2_iterations`` values are the resolved run lengths, ``coordination_ties`` the number of
     full-range coordination ties (``None`` = not computed), ``interest_*`` the automatically chosen
@@ -494,6 +496,7 @@ class RunFacts:
     nodes: int | None = None
     edges: int | None = None
     community_resolutions: dict[str, Any] = field(default_factory=dict)
+    community_fits: dict[str, Any] = field(default_factory=dict)
     year_resolutions: dict[int, dict[str, Any]] = field(default_factory=dict)
     measure_notes: dict[str, str] = field(default_factory=dict)
     fa2_iterations: int | None = None
@@ -545,7 +548,7 @@ _STRATEGY_DESCRIPTIONS: dict[str, str] = {
 _AUTO_PARAMETER_VALUES: dict[str, str] = {
     "resolution": "auto (network density)",
     "weights": "none (binary fit)",
-    "refine": "none (single fit)",
+    "refine": "none (point estimate)",
     "basis": "auto",
 }
 
@@ -606,9 +609,25 @@ def _strategy_value(inst: Any, opts: Any, facts: RunFacts) -> str:
         else:
             parts.append("Resolution γ = each year's own weighted edge density (see the table below)")
     parts.extend(_token_parameters(inst, skip=("resolution",)))
+    fit = facts.community_fits.get(inst.key) or {}
+    if inst.name == "LEIDEN_TEMPORAL" and isinstance(fit.get("interslice_weight"), numbers.Real):
+        parts.append(
+            f"identity-link weight = {format_value(fit['interslice_weight'])} (ω × the slices' mean tie weight)"
+        )
     if inst.name == "CONSENSUS":
         inputs = [i.label for i in opts.communities_strategy if consensus_eligible(i.name)]
         parts.append("inputs: " + (", ".join(inputs) or "none"))
+    if fit.get("runs"):
+        chosen = "lowest" if "description length" in str(fit.get("objective", "")) else "highest"
+        fit_text = f"reported fit: {chosen} {fit.get('objective', 'quality')} of {fit['runs']} seeded fits"
+        if isinstance(fit.get("best"), numbers.Real):
+            fit_text += f" ({format_value(fit['best'])}; worst {format_value(fit.get('worst'))})"
+        if isinstance(fit.get("stability"), numbers.Real):
+            fit_text += (
+                f"; stability = {format_value(fit['stability'])} (mean Adjusted Rand Index of the other fits to the "
+                "reported partition — 1 = every fit found it)"
+            )
+        parts.append(fit_text)
     return "; ".join(parts) or "—"
 
 

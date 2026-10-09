@@ -91,7 +91,9 @@ def apply_amplification_factor(
     """Add amplification factor (forwards received / own message count) to each node.
 
     With near-copy edges on, the copies other channels made of a channel's posts count as
-    forwards received (``graph.graph["near_copies"]``).
+    forwards received (``graph.graph["near_copies"]``). ``None`` for a channel with no message
+    in the analysis — a ratio over no output is undefined (dead leaves, whose messages are
+    outside the analysis, in particular), like content originality.
     """
     key = "amplification_factor"
 
@@ -109,7 +111,7 @@ def apply_amplification_factor(
         pk = channel_entry["channel"].pk
         mc = message_counts.get(pk, 0)
         fr = forwards_received.get(pk, 0) + copies_received.get(pk, 0)
-        node[key] = round(fr / mc, AMPLIFICATION_DECIMALS) if mc > 0 else 0.0
+        node[key] = round(fr / mc, AMPLIFICATION_DECIMALS) if mc > 0 else None
 
     return [(key, "Amplification Factor")]
 

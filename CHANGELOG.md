@@ -1,5 +1,28 @@
 # Changelog
 ## [1.0] - To be announced
+*Methodology review of the measures and community detection.*
+
+### Improvements
+- **Community partitions are the best of many fits, and record how stable they are.** Every stochastic detector used to report a single seeded run, and on real data single runs disagree: Leiden seeds agreed at a median ARI of 0.68. Leiden-family strategies and Louvain now keep the best of 50 seeded runs, and the SBM family the lowest description length of 10 refined fits. Each partition's fit summary — runs, best and worst objective, and *stability* (how far the other fits agree with the reported partition) — goes to `summary.json` (`community_fits`), `PARAMETERS.md` and the run log. See [Best of many fits](docs/community-detection.md#best-of-many-fits-and-how-stable-the-answer-is).
+- **Modularity is tested against random graphs.** Leiden, Leiden directed and Louvain now get a modularity z-score and p-value against random graphs with the same degrees and strengths, in the network and community tables. Sparse citation graphs reach high modularity by chance, so a raw Q is not evidence on its own. See [Modularity significance](docs/whole-network-statistics.md#modularity-significance).
+- **Module roles follow Guimerà & Amaral's definition.** The participation coefficient now counts distinct neighbours, unweighted like the within-module z the role thresholds were calibrated with; the weighted version moves to a new `participation_weighted` column. On one export this changed 47% of the roles.
+
+### Fixes
+- **The assortative SBM no longer stops at a poor fit.** Its single greedy sweep from a random start reported 3 groups where the data support 6, at a description length 234 nats worse than the best fit. It now starts from graph-tool's multilevel fit and keeps the best of 10.
+- **Transitivity is the standard global clustering coefficient.** It read only outgoing ties, so a directed 3-cycle scored 0 (0.225 instead of 0.386 on one export).
+- **MODULEROLE no longer falls back to K-core.** Without LEIDEN_DIRECTED the automatic basis took the first partition available, which could be KCORE's shells; it now picks only cohesive partitions, `basis=KCORE` is refused and `basis=SBM` warns.
+- **Dead leaves are no longer scored on citations Pulpit never reads.** Their out-degree centrality, HITS hub, Burt's constraint, local clustering, reciprocity and amplification are now empty instead of 0, and they are left out of the whole-network reciprocity, clustering, transitivity, out-degree CV and assortativity.
+- **Self-citations no longer count as prestige or as a contact.** With `--self-references` on they fed PageRank, HITS and the degree centralities, and made a channel its own contact in Burt's constraint.
+- **Unconnected channels no longer count as agreement.** Every algorithm parks them in one shared community, which made them a fake consensus community in CONSENSUS and inflated the partition-comparison matrices.
+- **Behavioural equivalence tells low profiles from high ones.** The cosine scored a channel low on every measure 1.0 against one high on every measure; it is now Gower similarity.
+- **Structural equivalence no longer penalises mutual pairs.** The tie between the two channels compared is left out of their profiles.
+- **HITS converges on large graphs.** It stopped at 100 iterations without saying so; with dead leaves it needed about 300. It now iterates up to 1,000 times and warns if it still has not converged.
+- **Amplification is empty, not 0, for a channel with no messages** in the analysis, like content originality.
+
+### Backward incompatibility
+- **New exports will not match earlier ones.** Every partition, module role and several network statistics change with the fixes above.
+- **LEIDEN_TEMPORAL's ω is now relative to the mean tie weight.** ω = 1 makes an identity link as strong as an average tie under every edge-weight strategy; an absolute ω froze the years together under `PARTIAL_REFERENCES` and barely coupled them under `TOTAL`. Existing `interslice=` values need re-choosing.
+- **Exports are slower**, mostly from the SBM restarts.
 
 ## [0.28] - 2026-10-09
 *Exploring environment by snowball strategy. Dominance analysis. Message tags.*

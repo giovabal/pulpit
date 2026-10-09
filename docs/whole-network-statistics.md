@@ -36,6 +36,8 @@ Metrics are organized into selectable groups. Controlled via `--network-stat-gro
 
 The raw count of channels (nodes) and directed connections (edges) in the graph. An edge from A to B means A has forwarded content from B or referenced B's username, weighted by frequency relative to A's total output. These counts depend on the `DRAW_DEAD_LEAVES` setting and any date range filters applied at export time.
 
+**Dead leaves.** With dead leaves drawn, a **Dead leaves (own citations not observed)** row counts them. A dead leaf is in the graph only because a monitored channel cited it; its own messages are never read, so its outgoing citations are unknown rather than absent. The statistics that read a channel's own citations — **Reciprocity**, **Average Clustering**, **Transitivity**, the **out-degree CV** and the **degree assortativity** coefficients — therefore describe the observed channels only (reciprocity on the subgraph among them, clustering and transitivity over the triangles centred on them, assortativity over the ties between them). Counting dead leaves would add one-way ties and zero out-degrees by construction. Path lengths, efficiency, components and density keep every node. Self-citations (`--self-references`) never enter these statistics either.
+
 ### Density
 
 The fraction of all possible directed edges that actually exist. For a directed graph with *n* nodes, the maximum number of edges is *n(n−1)*; density is the observed edge count divided by that maximum.
@@ -72,13 +74,13 @@ The longest directed shortest path in the largest strongly connected component.
 
 ### Reciprocity
 
-The fraction of edges that are mutual — if A→B exists, does B→A also exist? Computed as (number of mutual pairs) / (total number of edges).
+The fraction of edges that are mutual — if A→B exists, does B→A also exist? Computed as (number of mutual pairs) / (total number of edges), over the ties between observed channels (dead leaves and self-citations excluded — see [Dead leaves](#nodes-and-edges)).
 
 **In practice:** reciprocity measures how symmetric information exchange is. A low reciprocity means the network is predominantly hierarchical: content flows from producers to distributors in one direction. A high reciprocity suggests peer-like mutual amplification. In political networks, high reciprocity within a community usually signals tight ideological cohesion; it is also a natural place to *look* for arranged mutual amplification, though the static graph alone cannot tell arrangement from affinity — that distinction lives in message-level timing, which the [coordination analysis](coordination-analysis.md) tests directly.
 
 ### Average Clustering Coefficient
 
-For each channel, the clustering coefficient measures how interconnected its immediate neighbours are — do the channels that reference A also reference each other? The average is taken over all channels.
+For each channel, the clustering coefficient measures how interconnected its immediate neighbours are — do the channels that reference A also reference each other? The average is taken over all observed channels (every channel but the dead leaves).
 
 **In practice:** a high average clustering coefficient means channels tend to form tight triangles of mutual reference — characteristic of ideologically homogeneous clusters. A low clustering coefficient indicates a more tree-like or hub-and-spoke structure.
 
@@ -88,9 +90,11 @@ For each channel, the clustering coefficient measures how interconnected its imm
 
 ### Transitivity
 
-The fraction of all connected triples in the graph that form closed triangles. Also called the global clustering coefficient. Unlike Avg Clustering (which averages each channel's local coefficient separately), transitivity is a global fraction that gives more weight to high-degree channels.
+The fraction of all connected triples in the graph that form closed triangles — `3 × triangles / connected triples` — computed on the **undirected** projection (a tie in either direction connects two channels), so the value is comparable with the transitivity reported in the literature. Also called the global clustering coefficient. Unlike Avg Clustering (which averages each channel's local coefficient separately), transitivity is a global fraction that gives more weight to high-degree channels. With dead leaves drawn it counts the triples centred on observed channels.
 
-**Reference:** Watts, D.J. & Strogatz, S.H. (1998) "Collective dynamics of 'small-world' networks." *Nature* 393. [doi:10.1038/30918](https://doi.org/10.1038/30918)
+*Correction (2026):* earlier releases computed it with NetworkX's `transitivity` on the directed graph, which only follows outgoing ties and so measured something narrower — how often two channels cited by the same channel cite each other (a directed 3-cycle scored 0). On one 313-channel export that read 0.225 where the global clustering coefficient is 0.386.
+
+**References:** Newman, M.E.J. (2003) "The structure and function of complex networks." *SIAM Review* 45(2). [doi:10.1137/S003614450342480](https://doi.org/10.1137/S003614450342480); Watts, D.J. & Strogatz, S.H. (1998) "Collective dynamics of 'small-world' networks." *Nature* 393. [doi:10.1038/30918](https://doi.org/10.1038/30918)
 
 **In practice:** high transitivity means channels that both reference a third channel tend to reference each other — information loops are closed and the network is echo-chamber-like. Low transitivity indicates a more open, tree-like structure.
 
@@ -120,7 +124,7 @@ Two fundamental properties make λ₂ particularly meaningful:
 
 ### Degree CV (In-degree and Out-degree Coefficient of Variation)
 
-The coefficient of variation (σ/μ) of the in-degree and out-degree distributions. CV normalises the spread of the distribution by its centre, allowing networks of different sizes or densities to be compared directly.
+The coefficient of variation (σ/μ) of the in-degree and out-degree distributions. CV normalises the spread of the distribution by its centre, allowing networks of different sizes or densities to be compared directly. The out-degree CV runs over observed channels only: a dead leaf's out-degree is unknown, and counting it as 0 would inflate the spread.
 
 **Reference:** Pastor-Satorras, R. & Vespignani, A. (2001) "Epidemic spreading in scale-free networks." *Physical Review Letters* 86. [doi:10.1103/PhysRevLett.86.3200](https://doi.org/10.1103/PhysRevLett.86.3200)
 
@@ -152,7 +156,7 @@ The share of all channels in the largest strongly connected component — the ne
 
 ### Directed degree assortativity (four coefficients)
 
-Assortativity measures whether channels tend to connect to channels with similar degree. For directed graphs there are four Pearson correlation coefficients, computed over all edges:
+Assortativity measures whether channels tend to connect to channels with similar degree. For directed graphs there are four Pearson correlation coefficients, computed over all edges between observed channels (a tie to a dead leaf would pair a degree with an unobserved out-degree):
 
 | Coefficient | Source property | Target property |
 | :---------- | :-------------- | :-------------- |
@@ -211,7 +215,17 @@ Beyond the whole-network level, community statistics appear in `community_table.
 
 ### Modularity (per strategy)
 
-Modularity measures the quality of a community partition — the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. Values above roughly 0.3 are conventionally considered evidence of meaningful community structure.
+Modularity measures the quality of a community partition — the fraction of edges that fall within communities minus the fraction that would fall within them in a random graph with the same degree sequence. A "0.3 or above" rule of thumb circulates, but it is not evidence on its own: sparse, tree-like networks — hub-and-spoke citation graphs above all — reach high modularity even when random (Guimerà, Sales-Pardo & Amaral 2004). Read it with the significance columns below.
+
+#### Modularity significance
+
+For the strategies that maximise modularity — `LEIDEN`, `LEIDEN_DIRECTED` and `LOUVAIN` — the network table's *Modularity by strategy* section adds **Modularity z** and **p (random)**, and the community table states them next to *Network modularity Q*. Pulpit builds 20 random versions of the graph the partition was detected on. Each keeps every channel's in- and out-degree exactly and its in- and out-strength approximately (degree-preserving Maslov–Sneppen rewiring, then strength fitting — the configuration null of the [robustness analysis](robustness-analysis.md)). It then takes the best modularity Leiden reaches on each, with the same objective, directed or undirected. **z** is how many standard deviations the partition's modularity lies above that null mean; **p** is the one-sided Monte-Carlo p-value `(random graphs at least as modular + 1) / 21`, whose floor is ≈ 0.048. A large positive z means the network has community structure that random graphs with its degrees cannot imitate; z near 0 means the partition is no more modular than chance. Each random graph's best modularity comes from 5 Leiden runs, slightly fewer than the 50 behind the reported partition, so z is a little optimistic.
+
+The other strategies get no z: CPM, the SBM family, K-core, the consensus partition and the label groups optimise (or encode) something other than modularity, so setting their modularity against the random graphs' *best* would always make them look insignificant. Their modularity remains a descriptive figure.
+
+On one far-right Telegram export of 313 monitored channels, directed Leiden reached Q = 0.69 — but random graphs with the same degrees and strengths already reached 0.58 on average, so the structure beyond chance is the gap (z ≈ 9). With the 1,649 dead leaves drawn, Q = 0.66 against a random-graph mean of 0.61 (z ≈ 3.8): most of the larger graph's apparent modularity is the star shape of its citations, not communities.
+
+**References:** Guimerà, R., Sales-Pardo, M. & Amaral, L.A.N. (2004) "Modularity from fluctuations in random graphs and complex networks." *Physical Review E* 70, 025101. [doi:10.1103/PhysRevE.70.025101](https://doi.org/10.1103/PhysRevE.70.025101); Reichardt, J. & Bornholdt, S. (2006) "When are networks truly modular?" *Physica D* 224. [doi:10.1016/j.physd.2006.09.009](https://doi.org/10.1016/j.physd.2006.09.009); Maslov, S. & Sneppen, K. (2002) "Specificity and stability in topology of protein networks." *Science* 296. [doi:10.1126/science.1065103](https://doi.org/10.1126/science.1065103).
 
 Some partitions leave channels without a community. A label-group partition, for example, has no label for dead leaves, environment channels or channels never labelled in that group. When that happens, each channel left out counts as a community of its own, which is the standard convention. It keeps its degree in the random-graph baseline, and its edges count as edges between communities. The rule is the same for the directed and the undirected modularity. The table's per-community contributions list only the real communities, so when some channels are left out the contributions no longer add up exactly to the headline figure. The difference is the left-out channels' own terms, which are zero or negative unless a channel cites itself.
 
@@ -261,7 +275,7 @@ where I(U; V) is the mutual information of the two partitions and H(·) is Shann
 - **NMI is *not* chance-corrected** — it is the familiar [0, 1] score, but it is biased upward when either partition has many small clusters. It is kept for comparability with the large body of literature that reports NMI.
 - **VI is a true metric** on the space of partitions (it satisfies the triangle inequality; Meilă 2007), reported here in **bits**. It is a *distance*: **0 means identical** and larger means more different, bounded above by log₂ N for N co-assigned channels. In the heat-map its colour scale is therefore inverted (darker = smaller VI = more agreement) and normalised within the matrix; because VI is unnormalised, compare VI values cautiously across pairs whose channel coverage differs a lot.
 
-**Intersection.** Each pair is computed on the **intersection** of channels assigned by *both* partitions. This matters for label-group partitions, which only assign the channels that carry one of the group's labels; channels missing from a group are silently excluded from that group's pairs but not from others. (Algorithmic strategies assign every graph node, so two algorithms are always compared on the full node set.)
+**Intersection.** Each pair is computed on the **intersection** of channels assigned by *both* partitions. This matters for label-group partitions, which only assign the channels that carry one of the group's labels; channels missing from a group are silently excluded from that group's pairs but not from others. Channels with **no tie** in the graph the detections ran on are left out of every pair: each algorithm parks them in one shared residual community, so including them would count as agreement between any two algorithms.
 
 **References:** Hubert, L. & Arabie, P. (1985) "Comparing partitions." *Journal of Classification* 2. [doi:10.1007/BF01908075](https://doi.org/10.1007/BF01908075) (ARI). Vinh, N.X., Epps, J. & Bailey, J. (2010) "Information theoretic measures for clusterings comparison." *JMLR* 11. (AMI). Kvalseth, T.O. (1987) "Entropy and correlation: Some comments." *IEEE Transactions on Systems, Man and Cybernetics* 17(3). [doi:10.1109/TSMC.1987.4309069](https://doi.org/10.1109/TSMC.1987.4309069) (NMI). Meilă, M. (2007) "Comparing clusterings — an information based distance." *Journal of Multivariate Analysis* 98(5). [doi:10.1016/j.jmva.2006.11.013](https://doi.org/10.1016/j.jmva.2006.11.013) (VI). The chance-corrected indices are computed with [scikit-learn](https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation).
 
@@ -271,14 +285,14 @@ where I(U; V) is the mutual information of the two partitions and H(·) is Shann
 
 Generated with `--structural-similarity`. Available as a standalone page `structural_similarity.html` (the filename is kept for compatibility; the page shows structural equivalence — see [Export formats](export-formats.md#structural_similarityhtml--structural-equivalence-matrix)).
 
-Each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity between their weighted *tie profiles*. A channel's profile is its weighted out-citations to every other channel concatenated with its weighted in-citations from every other channel (self-ties dropped).
+Each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity between their weighted *tie profiles*. A channel's profile is its weighted out-citations to every other channel concatenated with its weighted in-citations from every other channel (self-ties dropped). When i and j are compared, the entries for the tie between them are left out of both profiles (Burt 1976; Wasserman & Faust 1994 §9.4). They sit at different positions in the two profiles, so they could only lower the similarity: two channels that cite each other and share every other neighbour score 1.0.
 
 > **What this measures.** Two channels score 1.0 when they cite — and are cited by — the *same* channels with the *same relative intensity*, i.e. they occupy interchangeable positions in the citation network. This is genuinely relational: it depends on *who* a channel connects to, not on its centrality scores. (It need not require the two channels to cite each other.) For "channels that behave alike by the numbers" see the [behavioural equivalence matrix](#behavioural-equivalence-matrix) instead.
 
 **Computation:**
 1. The weighted directed adjacency `A` is built over the channels (self-loops zeroed).
 2. Each channel's profile is the row of `A` (out-ties) concatenated with the column of `A` (in-ties): `P = [A | Aᵀ]`.
-3. Rows are normalised to unit length and the similarity matrix is `S = P̂ · P̂ᵀ`, clipped to [0, 1] with the diagonal forced to 1.0. Built with sparse linear algebra so it scales to large graphs.
+3. `S_ij = P_i · P_j / (‖P_i‖ ‖P_j‖)`, where both norms leave out the pair's own tie (`‖P_i‖² − A_ij² − A_ji²`); the dot product already skips it. Clipped to [0, 1] with the diagonal forced to 1.0. Built with sparse linear algebra so it scales to large graphs.
 
 **Range:** 0 (no shared neighbours) to 1 (identical neighbourhood with identical tie strengths).
 
@@ -288,16 +302,19 @@ The heatmap colours cells from white (low similarity) to steel-blue (high simila
 
 Generated with `--behavioural-equivalence`. Available as a standalone page `behavioural_equivalence.html` (see [Export formats](export-formats.md#behavioural_equivalencehtml--behavioural-equivalence-matrix)).
 
-Each cell (i, j) shows the cosine similarity between channels i and j's **behavioural-measure profiles** — built from the behavioural measures that were computed: amplification factor, content originality, diffusion lag, plus audience/activity volume (followers, message count).
+Each cell (i, j) shows the **Gower similarity** (Gower 1971) between channels i and j's **behavioural-measure profiles** — built from the behavioural measures that were computed: amplification factor, content originality, diffusion lag, plus audience/activity volume (followers, message count).
 
 > **What this measures.** Two channels score 1.0 when they *behave* alike — originate vs amplify, fast vs slow, narrow vs wide reach, similar audience size — regardless of their position in the citation network. It is the behavioural counterpart of structural equivalence: a channel can be structurally equivalent to another (same neighbours) yet behaviourally very different, or vice versa.
 
 **Computation:**
 1. A raw n × m matrix is built (n channels, m behavioural measures). Missing values — `None`, e.g. diffusion lag for a channel with no dated forwards — are imputed to the **column median** (a neutral "unknown"), not 0.
-2. Each column is min-max normalised to [0, 1] so every measure contributes equally regardless of scale.
-3. Each row is normalised to unit length; cosine similarity `S = U · Uᵀ`, clipped to [0, 1], diagonal forced to 1.0.
+2. The heavy-tailed volume measures (followers, message count) are log-scaled (`log1p`), so a few very large channels do not squeeze everyone else into one corner.
+3. Each column is min-max normalised to [0, 1] so every measure contributes equally regardless of scale.
+4. `S_ij = 1 − mean_k |x_ik − x_jk|`, in [0, 1], diagonal 1.0.
 
-**Range:** 0 (orthogonal behaviour) to 1 (identical behavioural profile up to magnitude).
+**Range:** 0 (opposite ends of every measure) to 1 (identical behavioural profile). Earlier releases used the cosine of the normalised profiles, which compares only their *direction*. A channel low on every measure then scored 1.0 against one high on every measure, and an all-zero profile scored 0 against everyone; Gower's similarity reads 1 only when the measures themselves match.
+
+**References:** Gower, J.C. (1971) "A general coefficient of similarity and some of its properties." *Biometrics* 27(4). [doi:10.2307/2528823](https://doi.org/10.2307/2528823).
 
 The heatmap rendering matches the structural equivalence matrix (white → steel-blue, grey diagonal, lower triangle only).
 

@@ -203,10 +203,14 @@ def write_network_metrics_json(
         mod = entry["modularity"] if entry else None
         icr = entry.get("inter_community_edge_ratio") if entry else None
         mei = entry.get("mean_ei_index") if entry else None
+        mod_z = entry.get("modularity_z") if entry else None
+        mod_p = entry.get("modularity_p") if entry else None
         modularity_rows.append(
             {
                 "strategy": strategy_key,
                 "modularity": _fmt(mod) if mod is not None else "—",
+                "modularity_z": _fmt(mod_z, 1) if mod_z is not None else "—",
+                "modularity_p": _fmt(mod_p, 3) if mod_p is not None else "—",
                 "inter_community_ratio": _fmt(icr) if icr is not None else "—",
                 "mean_ei": _fmt(mei) if mei is not None else "—",
             }
@@ -261,12 +265,19 @@ def write_network_table_xlsx(
             ws.append([])
             ws.append(["‡ Computed on the largest strongly connected component (directed)"])
         ws.append([])
-        ws.append(["Strategy", "Modularity"])
+        ws.append(["Strategy", "Modularity", "Modularity z (vs random graphs)", "p (vs random graphs)"])
         for cell in ws[ws.max_row]:
             cell.font = Font(bold=True)
         for strategy_key in strategies:
-            entry = ctd["strategies"].get(strategy_key)
-            ws.append([strategy_display_label(strategy_key), entry["modularity"] if entry else None])
+            entry = ctd["strategies"].get(strategy_key) or {}
+            ws.append(
+                [
+                    strategy_display_label(strategy_key),
+                    entry.get("modularity"),
+                    entry.get("modularity_z"),
+                    entry.get("modularity_p"),
+                ]
+            )
 
         comparison = ctd.get("partition_comparison")
         if comparison and len(comparison.get("strategies", [])) >= 2:
@@ -522,6 +533,8 @@ def write_community_metrics_json(
             strategy_entry["rows"] = rows_out
             mod = entry.get("modularity")
             strategy_entry["modularity"] = round(mod, 6) if mod is not None else None
+            strategy_entry["modularity_z"] = entry.get("modularity_z")
+            strategy_entry["modularity_p"] = entry.get("modularity_p")
             icr = entry.get("inter_community_edge_ratio")
             strategy_entry["inter_community_edge_ratio"] = round(icr, 6) if icr is not None else None
             mei = entry.get("mean_ei_index")

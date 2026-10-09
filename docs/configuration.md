@@ -190,8 +190,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.csv` | Write `nodes.csv` and `edges.csv` | `false` |
 | `outputs.seo` | Set indexable robots meta tags on the export HTML | `false` |
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
-| `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles) | `false` |
-| `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (cosine of behavioural-measure profiles) | `false` |
+| `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles over third channels) | `false` |
+| `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (Gower similarity of behavioural-measure profiles) | `false` |
 | `outputs.dominance` | Run the dominance analysis: David's score ranking and roles per channel, two-sided dependence per connected pair with hypergeometric validation, SpringRank / transitivity / consistency tests of the whole network ([docs](dominance.md)) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |

@@ -165,8 +165,10 @@ SBM_DEFAULT_WEIGHTS = ""
 #: Refinement of an SBM / SBM_ASSORTATIVE token that omits ``refine``: empty = the single point estimate.
 SBM_DEFAULT_REFINE = ""
 CONSENSUS_DEFAULT_THRESHOLD = 0.5
-# leidenalg's own default coupling weight; higher ω = smoother, more persistent communities
-# across years, lower ω = each year re-partitioned nearly independently.
+# Coupling ω of a LEIDEN_TEMPORAL token that omits ``interslice``: ω is relative — a multiple of the mean tie weight
+# of the year slices (temporal_interslice_weight) — so 1.0 makes an identity link as strong as an average tie,
+# whatever --edge-weight-strategy's units. Higher ω = smoother, more persistent communities across years, lower ω =
+# each year re-partitioned nearly independently.
 TEMPORAL_DEFAULT_INTERSLICE = 1.0
 
 # Base key of the per-channel SBM assignment-confidence companion column written by
@@ -256,8 +258,9 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 minimum=0.0,
                 label="Coupling ω",
                 help="Weight of the identity link tying each channel to itself in adjacent years "
-                "(Mucha et al. 2010), in the same raw tie-weight units as the citation edges. 0 = years "
-                "partitioned independently; higher = smoother, more persistent communities across the timeline.",
+                "(Mucha et al. 2010), as a multiple of the year slices' mean tie weight: 1 = as strong as an "
+                "average tie, whatever --edge-weight-strategy. 0 = years partitioned independently; higher = "
+                "smoother, more persistent communities across the timeline.",
             ),
         ),
         primary_keys=("leiden_temporal",),
@@ -480,19 +483,25 @@ def _merge_isolated_nodes(graph: nx.DiGraph, community_map: CommunityMap) -> Com
 # library defaults included — so FIXED_PARAMETERS (written to the export's PARAMETERS.md) is read from
 # the very values the detectors run with.
 
-#: Seed of every leidenalg optimisation (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LEIDEN_TEMPORAL, CONSENSUS).
+#: Seed of the first leidenalg optimisation (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LEIDEN_TEMPORAL, CONSENSUS); run k
+#: of a best-of-:data:`LEIDEN_RUNS` fit uses ``LEIDEN_SEED + k``.
 LEIDEN_SEED = 0
-#: Leiden iterations per optimisation — leidenalg's own default (a negative value would iterate until no
-#: further improvement).
-LEIDEN_N_ITERATIONS = 2
+#: Independent seeded Leiden optimisations per partition; the one with the highest quality is reported. Modularity
+#: and CPM landscapes are degenerate — one run lands on one of many near-optimal, mutually dissimilar partitions
+#: (Good, de Montjoye & Clauset 2010) — so a single seed reports an arbitrary one.
+LEIDEN_RUNS = 50
+#: Leiden iterations per optimisation: negative = iterate until an iteration no longer improves the partition.
+LEIDEN_N_ITERATIONS = -1
 #: Largest community leidenalg may form, in nodes — leidenalg's own default (0 = no limit).
 LEIDEN_MAX_COMM_SIZE = 0
 #: Modularity resolution γ of LEIDEN, LEIDEN_DIRECTED, LOUVAIN and the CONSENSUS clustering, and of the
 #: modularity community_stats reports. leidenalg's ModularityVertexPartition has no resolution parameter (it
 #: is standard modularity, γ = 1); networkx's Louvain and modularity receive it explicitly.
 MODULARITY_RESOLUTION = 1
-#: Seed of networkx's Louvain, which randomises the node-visit order.
+#: Seed of the first networkx Louvain run, which randomises the node-visit order; run k uses ``LOUVAIN_SEED + k``.
 LOUVAIN_SEED = 0
+#: Independent seeded Louvain runs per partition; the one with the highest modularity is reported.
+LOUVAIN_RUNS = 50
 #: Minimum modularity gain for Louvain to go on to a further aggregation level — networkx's own default.
 LOUVAIN_THRESHOLD = 1e-07
 #: Maximum number of Louvain aggregation levels — networkx's own default (None = no limit).
@@ -518,10 +527,16 @@ TEMPORAL_PLURALITY_RULE = (
     "each channel's most frequent community across the year slices it appears in; ties go to its latest "
     "year's community when that is among the tied, else to the smallest community id"
 )
+#: How LEIDEN_TEMPORAL turns its relative coupling ω into the identity-link weight (temporal_interslice_weight).
+TEMPORAL_INTERSLICE_SCALE_RULE = (
+    "identity-link weight = ω × the mean tie weight of the year slices (the undirected W+Wᵀ projection on the raw "
+    "tie weights, self-loops excluded, averaged over every slice's ties)"
+)
 #: How CONSENSUS turns the input partitions into one (detect_consensus).
 CONSENSUS_CLUSTERING_RULE = (
-    "one pass: Leiden modularity clustering of the consensus graph, which links two channels when the share "
-    "of input partitions co-assigning them is ≥ τ, weighted by that share"
+    "one pass: Leiden modularity clustering (best of LEIDEN_RUNS seeds) of the consensus graph, which links two "
+    "channels when the share of input partitions co-assigning them is ≥ τ, weighted by that share; channels "
+    "without a tie in the graph are left out of the co-assignment counts"
 )
 #: Seed of every SBM / SBM_ASSORTATIVE fit: graph-tool's own generator (``seed_rng``) and numpy's global
 #: one, which graph-tool's Python layer draws from (nested-level shuffles, MCMC sweeps, partition modes).
@@ -533,6 +548,14 @@ SBM_DEGREE_CORRECTED = True
 #: (∞ = greedy descent) — graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl defaults.
 SBM_FIT_NITER = 1
 SBM_FIT_BETA = math.inf
+#: Independent fits per SBM / SBM_ASSORTATIVE partition; the one with the lowest description length (the most
+#: probable partition) is reported — graph-tool's own advice, as a single agglomerative fit can stop in a poor local
+#: minimum. Run k draws on the continuing seeded stream, so the set of fits is reproducible.
+SBM_FIT_RESTARTS = 10
+#: Zero-temperature merge-split refinement after each SBM fit: this many sweeps of ``SBM_REFINE_NITER`` moves each
+#: — graph-tool's documented pattern for improving a minimize_*_blockmodel_dl result.
+SBM_REFINE_SWEEPS = 100
+SBM_REFINE_NITER = 10
 # SBM(refine=MCMC) run lengths: `wait` bounds the multiflip equilibration phase, `samples` is the
 # number of posterior partitions collected for the marginals. Modest by graph-tool-docs standards
 # (which use wait=1000), sized for Pulpit's few-hundred-to-few-thousand-node citation graphs.
@@ -557,8 +580,8 @@ SBM_NESTED_PAD_LEVELS = 4
 #: (graph-tool's default) and iterate the alignment until it converges.
 SBM_MODE_RELABEL = True
 SBM_MODE_CONVERGE = True
-# Zero-temperature merge-split sweeps for the planted-partition greedy fit — the value used in
-# graph-tool's own PPBlockState documentation example.
+# Zero-temperature merge-split sweeps refining each planted-partition fit (started from graph-tool's multilevel
+# minimize_blockmodel_dl) — the value used in graph-tool's own PPBlockState documentation example.
 PP_GREEDY_NITER = 1000
 #: Inverse temperature of the planted-partition greedy fit (∞ = zero temperature).
 PP_GREEDY_BETA = math.inf
@@ -594,17 +617,27 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         _LEIDENALG_STRATEGIES,
         name="Leiden random seed",
         value=LEIDEN_SEED,
-        affects="Seeds leidenalg's optimiser, so the node-visit order — and hence the partition — is reproducible.",
+        affects="Seeds the first of the Leiden runs (run k uses this + k), so the set of runs — and hence the "
+        "reported partition — is reproducible.",
         constant="LEIDEN_SEED",
+    ),
+    *_per_strategy(
+        _LEIDENALG_STRATEGIES,
+        name="Leiden runs",
+        value=LEIDEN_RUNS,
+        affects="Independent seeded optimisations per partition; the highest-quality one is reported and the "
+        "runs' agreement with it is recorded as the partition's stability (summary.json community_fits).",
+        constant="LEIDEN_RUNS",
+        note="Modularity and CPM landscapes are degenerate: single runs land on different near-optimal "
+        "partitions (Good, de Montjoye & Clauset 2010).",
     ),
     *_per_strategy(
         _LEIDENALG_STRATEGIES,
         name="Leiden iterations",
         value=LEIDEN_N_ITERATIONS,
         affects="Number of full Leiden iterations (local moves, refinement, aggregation) per optimisation; "
-        "further iterations can only raise the quality function.",
+        "negative = iterate until an iteration no longer improves the quality function.",
         constant="LEIDEN_N_ITERATIONS",
-        note="leidenalg's own default, passed explicitly.",
     ),
     *_per_strategy(
         _LEIDENALG_STRATEGIES,
@@ -630,7 +663,9 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Merge isolated channels",
         value=MERGE_ISOLATED_NODES,
         affects="Channels with no tie in the graph the detection ran on all share one community (the first "
-        "isolated channel's, by id) instead of each forming its own singleton community.",
+        "isolated channel's, by id) instead of each forming its own singleton community. The shared community "
+        "is a display convenience: these channels are left out of the CONSENSUS co-assignment counts and of the "
+        "partition-comparison matrices.",
         constant="MERGE_ISOLATED_NODES",
     ),
     FixedParameter(
@@ -656,10 +691,19 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Coupling ω when omitted",
         value=TEMPORAL_DEFAULT_INTERSLICE,
         scope="strategy:LEIDEN_TEMPORAL",
-        affects="Weight of the identity link tying each channel to itself in adjacent years when a "
-        "LEIDEN_TEMPORAL token omits interslice; higher = smoother, more persistent communities across years.",
+        affects="Coupling of the identity link tying each channel to itself in adjacent years when a "
+        "LEIDEN_TEMPORAL token omits interslice, as a multiple of the slices' mean tie weight (1 = as strong as an "
+        "average tie); higher = smoother, more persistent communities across years.",
         source=f"{_SOURCE}: TEMPORAL_DEFAULT_INTERSLICE",
-        note="leidenalg's own default coupling weight.",
+    ),
+    FixedParameter(
+        name="Coupling ω scale",
+        value=TEMPORAL_INTERSLICE_SCALE_RULE,
+        scope="strategy:LEIDEN_TEMPORAL",
+        affects="Turns the relative ω of every LEIDEN_TEMPORAL token into the absolute identity-link weight, so "
+        "the same ω couples the years equally strongly under every --edge-weight-strategy (the absolute weight "
+        "used is recorded in summary.json community_resolutions).",
+        source=f"{_SOURCE}: TEMPORAL_INTERSLICE_SCALE_RULE",
     ),
     FixedParameter(
         name="Interslice-layer resolution",
@@ -691,8 +735,17 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Louvain random seed",
         value=LOUVAIN_SEED,
         scope="strategy:LOUVAIN",
-        affects="Seeds networkx's Louvain, which randomises the node-visit order, so the partition is reproducible.",
+        affects="Seeds the first Louvain run (run k uses this + k); networkx's Louvain randomises the node-visit "
+        "order, so the seeds make the set of runs — and the reported partition — reproducible.",
         source=f"{_SOURCE}: LOUVAIN_SEED",
+    ),
+    FixedParameter(
+        name="Louvain runs",
+        value=LOUVAIN_RUNS,
+        scope="strategy:LOUVAIN",
+        affects="Independent seeded Louvain runs; the highest-modularity one is reported and the runs' agreement "
+        "with it is recorded as the partition's stability (summary.json community_fits).",
+        source=f"{_SOURCE}: LOUVAIN_RUNS",
     ),
     FixedParameter(
         name="Louvain level threshold",
@@ -760,29 +813,57 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         source=f"{_SOURCE}: SBM_DEGREE_CORRECTED",
         note="Karrer & Newman (2011); graph-tool's BlockState default, passed explicitly.",
     ),
-    FixedParameter(
+    *_per_strategy(
+        _SBM_STRATEGIES,
         name="Fit sweeps per step",
         value=SBM_FIT_NITER,
-        scope="strategy:SBM",
         affects="Merge-split sweeps per step of the multilevel minimum-description-length fit (the nested fit "
         "repeats the step level by level until the description length stops changing).",
-        source=f"{_SOURCE}: SBM_FIT_NITER",
+        constant="SBM_FIT_NITER",
         note="graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl default, passed explicitly; "
         "the other multilevel-sweep settings are graph-tool's defaults.",
     ),
-    FixedParameter(
+    *_per_strategy(
+        _SBM_STRATEGIES,
         name="Fit inverse temperature β",
         value=SBM_FIT_BETA,
-        scope="strategy:SBM",
         affects="Inverse temperature of the minimum-description-length fit: ∞ = greedy descent.",
-        source=f"{_SOURCE}: SBM_FIT_BETA",
+        constant="SBM_FIT_BETA",
         note="graph-tool's minimize_blockmodel_dl / minimize_nested_blockmodel_dl default, passed explicitly.",
+    ),
+    *_per_strategy(
+        _SBM_STRATEGIES,
+        name="Fit restarts",
+        value=SBM_FIT_RESTARTS,
+        affects="Independent fits per partition; the one with the lowest description length (the most probable "
+        "partition) is reported and the fits' agreement with it is recorded as the partition's stability "
+        "(summary.json community_fits).",
+        constant="SBM_FIT_RESTARTS",
+        note="A single agglomerative fit can stop in a poor local minimum; graph-tool's documentation advises "
+        "repeating it and keeping the smallest description length.",
+    ),
+    FixedParameter(
+        name="Refinement sweeps",
+        value=SBM_REFINE_SWEEPS,
+        scope="strategy:SBM",
+        affects="Zero-temperature merge-split sweeps run after every fit to lower its description length further "
+        "before the fits are compared.",
+        source=f"{_SOURCE}: SBM_REFINE_SWEEPS",
+        note="graph-tool's documented refinement pattern.",
+    ),
+    FixedParameter(
+        name="Refinement moves per sweep",
+        value=SBM_REFINE_NITER,
+        scope="strategy:SBM",
+        affects="Merge-split moves (niter) in each refinement sweep.",
+        source=f"{_SOURCE}: SBM_REFINE_NITER",
     ),
     FixedParameter(
         name="Planted-partition greedy sweeps",
         value=PP_GREEDY_NITER,
         scope="strategy:SBM_ASSORTATIVE",
-        affects="Merge-split sweeps of the zero-temperature planted-partition fit.",
+        affects="Zero-temperature merge-split sweeps refining each multilevel planted-partition fit before the "
+        "fits are compared.",
         source=f"{_SOURCE}: PP_GREEDY_NITER",
         note="The value in graph-tool's PPBlockState documentation example.",
     ),
@@ -927,22 +1008,85 @@ def _build_directed_igraph(
     return ig_graph, weights
 
 
-def _assign_from_partition(partition: Iterable, node_ids: list[str]) -> CommunityMap:
-    """Build {node_id: community_index} from an iterable of communities-as-node-indices."""
-    community_map: CommunityMap = {}
-    for community_index, community in enumerate(partition, start=1):
-        for node_index in community:
-            community_map[node_ids[node_index]] = community_index
-    return community_map
+def _assign_from_membership(membership: Iterable[int], node_ids: list[str]) -> CommunityMap:
+    """Build {node_id: community_index} from a membership vector aligned with ``node_ids``."""
+    return {node_ids[index]: int(community) + 1 for index, community in enumerate(membership)}
 
 
-def _assign_from_node_sets(communities: Iterable[Iterable[str]]) -> CommunityMap:
-    """Build {node_id: community_index} from an iterable of communities-as-node-id-sets."""
-    community_map: CommunityMap = {}
-    for index, community in enumerate(communities, start=1):
-        for node_id in community:
-            community_map[node_id] = index
-    return community_map
+# ── Best-of-N fitting ─────────────────────────────────────────────────────────
+#
+# Every algorithmic detector is a stochastic optimiser over a degenerate landscape: different seeds return
+# different, comparably good partitions (Good, de Montjoye & Clauset 2010). Each detector therefore runs several
+# seeded fits and reports the best one by its own objective; ``diagnostics_out`` receives how the fits compare,
+# so an export records how reproducible each partition is (summary.json ``community_fits``, PARAMETERS.md).
+
+
+def _select_best_run(
+    runs: "list[tuple[float, Any]]",
+    *,
+    objective: str,
+    minimise: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
+) -> int:
+    """Index of the best of several seeded fits, recording how much the fits agree with it.
+
+    ``runs`` holds one ``(quality, labels)`` pair per fit, ``labels`` a community id per node over one fixed node
+    order. The best fit has the highest quality — the lowest with ``minimise`` (a description length) — and a tie
+    goes to the earliest fit, so the choice is deterministic. ``diagnostics_out`` receives ``objective``, ``runs``,
+    ``best`` / ``worst`` quality, ``stability`` — the mean Adjusted Rand Index of the other fits to the reported
+    one (``None`` for a single fit) — and ``identical_share``, the share of fits that found exactly the reported
+    partition.
+    """
+    qualities = [float(quality) for quality, _ in runs]
+    best_quality = min(qualities) if minimise else max(qualities)
+    best = qualities.index(best_quality)
+    if diagnostics_out is not None:
+        from sklearn.metrics import adjusted_rand_score
+
+        reference = list(runs[best][1])
+        agreement = [
+            float(adjusted_rand_score(reference, list(labels)))
+            for index, (_, labels) in enumerate(runs)
+            if index != best
+        ]
+        diagnostics_out.update(
+            {
+                "objective": objective,
+                "runs": len(runs),
+                "best": round(best_quality, 6),
+                "worst": round(max(qualities) if minimise else min(qualities), 6),
+                "stability": round(sum(agreement) / len(agreement), 4) if agreement else None,
+                "identical_share": round((1 + sum(1 for a in agreement if a >= 1.0 - 1e-12)) / len(runs), 4),
+            }
+        )
+    return best
+
+
+def _best_leiden_membership(
+    ig_graph: ig.Graph,
+    partition_type: Any,
+    *,
+    objective: str,
+    diagnostics_out: "dict[str, Any] | None" = None,
+    **partition_kwargs: Any,
+) -> list[int]:
+    """Membership vector of the best of :data:`LEIDEN_RUNS` seeded ``leidenalg.find_partition`` runs.
+
+    Run k uses seed ``LEIDEN_SEED + k``; the highest ``quality()`` wins (:func:`_select_best_run`).
+    ``partition_kwargs`` (weights, resolution) are passed to every run.
+    """
+    runs: list[tuple[float, list[int]]] = []
+    for run in range(LEIDEN_RUNS):
+        partition = leidenalg.find_partition(
+            ig_graph,
+            partition_type,
+            n_iterations=LEIDEN_N_ITERATIONS,
+            max_comm_size=LEIDEN_MAX_COMM_SIZE,
+            seed=LEIDEN_SEED + run,
+            **partition_kwargs,
+        )
+        runs.append((partition.quality(), list(partition.membership)))
+    return runs[_select_best_run(runs, objective=objective, diagnostics_out=diagnostics_out)][1]
 
 
 def _finalize_partition(
@@ -1015,25 +1159,37 @@ def detect_kcore(
 
 
 def detect_leiden(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+    graph: nx.DiGraph,
+    palette_name: str,
+    *,
+    reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
+    """Modularity (Newman 2006) via leidenalg on the undirected W+Wᵀ projection.
+
+    Best of :data:`LEIDEN_RUNS` seeded runs by modularity (:func:`_best_leiden_membership`);
+    ``diagnostics_out`` receives how the runs agree.
+    """
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map)
     if weights:
         ig_graph.es["weight"] = weights
-    partition = leidenalg.find_partition(
+    membership = _best_leiden_membership(
         ig_graph,
         leidenalg.ModularityVertexPartition,
+        objective="modularity",
+        diagnostics_out=diagnostics_out,
         weights="weight" if weights else None,
-        n_iterations=LEIDEN_N_ITERATIONS,
-        max_comm_size=LEIDEN_MAX_COMM_SIZE,
-        seed=LEIDEN_SEED,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+    return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
 def detect_leiden_directed(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+    graph: nx.DiGraph,
+    palette_name: str,
+    *,
+    reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Directed modularity (Leicht & Newman 2008) via leidenalg.
 
@@ -1042,21 +1198,20 @@ def detect_leiden_directed(
     Communities are built from asymmetric citation patterns: a source that
     cites many channels without being cited back is treated differently from
     a target that is widely cited.  Edge direction is preserved throughout
-    the optimisation.
+    the optimisation. Best of :data:`LEIDEN_RUNS` seeded runs by directed modularity.
     """
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_directed_igraph(graph, node_ids, node_id_map)
     if weights:
         ig_graph.es["weight"] = weights
-    partition = leidenalg.find_partition(
+    membership = _best_leiden_membership(
         ig_graph,
         leidenalg.ModularityVertexPartition,
+        objective="directed modularity",
+        diagnostics_out=diagnostics_out,
         weights="weight" if weights else None,
-        n_iterations=LEIDEN_N_ITERATIONS,
-        max_comm_size=LEIDEN_MAX_COMM_SIZE,
-        seed=LEIDEN_SEED,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+    return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
 def _build_undirected_igraph(
@@ -1075,6 +1230,33 @@ def _build_undirected_igraph(
         weights.append(undirected.edges[s, t].get(weight, 1.0))
     ig_graph.add_edges(edges)
     return ig_graph, weights
+
+
+def best_modularity(graph: nx.DiGraph, *, directed: bool, runs: int, seed: int = LEIDEN_SEED) -> float:
+    """The highest modularity ``runs`` seeded Leiden optimisations reach on ``graph``.
+
+    ``directed`` selects Leicht & Newman's directed modularity on the citation graph, else Newman's modularity of
+    the undirected W+Wᵀ projection — the two objectives the reported modularity is computed against. Weighted by
+    ``weight`` (modularity is invariant to its uniform rescale). The random-graph side of the modularity
+    significance test (``community_stats``): how modular a graph with no community structure but the same
+    degrees and strengths can be made to look. ``0.0`` for a graph without edges.
+    """
+    if graph.number_of_edges() == 0:
+        return 0.0
+    node_ids, node_id_map = _node_id_index(graph)
+    build = _build_directed_igraph if directed else _build_undirected_igraph
+    ig_graph, weights = build(graph, node_ids, node_id_map)
+    return max(
+        leidenalg.find_partition(
+            ig_graph,
+            leidenalg.ModularityVertexPartition,
+            weights=weights if weights else None,
+            n_iterations=LEIDEN_N_ITERATIONS,
+            max_comm_size=LEIDEN_MAX_COMM_SIZE,
+            seed=seed + run,
+        ).quality()
+        for run in range(runs)
+    )
 
 
 def cpm_density_resolution(graph: nx.Graph, weight: str | None = None) -> float:
@@ -1128,8 +1310,34 @@ def temporal_slice_resolutions(year_graphs: dict[int, nx.DiGraph], resolution: f
     return {year: cpm_density_resolution(year_graphs[year], weight_key) for year in sorted(year_graphs)}
 
 
+def temporal_interslice_weight(year_graphs: dict[int, nx.DiGraph], interslice: float) -> float:
+    """The absolute identity-link weight of a LEIDEN_TEMPORAL coupling ω: ``ω ×`` the mean tie weight of the slices.
+
+    The mean runs over every tie of every year slice's undirected W+Wᵀ projection — the graphs the multislice CPM
+    is optimised on — on the raw tie weights (:func:`tie_weight_key`, chosen once across the slices), self-loops
+    excluded. ω is thereby relative: 1 makes an identity link as strong as an average tie under every
+    ``--edge-weight-strategy`` (a citation share under PARTIAL_*, a count under TOTAL, 1 under NONE), where an
+    absolute ω would couple the years tightly under one strategy and negligibly under another. Falls back to the
+    plain ω when the slices hold no tie.
+    """
+    weight_key = tie_weight_key(*year_graphs.values())
+    weights = [
+        float(w)
+        for graph in year_graphs.values()
+        for u, v, w in to_undirected_sum(graph, weight=weight_key).edges(data=weight_key, default=1.0)
+        if u != v
+    ]
+    mean = sum(weights) / len(weights) if weights else 1.0
+    return float(interslice) * mean
+
+
 def detect_leiden_cpm(
-    graph: nx.DiGraph, palette_name: str, resolution: float | None = None, *, reverse: bool = False
+    graph: nx.DiGraph,
+    palette_name: str,
+    resolution: float | None = None,
+    *,
+    reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Leiden algorithm with the Constant Potts Model objective (Traag, Van Dooren & Nesterov 2011).
 
@@ -1148,21 +1356,21 @@ def detect_leiden_cpm(
 
     ``resolution=None`` (a bare ``LEIDEN_CPM``) uses the graph's own weighted edge density
     (:func:`cpm_density_resolution`) — the Reichardt–Bornholdt Erdős–Rényi null at γ_RB = 1, invariant
-    to a uniform rescale of the weights. :func:`cpm_resolution` reports the γ used.
+    to a uniform rescale of the weights. :func:`cpm_resolution` reports the γ used. Best of :data:`LEIDEN_RUNS`
+    seeded runs by CPM quality.
     """
     node_ids, node_id_map = _node_id_index(graph)
     ig_graph, weights = _build_undirected_igraph(graph, node_ids, node_id_map, weight=tie_weight_key(graph))
     gamma = resolution if resolution is not None else cpm_density_resolution(graph)
-    partition = leidenalg.find_partition(
+    membership = _best_leiden_membership(
         ig_graph,
         leidenalg.CPMVertexPartition,
+        objective="CPM quality",
+        diagnostics_out=diagnostics_out,
         weights=weights if weights else None,
         resolution_parameter=gamma,
-        n_iterations=LEIDEN_N_ITERATIONS,
-        max_comm_size=LEIDEN_MAX_COMM_SIZE,
-        seed=LEIDEN_SEED,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+    return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
 def detect_leiden_temporal(
@@ -1172,6 +1380,7 @@ def detect_leiden_temporal(
     interslice_weight: float,
     *,
     reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[dict[int, CommunityMap], CommunityMap, CommunityPalette]:
     """Interslice-coupled temporal communities over the timeline years (Mucha et al. 2010).
 
@@ -1179,8 +1388,9 @@ def detect_leiden_temporal(
     scope/weight settings as that year's export). Each year becomes one **slice** — the undirected
     W+Wᵀ projection with edge weights, exactly as ``LEIDEN_CPM`` sees a single graph (raw tie weights,
     so γ and ω are on one scale across every year rather than each year's own ×10/max rescale) — and
-    every channel present in two consecutive slices is tied to *itself* across them with weight
-    ``interslice_weight`` (ω). The CPM objective is then optimised (seed=0) over all slices at once,
+    every channel present in two consecutive slices is tied to *itself* across them by an identity link of
+    relative weight ``interslice_weight`` (ω, a multiple of the slices' mean tie weight — see
+    :func:`temporal_interslice_weight`). The CPM objective is then optimised over all slices at once,
     so a community's identity is **shared across years**: persistence, splits, and merges become
     properties of the partition itself rather than post-hoc ribbon-reading in the alluvial diagram.
     The identity link ties a channel only to itself in adjacent years — no multi-hop flow claim — so
@@ -1191,8 +1401,9 @@ def detect_leiden_temporal(
     ``leidenalg.find_partition_temporal`` (one γ for every slice) cannot express. So the optimisation
     replicates ``find_partition_temporal`` step for step with leidenalg's lower-level API
     (``time_slices_to_layers``, one ``CPMVertexPartition`` per layer, the zero-resolution interslice
-    partition, a seeded ``Optimiser.optimise_partition_multiplex``) — with an explicit γ the membership
-    is identical to ``find_partition_temporal``'s. ω stays absolute (raw tie-weight units) either way.
+    partition, a seeded ``Optimiser.optimise_partition_multiplex``), repeated for :data:`LEIDEN_RUNS` seeds and
+    keeping the run with the highest joint quality. ``diagnostics_out`` receives how the runs agree plus the
+    absolute identity-link weight used (``interslice_weight``).
 
     Returns ``(per_year, plurality, palette)``:
 
@@ -1219,6 +1430,7 @@ def detect_leiden_temporal(
     # that sit on the same scale, or a year whose heaviest tie is light would be inflated.
     weight_key = tie_weight_key(*year_graphs.values())
     gammas = temporal_slice_resolutions(year_graphs, resolution)
+    coupling = temporal_interslice_weight(year_graphs, interslice_weight)
     slices: list[ig.Graph] = []
     for year in years:
         undirected = to_undirected_sum(year_graphs[year], weight=weight_key)
@@ -1240,28 +1452,39 @@ def detect_leiden_temporal(
     # node_size is 1 for that slice's nodes and 0 for the rest, so a layer's CPM penalty counts its
     # own slice only. The interslice layer carries the identity links at resolution 0.
     layers, interslice_layer, union = leidenalg.time_slices_to_layers(
-        slices, interslice_weight=interslice_weight, vertex_id_attr="id", weight_attr="weight"
+        slices, interslice_weight=coupling, vertex_id_attr="id", weight_attr="weight"
     )
-    partitions = [
-        leidenalg.CPMVertexPartition(layer, node_sizes="node_size", weights="weight", resolution_parameter=gammas[year])
-        for year, layer in zip(years, layers, strict=True)
+    runs: list[tuple[float, list[int]]] = []
+    for run in range(LEIDEN_RUNS):
+        partitions = [
+            leidenalg.CPMVertexPartition(
+                layer, node_sizes="node_size", weights="weight", resolution_parameter=gammas[year]
+            )
+            for year, layer in zip(years, layers, strict=True)
+        ]
+        interslice_partition = leidenalg.CPMVertexPartition(
+            interslice_layer,
+            resolution_parameter=TEMPORAL_INTERSLICE_RESOLUTION,
+            node_sizes="node_size",
+            weights="weight",
+        )
+        optimiser = leidenalg.Optimiser()
+        optimiser.max_comm_size = LEIDEN_MAX_COMM_SIZE
+        optimiser.set_rng_seed(LEIDEN_SEED + run)
+        layers_to_optimise = partitions + [interslice_partition]
+        optimiser.optimise_partition_multiplex(
+            layers_to_optimise,
+            layer_weights=[TEMPORAL_LAYER_WEIGHT] * len(layers_to_optimise),
+            n_iterations=LEIDEN_N_ITERATIONS,
+        )
+        quality = sum(TEMPORAL_LAYER_WEIGHT * layer_partition.quality() for layer_partition in layers_to_optimise)
+        runs.append((quality, list(partitions[0].membership)))
+    best_membership = runs[_select_best_run(runs, objective="multislice CPM quality", diagnostics_out=diagnostics_out)][
+        1
     ]
-    interslice_partition = leidenalg.CPMVertexPartition(
-        interslice_layer,
-        resolution_parameter=TEMPORAL_INTERSLICE_RESOLUTION,
-        node_sizes="node_size",
-        weights="weight",
-    )
-    optimiser = leidenalg.Optimiser()
-    optimiser.max_comm_size = LEIDEN_MAX_COMM_SIZE
-    optimiser.set_rng_seed(LEIDEN_SEED)
-    layers_to_optimise = partitions + [interslice_partition]
-    optimiser.optimise_partition_multiplex(
-        layers_to_optimise,
-        layer_weights=[TEMPORAL_LAYER_WEIGHT] * len(layers_to_optimise),
-        n_iterations=LEIDEN_N_ITERATIONS,
-    )
-    union_membership = {(v["slice"], v["id"]): m for v, m in zip(union.vs, partitions[0].membership, strict=True)}
+    if diagnostics_out is not None:
+        diagnostics_out["interslice_weight"] = round(coupling, 6)
+    union_membership = {(v["slice"], v["id"]): m for v, m in zip(union.vs, best_membership, strict=True)}
     memberships = [
         [union_membership[(slice_index, v["id"])] for v in slice_graph.vs]
         for slice_index, slice_graph in enumerate(slices)
@@ -1299,7 +1522,11 @@ def detect_leiden_temporal(
 
 
 def detect_louvain(
-    graph: nx.DiGraph, palette_name: str, *, reverse: bool = False
+    graph: nx.DiGraph,
+    palette_name: str,
+    *,
+    reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Louvain modularity maximisation (Blondel et al. 2008) — the classic baseline, superseded by Leiden.
 
@@ -1318,22 +1545,34 @@ def detect_louvain(
     Edge weights from ``--edge-weight-strategy`` shape the partition; citation
     direction is dropped by the symmetrisation (so it shares
     ``UNDIRECTED_BASIS_STRATEGIES`` modularity reporting with ``LEIDEN``).
-    ``seed=0`` pins reproducibility — NetworkX's Louvain randomises node-visit
-    order, unlike the deterministic ``leidenalg`` partitions.
+    NetworkX's Louvain randomises the node-visit order, so it runs
+    :data:`LOUVAIN_RUNS` times with seeds ``LOUVAIN_SEED + k`` and the
+    highest-modularity run is reported (``diagnostics_out`` receives how the runs agree).
     """
-    communities = sorted(
-        nx.community.louvain_communities(
-            to_undirected_sum(graph),
+    undirected = to_undirected_sum(graph)
+    node_ids, node_id_map = _node_id_index(graph)
+    runs: list[tuple[float, list[int]]] = []
+    for run in range(LOUVAIN_RUNS):
+        communities = nx.community.louvain_communities(
+            undirected,
             weight="weight",
             resolution=MODULARITY_RESOLUTION,
             threshold=LOUVAIN_THRESHOLD,
             max_level=LOUVAIN_MAX_LEVEL,
-            seed=LOUVAIN_SEED,
-        ),
-        key=len,
-        reverse=True,
-    )
-    return _finalize_partition(graph, _assign_from_node_sets(communities), palette_name, reverse=reverse)
+            seed=LOUVAIN_SEED + run,
+        )
+        quality = (
+            nx.community.modularity(undirected, communities, weight="weight", resolution=MODULARITY_RESOLUTION)
+            if undirected.number_of_edges()
+            else 0.0
+        )
+        labels = [0] * len(node_ids)
+        for index, members in enumerate(communities):
+            for node_id in members:
+                labels[node_id_map[node_id]] = index
+        runs.append((quality, labels))
+    membership = runs[_select_best_run(runs, objective="modularity", diagnostics_out=diagnostics_out)][1]
+    return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
 def detect_consensus(
@@ -1343,6 +1582,7 @@ def detect_consensus(
     threshold: float,
     *,
     reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Consensus partition over the other selected algorithmic strategies (Lancichinetti & Fortunato 2012).
 
@@ -1350,15 +1590,20 @@ def detect_consensus(
     (see :func:`consensus_eligible`) — the partitions this run already computed. The
     co-assignment matrix ``D_ij`` = the fraction of input partitions placing ``i`` and ``j``
     in the same community; pairs with ``D_ij ≥ threshold`` become the weighted, undirected
-    *consensus graph*, which is clustered with Leiden modularity (``seed=0``, the same
-    machinery as ``LEIDEN``). Channels grouped together only when at least a ``threshold``
-    share of the algorithms agree; channels no algorithm coalition can place end up as
-    singletons — an honest "no consensus" answer rather than a forced assignment.
+    *consensus graph*, which is clustered with Leiden modularity (best of :data:`LEIDEN_RUNS`
+    seeds, the same machinery as ``LEIDEN``). Channels grouped together only when at least a
+    ``threshold`` share of the algorithms agree; channels no algorithm coalition can place end
+    up as singletons — an honest "no consensus" answer rather than a forced assignment.
+
+    Channels with no tie in ``graph`` are left out of the co-assignment counts: every merging
+    detector puts them in one shared residual community (:data:`MERGE_ISOLATED_NODES`), so
+    counting them would turn that display convenience into unanimous "agreement" — a clique of
+    unrelated channels in the consensus graph. They end up in the residual community here too.
 
     **Adaptation note.** Lancichinetti & Fortunato iterate — recluster ``D`` with the base
     algorithm ``n_P`` times, rebuild ``D``, repeat until block-diagonal — because their
     inputs are stochastic re-runs of one algorithm. Pulpit's input partitions are
-    deterministic (every detector is seeded), so the procedure degenerates: after the first
+    deterministic (every detector is seeded and reports its best fit), so the procedure degenerates: after the first
     clustering pass the rebuilt ``D`` is exactly the 0/1 block matrix of that partition and
     every further pass is a fixed point. One pass is therefore the faithful specialisation,
     and what runs here. This is *method* consensus (different algorithms, one run each) in
@@ -1382,7 +1627,7 @@ def detect_consensus(
         by_community: dict[Any, list[int]] = {}
         for node_id, community_id in community_map.items():
             index = node_id_map.get(node_id)
-            if index is not None:
+            if index is not None and graph.degree(node_id) > 0:
                 by_community.setdefault(community_id, []).append(index)
         for members in by_community.values():
             members.sort()
@@ -1397,15 +1642,14 @@ def detect_consensus(
             edges.append(pair)
             weights.append(agreement)
     consensus_graph.add_edges(edges)
-    partition = leidenalg.find_partition(
+    membership = _best_leiden_membership(
         consensus_graph,
         leidenalg.ModularityVertexPartition,
+        objective="modularity of the consensus graph",
+        diagnostics_out=diagnostics_out,
         weights=weights if weights else None,
-        n_iterations=LEIDEN_N_ITERATIONS,
-        max_comm_size=LEIDEN_MAX_COMM_SIZE,
-        seed=LEIDEN_SEED,
     )
-    return _finalize_partition(graph, _assign_from_partition(partition, node_ids), palette_name, reverse=reverse)
+    return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
 @contextmanager
@@ -1469,6 +1713,32 @@ def _mcmc_partition_mode(
     return community_map, confidence
 
 
+def _best_sbm_fit(
+    fit: Callable[[], Any],
+    blocks_of: Callable[[Any], Any],
+    *,
+    diagnostics_out: "dict[str, Any] | None" = None,
+) -> Any:
+    """The lowest-description-length state of :data:`SBM_FIT_RESTARTS` graph-tool fits.
+
+    ``fit()`` runs one complete fit (multilevel minimisation plus zero-temperature refinement) and returns its
+    state; ``blocks_of(state)`` reads the node-level partition for the agreement diagnostics. The fits draw on
+    the RNG stream :func:`_seeded_graph_tool` seeded, so the set of fits — and the choice — is reproducible.
+    """
+    import numpy as np
+
+    runs: list[tuple[float, Any]] = []
+    best_state: Any = None
+    for _ in range(SBM_FIT_RESTARTS):
+        state = fit()
+        entropy = float(state.entropy())
+        if best_state is None or entropy < min(quality for quality, _ in runs):
+            best_state = state
+        runs.append((entropy, np.asarray(blocks_of(state).a).copy()))
+    _select_best_run(runs, objective="description length (nats)", minimise=True, diagnostics_out=diagnostics_out)
+    return best_state
+
+
 def detect_sbm(
     graph: nx.DiGraph,
     palette_name: str,
@@ -1477,6 +1747,7 @@ def detect_sbm(
     refine: str = SBM_DEFAULT_REFINE,
     *,
     reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
     """Bayesian degree-corrected stochastic block model (Karrer & Newman 2011; Peixoto 2014, 2017) via graph-tool.
 
@@ -1510,8 +1781,13 @@ def detect_sbm(
     at the bottom (finest) hierarchy level — better model selection on large graphs, avoiding
     the underfitting of the flat model; ``FLAT`` fits a single-level SBM.
 
-    ``refine``: empty (default) reports the single MDL point estimate. ``MCMC`` follows the
-    fit with multiflip MCMC equilibration and collects ``SBM_MCMC_SAMPLES`` posterior
+    The point estimate is the lowest description length of :data:`SBM_FIT_RESTARTS` fits, each
+    refined by :data:`SBM_REFINE_SWEEPS` zero-temperature merge-split sweeps (graph-tool's advice:
+    a single agglomerative fit can stop in a poor local minimum); ``diagnostics_out`` receives how
+    the fits agree.
+
+    ``refine``: empty (default) reports that point estimate. ``MCMC`` follows the
+    best fit with multiflip MCMC equilibration and collects ``SBM_MCMC_SAMPLES`` posterior
     partitions; the reported partition is then each node's **maximum-marginal** block after
     label alignment (Peixoto 2021, "Revealing consensus and dissensus between network
     partitions", via ``PartitionModeState``), and the third return value maps each node to
@@ -1577,10 +1853,23 @@ def detect_sbm(
 
         nested = mode.upper() != "FLAT"
         fit_args = {"niter": SBM_FIT_NITER, "beta": SBM_FIT_BETA}
-        if nested:
-            state = gt.minimize_nested_blockmodel_dl(gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args)
-        else:
-            state = gt.minimize_blockmodel_dl(gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args)
+
+        def _fit() -> Any:
+            if nested:
+                fitted = gt.minimize_nested_blockmodel_dl(
+                    gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args
+                )
+            else:
+                fitted = gt.minimize_blockmodel_dl(gt_graph, state_args=state_args, multilevel_mcmc_args=fit_args)
+            for _ in range(SBM_REFINE_SWEEPS):
+                fitted.multiflip_mcmc_sweep(beta=SBM_FIT_BETA, niter=SBM_REFINE_NITER)
+            return fitted
+
+        state = _best_sbm_fit(
+            _fit,
+            lambda fitted: (fitted.get_levels()[0] if nested else fitted).get_blocks(),
+            diagnostics_out=diagnostics_out,
+        )
 
         confidence: dict[str, float] | None = None
         community_map: CommunityMap
@@ -1609,6 +1898,7 @@ def detect_sbm_assortative(
     refine: str = SBM_DEFAULT_REFINE,
     *,
     reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette, "dict[str, float] | None"]:
     """Bayesian planted-partition communities (Zhang & Peixoto 2020) via graph-tool's ``PPBlockState``.
 
@@ -1625,10 +1915,14 @@ def detect_sbm_assortative(
     Fitted on the **undirected W+Wᵀ projection** (assortativity is a symmetric notion — the
     same projection the Leiden family uses) and **unweighted** (binary citation structure, so
     the partition is invariant to ``--edge-weight-strategy``, like ``KCORE`` and the binary
-    ``SBM``). Parameter-free and seeded: the greedy fit runs ``PP_GREEDY_NITER``
-    zero-temperature merge-split sweeps, graph-tool's documented pattern.
+    ``SBM``). Parameter-free and seeded. Each fit starts from graph-tool's multilevel
+    ``minimize_blockmodel_dl(state=PPBlockState)`` and is refined by ``PP_GREEDY_NITER``
+    zero-temperature merge-split sweeps; the lowest description length of
+    :data:`SBM_FIT_RESTARTS` fits is reported (``diagnostics_out`` receives how they agree). A
+    single greedy sweep from a random start — the earlier procedure — routinely stopped in a poor
+    local minimum, reporting fewer, coarser communities than the data support.
 
-    ``refine``: empty (default) reports the greedy point estimate. ``MCMC`` equilibrates and
+    ``refine``: empty (default) reports that point estimate. ``MCMC`` equilibrates and
     samples the posterior exactly like ``SBM(refine=MCMC)`` — the reported partition becomes
     each channel's max-marginal community and the third return value carries the per-channel
     assignment confidence (share of posterior samples agreeing); ``None`` without MCMC.
@@ -1653,8 +1947,14 @@ def detect_sbm_assortative(
         gt_graph.add_vertex(len(node_ids))
         gt_graph.add_edge_list([(node_id_map[s], node_id_map[t]) for s, t in undirected.edges()])
 
-        state = gt.PPBlockState(gt_graph)
-        state.multiflip_mcmc_sweep(beta=PP_GREEDY_BETA, niter=PP_GREEDY_NITER)
+        fit_args = {"niter": SBM_FIT_NITER, "beta": SBM_FIT_BETA}
+
+        def _fit() -> Any:
+            fitted = gt.minimize_blockmodel_dl(gt_graph, state=gt.PPBlockState, multilevel_mcmc_args=fit_args)
+            fitted.multiflip_mcmc_sweep(beta=PP_GREEDY_BETA, niter=PP_GREEDY_NITER)
+            return fitted
+
+        state = _best_sbm_fit(_fit, lambda fitted: fitted.get_blocks(), diagnostics_out=diagnostics_out)
 
         confidence: dict[str, float] | None = None
         community_map: CommunityMap
@@ -1698,6 +1998,7 @@ def detect(
     channel_dict: dict[str, Any],
     *,
     reverse: bool = False,
+    diagnostics_out: "dict[str, Any] | None" = None,
 ) -> tuple[CommunityMap, CommunityPalette]:
     """Run community detection for one strategy instance. Returns (community_map, community_palette).
 
@@ -1705,6 +2006,11 @@ def detect(
     as a parameter-free instance) for convenience. Parameterised strategies read their tunable values
     from the instance — LEIDEN_CPM its ``resolution`` γ, which when omitted (auto) is the weighted edge
     density of ``graph`` (:func:`cpm_resolution` reports the γ used).
+
+    ``diagnostics_out``, when given, receives the fit summary of the stochastic detectors — how many
+    seeded fits ran, the best and worst objective value, and how far the fits agree with the reported
+    partition (:func:`_select_best_run`). KCORE and the label-group partitions are deterministic and
+    leave it empty.
     """
     if isinstance(instance, str):
         instance = StrategyInstance(instance.upper())
@@ -1727,14 +2033,16 @@ def detect(
     if strategy == "KCORE":
         return detect_kcore(graph, palette_name, reverse=reverse)
     if strategy == "LEIDEN":
-        return detect_leiden(graph, palette_name, reverse=reverse)
+        return detect_leiden(graph, palette_name, reverse=reverse, diagnostics_out=diagnostics_out)
     if strategy == "LEIDEN_DIRECTED":
-        return detect_leiden_directed(graph, palette_name, reverse=reverse)
+        return detect_leiden_directed(graph, palette_name, reverse=reverse, diagnostics_out=diagnostics_out)
     if strategy == "LEIDEN_CPM":
         # An omitted / auto resolution reaches the detector as None → the graph's own density.
-        return detect_leiden_cpm(graph, palette_name, instance_resolution(instance), reverse=reverse)
+        return detect_leiden_cpm(
+            graph, palette_name, instance_resolution(instance), reverse=reverse, diagnostics_out=diagnostics_out
+        )
     if strategy == "LOUVAIN":
-        return detect_louvain(graph, palette_name, reverse=reverse)
+        return detect_louvain(graph, palette_name, reverse=reverse, diagnostics_out=diagnostics_out)
     if strategy == "SBM":
         community_map, community_palette, confidence = detect_sbm(
             graph,
@@ -1743,6 +2051,7 @@ def detect(
             str(params.get("weights", SBM_DEFAULT_WEIGHTS) or ""),
             str(params.get("refine", SBM_DEFAULT_REFINE) or ""),
             reverse=reverse,
+            diagnostics_out=diagnostics_out,
         )
         _write_confidence(graph, channel_dict, instance, confidence)
         return community_map, community_palette
@@ -1752,6 +2061,7 @@ def detect(
             palette_name,
             str(params.get("refine", SBM_DEFAULT_REFINE) or ""),
             reverse=reverse,
+            diagnostics_out=diagnostics_out,
         )
         _write_confidence(graph, channel_dict, instance, confidence)
         return community_map, community_palette

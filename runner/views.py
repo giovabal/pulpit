@@ -198,12 +198,14 @@ class OperationsView(View):
                 "container_groups": container_groups,
                 "has_vacancies": has_vacancies,
                 "environment_deepest": deepest_environment,
-                # MODULEROLE basis choices: every algorithmic strategy plus each manual LABELGROUP<id>
+                # MODULEROLE basis choices: every algorithmic strategy but KCORE (k-shells are nested
+                # connectivity layers, not modules — the command rejects it) plus each manual LABELGROUP<id>
                 # partition (so a within-module role can be computed against a label group too).
                 "all_basis_choices": sorted(
                     [
                         (key, net_community.COMMUNITY_STRATEGY_LABELS.get(key, key))
                         for key in net_community.VALID_STRATEGIES
+                        if key != "KCORE"
                     ]
                     # Label groups are tagged "[custom label]" here — outside their own picker the
                     # option needs to read as a manual partition, not an algorithm.

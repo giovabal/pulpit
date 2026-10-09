@@ -13,7 +13,7 @@ from network.near_copies import (
     near_copies_for_channels,
 )
 from network.parameters import FixedParameter
-from network.utils import channel_cutoff_q, environment_channels, make_date_q
+from network.utils import DEAD_LEAVES_KEY, channel_cutoff_q, environment_channels, make_date_q
 from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
@@ -448,6 +448,9 @@ def build_graph(
     channel_dict: dict[str, dict[str, Any]] = {}
     channels = list(channel_qs)
     activity_bounds = _channel_activity_bounds([channel.pk for channel in channels])
+    # Dead leaves: drawn only because a monitored channel cited them — their own (outgoing) citations are
+    # outside the analysis, so the out-tie measures treat them as censored (network.utils.dead_leaf_ids).
+    dead_leaves: set[str] = set()
     for channel in channels:
         data_min, data_max = activity_bounds.get(channel.pk, (None, None))
         created = timezone.localdate(channel.date) if channel.date else None
@@ -483,6 +486,7 @@ def build_graph(
             node_depth = channel.environment_depth
         else:
             node_depth = 1  # dead leaf: cited directly by a monitored channel
+            dead_leaves.add(str(channel.pk))
         node_data = channel_network_data(
             channel,
             skip=_skip,
@@ -642,5 +646,6 @@ def build_graph(
         graph.remove_node(cid)
         del channel_dict[cid]
     channel_qs = channel_qs.filter(pk__in=[int(cid) for cid in channel_dict])
+    graph.graph[DEAD_LEAVES_KEY] = frozenset(cid for cid in dead_leaves if cid in channel_dict)
 
     return graph, channel_dict, edge_list, channel_qs

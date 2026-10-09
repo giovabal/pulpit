@@ -13,7 +13,9 @@ import networkx as nx
 #: A channel whose latest message (or creation) is less than this many days old at export time is still
 #: active: its activity period is shown open-ended ("Jan 2024 - ").
 ACTIVITY_ONGOING_DAYS = 30
-#: Edge attribute the participation coefficient weighs a node's ties by (the rescaled run edge weight).
+#: Edge attribute the *weighted* participation coefficient (``participation_weighted``) weighs a node's ties by —
+#: the rescaled run edge weight, summed over both directions of a tie. The role label and the ``participation``
+#: column use the unweighted coefficient, as Guimerà & Amaral (2005) define it and calibrate the role thresholds on.
 PARTICIPATION_WEIGHT = "weight"
 
 #: The values fixed in this module (``PARAMETERS.md``); the base node measures are always computed.
@@ -27,12 +29,14 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         source="network/measures/_base.py: ACTIVITY_ONGOING_DAYS",
     ),
     FixedParameter(
-        name="Participation coefficient edge weight",
+        name="Weighted participation edge weight",
         value=PARTICIPATION_WEIGHT,
         scope="measure:MODULEROLE",
-        affects="The participation coefficient weighs each tie by this edge attribute — the run's edge weight, "
-        "so it follows --edge-weight-strategy — while the within-module z-score counts neighbours unweighted.",
+        affects="The companion column participation_weighted weighs each tie by this edge attribute (both "
+        "directions summed) — the run's edge weight, so it follows --edge-weight-strategy. The participation "
+        "column and the role label count distinct neighbours unweighted, like the within-module z-score.",
         source="network/measures/_base.py: PARTICIPATION_WEIGHT",
+        note="Guimerà & Amaral (2005) define P and calibrate the role thresholds on unweighted degrees.",
     ),
 )
 
@@ -66,44 +70,50 @@ def apply_measure(
 def compute_neighbour_community_participation(
     graph: nx.DiGraph,
     partition: dict[Any, Any],
+    weight: str | None = None,
 ) -> dict[Any, float]:
-    """Participation coefficient (Guimerà & Amaral, *Nature* 2005) of each node
-    over the community distribution of its weighted neighbours (predecessors ∪
-    successors):
+    """Participation coefficient (Guimerà & Amaral, *Nature* 2005) of each node over
+    the communities of its neighbours (predecessors ∪ successors, self excluded):
 
-        ``P(v) = 1 − Σ_c (w_c / W)²``
+        ``P(v) = 1 − Σ_c (k_c / k)²``
 
-    where ``w_c`` is the total edge weight from ``v`` to community ``c`` and ``W``
-    the total neighbour weight. ``P`` is 0 when every neighbour sits in a single
+    where ``k_c`` counts ``v``'s neighbours in community ``c`` and ``k`` all its
+    community-tagged neighbours. ``P`` is 0 when every neighbour sits in a single
     community (no bridging) and approaches 1 as ``v``'s ties spread evenly across
     many communities — the canonical community-role quantity, bounded in ``[0, 1]``.
 
-    Used by :func:`network.measures._centrality.apply_module_role` as the P axis
-    of the Guimerà & Amaral within-module-role plane, and exported by it as the
-    sortable numeric measure ``participation``.
+    ``weight=None`` (default) is Guimerà & Amaral's own, unweighted definition: each
+    distinct neighbour counts once whatever the direction of the tie, exactly as the
+    within-module degree of the z axis counts it — the definition the role thresholds
+    were calibrated on. With an edge attribute name, each neighbour counts its tie
+    weight summed over both directions (the W+Wᵀ strength towards the community), the
+    weighted generalisation.
 
-    Nodes absent from ``partition``: their edges are skipped (treated as
-    "unknown community", contributing nothing). Nodes with no community-tagged
-    neighbours, or all neighbours in one community, receive 0.0.
+    Used by :func:`network.measures._centrality.apply_module_role`: the unweighted
+    coefficient is the P axis of the role plane and the ``participation`` column, the
+    weighted one the ``participation_weighted`` companion.
+
+    Neighbours absent from ``partition`` are skipped (an "unknown community",
+    contributing nothing). Nodes with no community-tagged neighbour, or all of them in
+    one community, receive 0.0.
     """
     participation: dict[Any, float] = {}
     for node in graph.nodes():
         weights: dict[Any, float] = {}
-        for pred in graph.predecessors(node):
-            if pred == node:
-                continue  # self-loop: excluded so it isn't double-counted (node is in both
-                # predecessors and successors), matching the `- {node}` of the within-module z axis
-            w = graph.edges[pred, node].get(PARTICIPATION_WEIGHT, 1.0)
-            c = partition.get(pred)
-            if c is not None:
-                weights[c] = weights.get(c, 0.0) + w
-        for succ in graph.successors(node):
-            if succ == node:
-                continue  # ditto
-            w = graph.edges[node, succ].get(PARTICIPATION_WEIGHT, 1.0)
-            c = partition.get(succ)
-            if c is not None:
-                weights[c] = weights.get(c, 0.0) + w
+        neighbours = (set(graph.predecessors(node)) | set(graph.successors(node))) - {node}
+        for neighbour in neighbours:
+            c = partition.get(neighbour)
+            if c is None:
+                continue
+            if weight is None:
+                w = 1.0
+            else:
+                w = 0.0
+                if graph.has_edge(neighbour, node):
+                    w += graph.edges[neighbour, node].get(weight, 1.0)
+                if graph.has_edge(node, neighbour):
+                    w += graph.edges[node, neighbour].get(weight, 1.0)
+            weights[c] = weights.get(c, 0.0) + w
         total = sum(weights.values())
         if total == 0.0 or len(weights) <= 1:
             participation[node] = 0.0

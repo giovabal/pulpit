@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 
 from network.community import (
     COMMUNITY_ALGORITHMS,
+    LEIDEN_RUNS,
     VALID_STRATEGIES,
     apply_edge_colors,
     apply_to_graph,
@@ -435,7 +436,7 @@ class DetectLeidenTemporalTests(TestCase):
     def test_explicit_resolution_matches_find_partition_temporal(self, _mock: MagicMock) -> None:
         # The unrolled multiplex optimisation (one CPMVertexPartition per layer, so each slice can
         # carry its own γ) must reproduce leidenalg.find_partition_temporal exactly for a single γ.
-        from network.community import detect_leiden_temporal
+        from network.community import LEIDEN_N_ITERATIONS, detect_leiden_temporal, temporal_interslice_weight
         from network.utils import to_undirected_sum
 
         import igraph as ig
@@ -460,9 +461,11 @@ class DetectLeidenTemporalTests(TestCase):
             memberships, _ = leidenalg.find_partition_temporal(
                 slices,
                 leidenalg.CPMVertexPartition,
-                interslice_weight=omega,
+                # ω is relative: the identity link weighs ω × the slices' mean tie weight.
+                interslice_weight=temporal_interslice_weight(year_graphs, omega),
                 vertex_id_attr="id",
                 weight_attr="weight",
+                n_iterations=LEIDEN_N_ITERATIONS,
                 seed=0,
                 resolution_parameter=gamma,
             )
@@ -473,7 +476,9 @@ class DetectLeidenTemporalTests(TestCase):
             return {frozenset(group) for group in groups.values()}
 
         def ours(gamma: float, omega: float) -> set[frozenset]:
-            per_year, _, _ = detect_leiden_temporal(year_graphs, "P", gamma, omega)
+            # One seeded run, so the comparison is run for run with find_partition_temporal(seed=0).
+            with patch("network.community.LEIDEN_RUNS", 1):
+                per_year, _, _ = detect_leiden_temporal(year_graphs, "P", gamma, omega)
             groups: dict[int, set] = {}
             for year, community_map in per_year.items():
                 for node_id, cid in community_map.items():
@@ -507,13 +512,14 @@ class DetectLeidenTemporalTests(TestCase):
         with patch("network.community.leidenalg.CPMVertexPartition", side_effect=real_cpm) as spy:
             detect_leiden_temporal(year_graphs, "P", None, 1.0)
         used = [call.kwargs["resolution_parameter"] for call in spy.call_args_list]
-        self.assertEqual(used, [gammas[2020], gammas[2021], 0])
+        # One set of layer partitions per seeded run (best of LEIDEN_RUNS).
+        self.assertEqual(used, [gammas[2020], gammas[2021], 0] * LEIDEN_RUNS)
 
     @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
     def test_auto_resolution_invariant_to_uniform_rescale_at_zero_coupling(self, _mock: MagicMock) -> None:
         # With ω = 0 the slices decouple, so the per-slice density default makes each year's partition
-        # independent of a uniform rescale of the raw ties (ω itself is absolute, so this holds only
-        # where the coupling does not compete with the ties).
+        # independent of a uniform rescale of the raw ties. ω is relative to the mean tie weight, so the
+        # invariance also holds with the years coupled.
         from network.community import detect_leiden_temporal
 
         def scaled(graph: nx.DiGraph, factor: float) -> nx.DiGraph:
@@ -523,10 +529,12 @@ class DetectLeidenTemporalTests(TestCase):
             return copy
 
         year_graphs = {2020: _cpm_fixture(3, scale=4.0), 2021: _cpm_fixture(5, scale=40.0)}
-        reference, _, _ = detect_leiden_temporal(year_graphs, "P", None, 0.0)
         rescaled = {year: scaled(graph, 4.0) for year, graph in year_graphs.items()}
-        per_year, _, _ = detect_leiden_temporal(rescaled, "P", None, 0.0)
-        self.assertEqual(per_year, reference)
+        for omega in (0.0, 1.0):
+            with self.subTest(omega=omega):
+                reference, _, _ = detect_leiden_temporal(year_graphs, "P", None, omega)
+                per_year, _, _ = detect_leiden_temporal(rescaled, "P", None, omega)
+                self.assertEqual(per_year, reference)
 
     def test_requires_two_year_slices(self) -> None:
         from network.community import detect_leiden_temporal
@@ -1273,10 +1281,9 @@ class CommunityFixedParametersTests(TestCase):
         from sklearn.metrics import adjusted_mutual_info_score, normalized_mutual_info_score
 
         find_partition = inspect.signature(leidenalg.find_partition).parameters
-        self.assertEqual(find_partition["n_iterations"].default, c.LEIDEN_N_ITERATIONS)
+        # LEIDEN_N_ITERATIONS (−1, iterate to convergence) and the relative TEMPORAL_DEFAULT_INTERSLICE are
+        # Pulpit's own choices, not leidenalg defaults, so they are not checked here.
         self.assertEqual(find_partition["max_comm_size"].default, c.LEIDEN_MAX_COMM_SIZE)
-        temporal = inspect.signature(leidenalg.find_partition_temporal).parameters
-        self.assertEqual(temporal["interslice_weight"].default, c.TEMPORAL_DEFAULT_INTERSLICE)
         louvain = inspect.signature(nx.community.louvain_communities).parameters
         self.assertEqual(louvain["resolution"].default, c.MODULARITY_RESOLUTION)
         self.assertEqual(louvain["threshold"].default, c.LOUVAIN_THRESHOLD)
@@ -1332,9 +1339,11 @@ class CommunityFixedParametersTests(TestCase):
             directed, _ = c.detect_leiden_directed(graph, "vaporwave")
             c.detect_leiden_cpm(graph, "vaporwave")
             c.detect_consensus(graph, "vaporwave", {"leiden": leiden, "leiden_directed": directed}, 0.5)
-        self.assertEqual(spy.call_count, 4)
+        # Four detectors, each the best of LEIDEN_RUNS runs seeded LEIDEN_SEED, LEIDEN_SEED + 1, …
+        self.assertEqual(spy.call_count, 4 * c.LEIDEN_RUNS)
+        seeds = list(range(c.LEIDEN_SEED, c.LEIDEN_SEED + c.LEIDEN_RUNS))
+        self.assertEqual([call.kwargs["seed"] for call in spy.call_args_list], seeds * 4)
         for call in spy.call_args_list:
-            self.assertEqual(call.kwargs["seed"], c.LEIDEN_SEED)
             self.assertEqual(call.kwargs["n_iterations"], c.LEIDEN_N_ITERATIONS)
             self.assertEqual(call.kwargs["max_comm_size"], c.LEIDEN_MAX_COMM_SIZE)
         # MERGE_ISOLATED_NODES: the two isolated channels share one community.
@@ -1346,11 +1355,11 @@ class CommunityFixedParametersTests(TestCase):
 
         import leidenalg
 
-        calls: dict[str, Any] = {}
+        calls: dict[str, Any] = {"seeds": []}
 
         class RecordingOptimiser(leidenalg.Optimiser):
             def set_rng_seed(self, value: int) -> None:
-                calls["seed"] = value
+                calls["seeds"].append(value)
                 super().set_rng_seed(value)
 
             def optimise_partition_multiplex(
@@ -1371,7 +1380,7 @@ class CommunityFixedParametersTests(TestCase):
             patch.object(leidenalg, "CPMVertexPartition", wraps=leidenalg.CPMVertexPartition) as cpm,
         ):
             c.detect_leiden_temporal({2020: self._graph(), 2021: self._graph()}, "vaporwave", None, 1.0)
-        self.assertEqual(calls["seed"], c.LEIDEN_SEED)
+        self.assertEqual(calls["seeds"], list(range(c.LEIDEN_SEED, c.LEIDEN_SEED + c.LEIDEN_RUNS)))
         self.assertEqual(calls["n_iterations"], c.LEIDEN_N_ITERATIONS)
         self.assertEqual(calls["max_comm_size"], c.LEIDEN_MAX_COMM_SIZE)
         self.assertEqual(calls["layers"], 3)  # two year slices + the interslice layer
@@ -1384,11 +1393,14 @@ class CommunityFixedParametersTests(TestCase):
 
         with patch.object(nx.community, "louvain_communities", wraps=nx.community.louvain_communities) as spy:
             c.detect_louvain(self._graph(), "vaporwave")
+        self.assertEqual(
+            [call.kwargs["seed"] for call in spy.call_args_list],
+            list(range(c.LOUVAIN_SEED, c.LOUVAIN_SEED + c.LOUVAIN_RUNS)),
+        )
         kwargs = spy.call_args.kwargs
         self.assertEqual(kwargs["resolution"], c.MODULARITY_RESOLUTION)
         self.assertEqual(kwargs["threshold"], c.LOUVAIN_THRESHOLD)
         self.assertEqual(kwargs["max_level"], c.LOUVAIN_MAX_LEVEL)
-        self.assertEqual(kwargs["seed"], c.LOUVAIN_SEED)
 
     def test_sbm_family_passes_the_declared_constants(self) -> None:
         import importlib.util
@@ -1406,6 +1418,13 @@ class CommunityFixedParametersTests(TestCase):
             greedy_sweeps.append(kwargs)
             return original_sweep(state, *args, **kwargs)
 
+        refine_sweeps: list[dict[str, Any]] = []
+        original_refine = gt.BlockState.multiflip_mcmc_sweep
+
+        def _record_refine(state: Any, *args: Any, **kwargs: Any) -> Any:
+            refine_sweeps.append(kwargs)
+            return original_refine(state, *args, **kwargs)
+
         with (
             patch.object(gt, "seed_rng", wraps=gt.seed_rng) as seed,
             patch.object(gt, "minimize_blockmodel_dl", wraps=gt.minimize_blockmodel_dl) as flat,
@@ -1413,16 +1432,30 @@ class CommunityFixedParametersTests(TestCase):
             patch.object(gt, "mcmc_equilibrate", wraps=gt.mcmc_equilibrate) as equilibrate,
             patch.object(gt, "PartitionModeState", wraps=gt.PartitionModeState) as mode,
             patch.object(gt.PPBlockState, "multiflip_mcmc_sweep", _record_sweep),
+            patch.object(gt.BlockState, "multiflip_mcmc_sweep", _record_refine),
         ):
             c.detect_sbm(self._graph(), "vaporwave", "FLAT", refine="MCMC")
+            flat_sbm_fits = flat.call_count
             c.detect_sbm(self._graph(), "vaporwave", "NESTED")
             c.detect_sbm_assortative(self._graph(), "vaporwave")
 
         self.assertEqual({call.args[0] for call in seed.call_args_list}, {c.SBM_SEED})
         fit_args = {"niter": c.SBM_FIT_NITER, "beta": c.SBM_FIT_BETA}
-        for fit in (flat, nested):
-            self.assertEqual(fit.call_args.kwargs["state_args"]["deg_corr"], c.SBM_DEGREE_CORRECTED)
-            self.assertEqual(fit.call_args.kwargs["multilevel_mcmc_args"], fit_args)
+        # Each family is the best of SBM_FIT_RESTARTS fits: the flat SBM, the nested SBM, and the planted
+        # partition (whose multilevel fit is minimize_blockmodel_dl with state=PPBlockState).
+        self.assertEqual(flat_sbm_fits, c.SBM_FIT_RESTARTS)
+        self.assertEqual(nested.call_count, c.SBM_FIT_RESTARTS)
+        self.assertEqual(flat.call_count, 2 * c.SBM_FIT_RESTARTS)
+        for call in [*flat.call_args_list[:flat_sbm_fits], *nested.call_args_list]:
+            self.assertEqual(call.kwargs["state_args"]["deg_corr"], c.SBM_DEGREE_CORRECTED)
+            self.assertEqual(call.kwargs["multilevel_mcmc_args"], fit_args)
+        for call in flat.call_args_list[flat_sbm_fits:]:
+            self.assertIs(call.kwargs["state"], gt.PPBlockState)
+            self.assertEqual(call.kwargs["multilevel_mcmc_args"], fit_args)
+        # Every flat-SBM fit is refined by SBM_REFINE_SWEEPS zero-temperature sweeps (nested states sweep through
+        # their own class, so only the flat fits reach the recorded BlockState method).
+        refine = {"beta": c.SBM_FIT_BETA, "niter": c.SBM_REFINE_NITER}
+        self.assertGreaterEqual(refine_sweeps.count(refine), c.SBM_FIT_RESTARTS * c.SBM_REFINE_SWEEPS)
         mcmc_args = {"niter": c.SBM_MCMC_SWEEP_NITER, "beta": c.SBM_MCMC_BETA}
         equilibration, sampling = (call.kwargs for call in equilibrate.call_args_list)
         self.assertEqual(equilibration["wait"], c.SBM_MCMC_WAIT)
@@ -1433,7 +1466,7 @@ class CommunityFixedParametersTests(TestCase):
             self.assertEqual(kwargs["multiflip"], c.SBM_MCMC_MULTIFLIP)
             self.assertEqual(kwargs["mcmc_args"], mcmc_args)
         self.assertEqual(mode.call_args.kwargs, {"relabel": c.SBM_MODE_RELABEL, "converge": c.SBM_MODE_CONVERGE})
-        self.assertEqual(greedy_sweeps, [{"beta": c.PP_GREEDY_BETA, "niter": c.PP_GREEDY_NITER}])
+        self.assertEqual(greedy_sweeps, [{"beta": c.PP_GREEDY_BETA, "niter": c.PP_GREEDY_NITER}] * c.SBM_FIT_RESTARTS)
 
     def test_statistics_pass_the_declared_constants(self) -> None:
         from network import community as c, community_stats as cs
@@ -1458,9 +1491,8 @@ class CommunityFixedParametersTests(TestCase):
                 "seed": cs.ALGEBRAIC_CONNECTIVITY_SEED,
             },
         )
-        self.assertEqual(
-            clustering.call_args.kwargs, {"weight": cs.CLUSTERING_WEIGHT, "count_zeros": cs.CLUSTERING_COUNT_ZEROS}
-        )
+        self.assertEqual(clustering.call_args.kwargs["weight"], cs.CLUSTERING_WEIGHT)
+        self.assertEqual(clustering.call_args.kwargs["count_zeros"], cs.CLUSTERING_COUNT_ZEROS)
 
         nodes = sorted(graph.nodes())
         graph_data = {"nodes": [{"id": n, "communities": {"leiden": "x" if n in "abc" else "y"}} for n in nodes]}
@@ -1555,8 +1587,10 @@ class BuildGraphTests(TestCase):
         self.assertGreater(ch3.in_degree or 0, 0)
         # Create a ch1↔ch2 edge so graph is valid
         self._create_forward()
-        _, channel_dict_dl, _, _ = build_graph(draw_dead_leaves=True)
+        graph_dl, channel_dict_dl, _, _ = build_graph(draw_dead_leaves=True)
         self.assertIn(str(ch3.pk), channel_dict_dl)
+        # The graph records which nodes are dead leaves (their own citations are never read).
+        self.assertEqual(graph_dl.graph["dead_leaves"], frozenset({str(ch3.pk)}))
 
     def test_draw_dead_leaves_false_excludes_out_of_target(self) -> None:
         ch3 = make_channel(telegram_id=3, label=None, title="Dead Leaf")
@@ -2568,7 +2602,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("LEIDEN", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False, diagnostics_out=None)
 
     @patch("network.community.detect_louvain")
     def test_louvain_strategy_calls_detect_louvain(self, mock_detect: MagicMock) -> None:
@@ -2576,7 +2610,7 @@ class DetectDispatcherTests(TestCase):
 
         mock_detect.return_value = ({}, {})
         detect("LOUVAIN", "palette", self.graph, self.channel_dict)
-        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False)
+        mock_detect.assert_called_once_with(self.graph, "palette", reverse=False, diagnostics_out=None)
 
     @patch("network.community.detect_labelgroup")
     def test_labelgroup_strategy_dispatches_to_detect_labelgroup(self, mock_detect: MagicMock) -> None:
@@ -2712,8 +2746,11 @@ class TemporalPrecomputeTests(TestCase):
 
         (key,) = [inst.key for inst in temporal_instances]
         self.assertEqual(key, "leiden_temporal_interslice_1_0")  # bare token: γ auto, not in the key
-        per_year, plurality, palette, slice_resolutions = results[key]
+        per_year, plurality, palette, slice_resolutions, fit = results[key]
         self.assertEqual(set(per_year), {2023, 2024})
+        # The multislice fit summary: best of LEIDEN_RUNS runs, plus the absolute identity-link weight.
+        self.assertEqual(fit["runs"], LEIDEN_RUNS)
+        self.assertGreater(fit["interslice_weight"], 0.0)
         # Auto γ: each slice's own density — positive, one per slice.
         self.assertEqual(set(slice_resolutions), {2023, 2024})
         self.assertTrue(all(gamma > 0 for gamma in slice_resolutions.values()))
@@ -2823,7 +2860,13 @@ class CpmResolutionCommandTests(TestCase):
         temporal_key = strategies[2].key
         year_map = dict.fromkeys(graph.nodes(), 1)
         temporal_results = {
-            temporal_key: ({2023: year_map, 2024: year_map}, year_map, {1: (255, 0, 0)}, {2023: 0.11, 2024: 0.22})
+            temporal_key: (
+                {2023: year_map, 2024: year_map},
+                year_map,
+                {1: (255, 0, 0)},
+                {2023: 0.11, 2024: 0.22},
+                {"runs": 3, "stability": 0.9, "interslice_weight": 0.05},
+            )
         }
         options = {"community_palette": "P", "community_palette_reversed": False, "community_backbone_alpha": 0.0}
         cmd = Command()
@@ -4066,12 +4109,17 @@ class ApplyModuleRoleTests(TestCase):
         labels = apply_module_role(graph_data, graph, "leiden_directed")
         self.assertEqual(
             labels,
-            [("within_module_z", "Within-module z"), ("participation", "Participation Coefficient")],
+            [
+                ("within_module_z", "Within-module z"),
+                ("participation", "Participation Coefficient"),
+                ("participation_weighted", "Participation (weighted)"),
+            ],
         )
         for node in graph_data["nodes"]:
             self.assertIn("within_module_z", node)
-            self.assertGreaterEqual(node["participation"], 0.0)
-            self.assertLessEqual(node["participation"], 1.0)
+            for key in ("participation", "participation_weighted"):
+                self.assertGreaterEqual(node[key], 0.0)
+                self.assertLessEqual(node[key], 1.0)
             self.assertIn(node["module_role"], self._ROLES)
         node_map = {n["id"]: n for n in graph_data["nodes"]}
         # "a" bridges the two communities (ties to b, c in its own and d outside);
@@ -8680,3 +8728,386 @@ class NearCopyCommandOptionTests(TestCase):
                 stdout=io.StringIO(),
                 stderr=io.StringIO(),
             )
+
+
+# ---------------------------------------------------------------------------
+# Methodology review (2026-10): best-of-N fits, censored dead leaves, self-loops, module roles,
+# transitivity, modularity significance, equivalence matrices
+# ---------------------------------------------------------------------------
+
+
+def _two_triangles() -> nx.DiGraph:
+    """Two directed triangles joined by one bridge, plus two isolated channels (raw = rescaled weights)."""
+    graph = nx.DiGraph()
+    for s, t in [("a", "b"), ("b", "c"), ("c", "a"), ("d", "e"), ("e", "f"), ("f", "d"), ("c", "d")]:
+        graph.add_edge(s, t, weight=1.0, weight_raw=1.0)
+    graph.add_nodes_from(["g", "h"])
+    return graph
+
+
+class BestOfRunsTests(TestCase):
+    """Every stochastic detector reports the best of several seeded fits and how far the fits agree."""
+
+    def test_select_best_run_picks_extreme_and_breaks_ties_to_the_earliest(self) -> None:
+        from network.community import _select_best_run
+
+        runs = [(0.5, [0, 0, 1]), (0.7, [0, 1, 1]), (0.7, [1, 0, 0])]
+        diagnostics: dict = {}
+        self.assertEqual(_select_best_run(runs, objective="modularity", diagnostics_out=diagnostics), 1)
+        self.assertEqual(diagnostics["runs"], 3)
+        self.assertEqual(diagnostics["best"], 0.7)
+        self.assertEqual(diagnostics["worst"], 0.5)
+        # Run 2 is the same partition as run 1 relabelled; run 0 is not.
+        self.assertAlmostEqual(diagnostics["identical_share"], round(2 / 3, 4))
+        self.assertLess(diagnostics["stability"], 1.0)
+        self.assertEqual(_select_best_run(runs, objective="description length", minimise=True), 0)
+
+    def test_a_single_run_has_no_stability(self) -> None:
+        from network.community import _select_best_run
+
+        diagnostics: dict = {}
+        _select_best_run([(1.0, [0, 1])], objective="x", diagnostics_out=diagnostics)
+        self.assertIsNone(diagnostics["stability"])
+        self.assertEqual(diagnostics["identical_share"], 1.0)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_detect_fills_the_fit_summary(self, _mock: MagicMock) -> None:
+        from network.community import LOUVAIN_RUNS, detect
+
+        graph = _two_triangles()
+        for token, runs in (("LEIDEN", LEIDEN_RUNS), ("LEIDEN_DIRECTED", LEIDEN_RUNS), ("LOUVAIN", LOUVAIN_RUNS)):
+            with self.subTest(token=token):
+                fit: dict = {}
+                community_map, _ = detect(token, "P", graph, {}, diagnostics_out=fit)
+                self.assertEqual(fit["runs"], runs)
+                self.assertIn("modularity", fit["objective"])
+                self.assertGreaterEqual(fit["best"], fit["worst"])
+                # Two triangles: every run finds them; the isolated pair shares the residual community.
+                self.assertEqual(community_map["a"], community_map["b"])
+                self.assertNotEqual(community_map["a"], community_map["e"])
+        fit = {}
+        detect("KCORE", "P", graph, {}, diagnostics_out=fit)
+        self.assertEqual(fit, {})  # deterministic: no fit summary
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_reported_leiden_partition_is_at_least_as_good_as_seed_zero(self, _mock: MagicMock) -> None:
+        from network.community import _build_directed_igraph, _node_id_index, detect_leiden_directed
+
+        import leidenalg
+
+        graph = _cpm_fixture(11)
+        fit: dict = {}
+        detect_leiden_directed(graph, "P", diagnostics_out=fit)
+        node_ids, node_id_map = _node_id_index(graph)
+        ig_graph, weights = _build_directed_igraph(graph, node_ids, node_id_map)
+        single = leidenalg.find_partition(
+            ig_graph, leidenalg.ModularityVertexPartition, weights=weights, n_iterations=-1, seed=0
+        )
+        self.assertGreaterEqual(fit["best"], round(single.quality(), 6))
+
+    def test_interslice_weight_is_relative_to_the_mean_tie(self) -> None:
+        from network.community import temporal_interslice_weight
+
+        first = nx.DiGraph()
+        first.add_edge("a", "b", weight=10.0, weight_raw=2.0)
+        first.add_edge("b", "a", weight=10.0, weight_raw=2.0)  # one undirected tie of raw weight 4
+        second = nx.DiGraph()
+        second.add_edge("a", "c", weight=10.0, weight_raw=1.0)
+        second.add_edge("c", "c", weight=10.0, weight_raw=9.0)  # self-loop: not a tie
+        self.assertAlmostEqual(temporal_interslice_weight({2020: first, 2021: second}, 0.5), 0.5 * (4.0 + 1.0) / 2)
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_consensus_ignores_isolated_channels(self, _mock: MagicMock) -> None:
+        from network.community import detect_consensus
+
+        graph = _two_triangles()
+        # Both inputs (wrongly, as a merge artefact would) put the isolated g, h with a.
+        partition = {"a": 1, "b": 1, "c": 1, "d": 2, "e": 2, "f": 2, "g": 1, "h": 1}
+        consensus, _ = detect_consensus(graph, "P", {"x": partition, "y": dict(partition)}, 0.5)
+        self.assertEqual(consensus["a"], consensus["b"])
+        self.assertNotEqual(consensus["g"], consensus["a"])
+        self.assertEqual(consensus["g"], consensus["h"])  # the shared residual community
+
+
+class SbmBestOfFitsTests(TestCase):
+    def setUp(self) -> None:
+        import importlib.util
+
+        if importlib.util.find_spec("graph_tool") is None:
+            self.skipTest("graph-tool not installed")
+
+    @patch("network.community.palette_colors", return_value=["#ff0000", "#00ff00", "#0000ff"])
+    def test_sbm_family_reports_the_lowest_description_length(self, _mock: MagicMock) -> None:
+        from network.community import SBM_FIT_RESTARTS, detect_sbm, detect_sbm_assortative
+
+        graph = _cpm_fixture(5)
+        for label, run in (
+            ("SBM", lambda fit: detect_sbm(graph, "P", "NESTED", diagnostics_out=fit)),
+            ("SBM_ASSORTATIVE", lambda fit: detect_sbm_assortative(graph, "P", diagnostics_out=fit)),
+        ):
+            with self.subTest(strategy=label):
+                fit: dict = {}
+                run(fit)
+                self.assertEqual(fit["runs"], SBM_FIT_RESTARTS)
+                self.assertIn("description length", fit["objective"])
+                self.assertLessEqual(fit["best"], fit["worst"])
+
+
+class ModuleRoleBasisTests(TestCase):
+    """MODULEROLE is only read against cohesive partitions."""
+
+    def test_auto_basis_never_picks_kcore_or_sbm(self) -> None:
+        from network.management.commands.structural_analysis import _resolve_community_basis
+
+        (auto,) = parse_measures(["MODULEROLE"])
+        self.assertIsNone(_resolve_community_basis(auto, ["kcore", "sbm_mode_nested"]))
+        self.assertEqual(_resolve_community_basis(auto, ["kcore", "sbm_assortative", "leiden"]), "leiden")
+        self.assertEqual(_resolve_community_basis(auto, ["kcore", "labelgroup3"]), "labelgroup3")
+
+    def test_explicit_kcore_basis_is_rejected(self) -> None:
+        from django.core.management.base import CommandError
+
+        from network.management.commands.structural_analysis import Command, _resolve_community_basis
+
+        (explicit,) = parse_measures(["MODULEROLE(basis=KCORE)"])
+        self.assertIsNone(_resolve_community_basis(explicit, ["kcore"]))
+        with self.assertRaisesRegex(CommandError, "KCORE"):
+            Command()._validate_settings(parse_strategies(["KCORE"]), [explicit], [], ["CHANNEL"], "", [])
+
+    def test_explicit_sbm_basis_is_honoured(self) -> None:
+        from network.management.commands.structural_analysis import _resolve_community_basis
+
+        (explicit,) = parse_measures(["MODULEROLE(basis=SBM)"])
+        self.assertEqual(_resolve_community_basis(explicit, ["sbm_mode_nested"]), "sbm_mode_nested")
+
+
+class ModuleRoleParticipationTests(TestCase):
+    """The role reads Guimerà & Amaral's unweighted participation; the weighted one rides alongside."""
+
+    def _graph(self) -> "tuple[nx.DiGraph, dict]":
+        graph = nx.DiGraph()
+        # "a" has two neighbours in its own module (b, c) and one in another (d), whose tie is very heavy.
+        for s, t, w in [("a", "b", 1.0), ("b", "c", 1.0), ("c", "a", 1.0), ("a", "d", 50.0)]:
+            graph.add_edge(s, t, weight=w)
+        graph.add_node("lone")
+        for node in graph.nodes():
+            module = "2-x" if node == "d" else "1-x"
+            graph.nodes[node]["data"] = {"communities": {"basis": module}}
+        return graph, {"nodes": [{"id": node} for node in graph.nodes()]}
+
+    def test_participation_counts_neighbours_and_weighted_counts_ties(self) -> None:
+        graph, graph_data = self._graph()
+        apply_module_role(graph_data, graph, "basis")
+        node = {n["id"]: n for n in graph_data["nodes"]}["a"]
+        # Unweighted: 2 of 3 neighbours inside → 1 − (2/3)² − (1/3)² = 4/9.
+        self.assertAlmostEqual(node["participation"], round(4 / 9, 4))
+        # Weighted: 2 of 52 weight units inside → much more of a bridge.
+        self.assertAlmostEqual(node["participation_weighted"], round(1 - (2 / 52) ** 2 - (50 / 52) ** 2, 4))
+
+    def test_reciprocated_tie_counts_once(self) -> None:
+        from network.measures._base import compute_neighbour_community_participation
+
+        graph = nx.DiGraph([("a", "b"), ("b", "a"), ("a", "c")])
+        participation = compute_neighbour_community_participation(graph, {"a": 1, "b": 1, "c": 2})
+        self.assertAlmostEqual(participation["a"], 0.5)  # one neighbour on each side, not 2:1
+
+    def test_isolated_channel_has_no_role(self) -> None:
+        graph, graph_data = self._graph()
+        apply_module_role(graph_data, graph, "basis")
+        lone = {n["id"]: n for n in graph_data["nodes"]}["lone"]
+        for key in ("within_module_z", "participation", "participation_weighted", "module_role"):
+            self.assertIsNone(lone[key])
+
+
+class DeadLeafAndSelfLoopMeasureTests(TestCase):
+    """Out-tie measures are undefined on dead leaves; self-loops never enter the structural measures."""
+
+    def _graph(self) -> "tuple[nx.DiGraph, dict]":
+        graph = nx.DiGraph()
+        for s, t in [("a", "b"), ("b", "a"), ("a", "c"), ("b", "c"), ("b", "dead")]:
+            graph.add_edge(s, t, weight=1.0)
+        graph.graph["dead_leaves"] = frozenset({"dead"})
+        return graph, {"nodes": [{"id": node} for node in graph.nodes()]}
+
+    def test_out_tie_measures_are_none_on_dead_leaves(self) -> None:
+        graph, graph_data = self._graph()
+        for apply in (
+            apply_out_degree_centrality,
+            apply_hits,
+            apply_burt_constraint,
+            apply_local_clustering,
+            apply_reciprocity,
+            apply_in_degree_centrality,
+        ):
+            apply(graph_data, graph)
+        nodes = {n["id"]: n for n in graph_data["nodes"]}
+        for key in ("out_degree_centrality", "hits_hub", "burt_constraint", "local_clustering", "reciprocity"):
+            with self.subTest(key=key):
+                self.assertIsNone(nodes["dead"][key])
+                self.assertIsNotNone(nodes["a"][key])
+        # The in-tie side of a dead leaf is observed.
+        self.assertGreater(nodes["dead"]["in_degree_centrality"], 0.0)
+        self.assertIsNotNone(nodes["dead"]["hits_authority"])
+
+    def test_self_loops_do_not_enter_structural_measures(self) -> None:
+        triangle = nx.DiGraph()
+        for s, t in [("1", "2"), ("2", "3"), ("1", "3")]:
+            triangle.add_edge(s, t, weight=1.0)
+        looped = triangle.copy()
+        looped.add_edge("1", "1", weight=5.0)
+        results = []
+        for graph in (triangle, looped):
+            graph_data: dict = {"nodes": [{"id": node} for node in graph.nodes()]}
+            for apply in (apply_burt_constraint, apply_pagerank, apply_hits, apply_in_degree_centrality):
+                apply(graph_data, graph)
+            results.append({n["id"]: n for n in graph_data["nodes"]})
+        for key in ("burt_constraint", "pagerank", "hits_hub", "hits_authority", "in_degree_centrality"):
+            with self.subTest(key=key):
+                self.assertAlmostEqual(results[0]["1"][key], results[1]["1"][key])
+        self.assertAlmostEqual(results[1]["1"]["burt_constraint"], 1.125)
+
+    def test_hits_warns_when_it_does_not_converge(self) -> None:
+        from network.measures import _centrality, compute_hits
+
+        with patch.object(_centrality.logger, "warning") as warning:
+            compute_hits(_cpm_fixture(3), max_iter=1)
+        self.assertIn("did not converge", warning.call_args.args[0])
+        with patch.object(_centrality.logger, "warning") as warning:
+            compute_hits(_cpm_fixture(3))
+        warning.assert_not_called()
+
+
+class AmplificationUndefinedWithoutMessagesTests(TestCase):
+    def test_channel_without_messages_gets_none(self) -> None:
+        label = make_label("OrgAmp", color="#FF0000")
+        source = make_channel(telegram_id=901, label=label, title="Silent")
+        amplifier = make_channel(telegram_id=902, label=label, title="Talker")
+        Message.objects.create(telegram_id=1, channel=amplifier)
+        channel_dict = {str(source.pk): {"channel": source}, str(amplifier.pk): {"channel": amplifier}}
+        graph_data: dict = {"nodes": [{"id": str(source.pk)}, {"id": str(amplifier.pk)}]}
+        apply_amplification_factor(graph_data, nx.DiGraph(), channel_dict)
+        nodes = {n["id"]: n for n in graph_data["nodes"]}
+        self.assertIsNone(nodes[str(source.pk)]["amplification_factor"])
+        self.assertEqual(nodes[str(amplifier.pk)]["amplification_factor"], 0.0)
+
+
+class NetworkSummaryCorrectionsTests(TestCase):
+    def test_transitivity_is_the_undirected_global_clustering(self) -> None:
+        for edges in ([("1", "2"), ("2", "3"), ("3", "1")], [("1", "2"), ("2", "3"), ("1", "3")]):
+            with self.subTest(edges=edges):
+                summary = _network_summary(nx.DiGraph(edges))
+                self.assertEqual(summary["transitivity"], 1.0)  # a closed triangle, whatever the directions
+        star = nx.DiGraph([("hub", "x"), ("hub", "y"), ("hub", "z")])
+        self.assertEqual(_network_summary(star)["transitivity"], 0.0)
+
+    def test_dead_leaves_are_left_out_of_out_tie_statistics(self) -> None:
+        graph = nx.DiGraph([("a", "b"), ("b", "a"), ("a", "dead"), ("b", "dead")])
+        for _u, _v, data in graph.edges(data=True):
+            data["weight"] = 1.0
+        plain = _network_summary(graph)
+        graph.graph["dead_leaves"] = frozenset({"dead"})
+        censored = _network_summary(graph)
+        self.assertAlmostEqual(plain["reciprocity"], 0.5)
+        self.assertEqual(censored["reciprocity"], 1.0)  # a ↔ b is the only observable dyad
+        self.assertEqual(censored["out_degree_cv"], 0.0)  # a and b both cite two channels
+        self.assertEqual(censored["dead_leaves"], 1)
+        labels = [label for label, _value, _group in network_summary_rows(censored)]
+        self.assertIn("Dead leaves (own citations not observed)", labels)
+
+    def test_self_loops_do_not_count_as_unreciprocated_ties(self) -> None:
+        graph = nx.DiGraph([("a", "b"), ("b", "a"), ("a", "a")])
+        self.assertEqual(_network_summary(graph)["reciprocity"], 1.0)
+
+
+class ModularitySignificanceTests(TestCase):
+    @staticmethod
+    def _ring_of_cliques() -> nx.DiGraph:
+        graph = nx.DiGraph()
+        cliques = [[f"{k}{i}" for i in range(5)] for k in "abcd"]
+        for members in cliques:
+            for u in members:
+                for v in members:
+                    if u != v:
+                        graph.add_edge(u, v, weight=1.0)
+        for left, right in zip(cliques, cliques[1:] + cliques[:1], strict=True):
+            graph.add_edge(left[0], right[0], weight=1.0)
+        return graph
+
+    def test_strategy_entry_carries_z_and_p(self) -> None:
+        from network.community_stats import MODULARITY_NULL_SAMPLES, _compute_strategy_entry
+
+        graph = self._ring_of_cliques()
+        graph_data = {"nodes": [{"id": n, "communities": {"leiden": n[0]}} for n in graph.nodes()]}
+        groups = [(str(i), 5, k, "#000000") for i, k in enumerate("abcd")]
+        entry = _compute_strategy_entry("leiden", {"groups": groups}, graph_data, graph, {}, {})
+        self.assertGreater(entry["modularity"], entry["modularity_null_mean"])
+        self.assertGreater(entry["modularity_z"], 2.0)
+        self.assertAlmostEqual(entry["modularity_p"], round(1 / (MODULARITY_NULL_SAMPLES + 1), 4))
+
+    def test_only_modularity_maximisers_are_tested(self) -> None:
+        from network.community_stats import _compute_strategy_entry
+
+        graph = self._ring_of_cliques()
+        graph_data = {"nodes": [{"id": n, "communities": {"sbm_assortative": n[0]}} for n in graph.nodes()]}
+        groups = [(str(i), 5, k, "#000000") for i, k in enumerate("abcd")]
+        entry = _compute_strategy_entry("sbm_assortative", {"groups": groups}, graph_data, graph, {}, {})
+        self.assertIsNotNone(entry["modularity"])
+        self.assertNotIn("modularity_z", entry)
+
+    def test_null_is_shared_across_strategies_on_one_graph(self) -> None:
+        from network import community_stats as cs
+
+        graph = self._ring_of_cliques()
+        cache: dict = {}
+        with patch.object(cs, "_null_modularities", wraps=cs._null_modularities) as spy:
+            cs._modularity_significance(0.5, graph, directed=False, cache=cache)
+            cs._modularity_significance(0.4, graph, directed=False, cache=cache)
+            cs._modularity_significance(0.4, graph, directed=True, cache=cache)
+        self.assertEqual(spy.call_count, 2)  # one null per (graph, objective)
+
+    def test_too_small_a_graph_has_no_test(self) -> None:
+        from network.community_stats import _modularity_significance
+
+        result = _modularity_significance(0.5, nx.DiGraph([("a", "b")]), directed=True, cache={})
+        self.assertEqual(result, {"modularity_z": None, "modularity_p": None, "modularity_null_mean": None})
+
+
+class PartitionComparisonIsolatesTests(TestCase):
+    def test_isolated_channels_are_not_compared(self) -> None:
+        graph = _two_triangles()
+        # The two partitions agree on nothing but the residual community of the isolated g, h.
+        first = {"a": "1", "b": "1", "c": "1", "d": "2", "e": "2", "f": "2", "g": "3", "h": "3"}
+        second = {"a": "1", "b": "2", "c": "1", "d": "2", "e": "1", "f": "2", "g": "3", "h": "3"}
+        graph_data = {"nodes": [{"id": n, "communities": {"x": first[n], "y": second[n]}} for n in graph.nodes()]}
+        result = compute_community_metrics(graph_data, {}, graph, ["x", "y"])
+        connected = sorted(n for n in graph.nodes() if graph.degree(n))
+        expected = _compare_partitions([first[n] for n in connected], [second[n] for n in connected])
+        self.assertEqual(result["partition_comparison"]["metrics"]["ari"][0][1], expected["ari"])
+
+
+class EquivalenceMatrixTests(TestCase):
+    def test_behavioural_equivalence_tells_low_from_high_profiles(self) -> None:
+        from network.community_stats import _compute_behavioural_equivalence
+
+        nodes = [
+            {"id": "low", "amplification_factor": 0.0, "content_originality": 0.0},
+            {"id": "high", "amplification_factor": 1.0, "content_originality": 1.0},
+            {"id": "low2", "amplification_factor": 0.0, "content_originality": 0.0},
+            {"id": "mid", "amplification_factor": 0.5, "content_originality": 0.5},
+        ]
+        labels = [("amplification_factor", "Amplification"), ("content_originality", "Originality")]
+        cells = _compute_behavioural_equivalence({"nodes": nodes}, labels)["cells_lower"]
+        self.assertEqual(cells[1][0], 0.0)  # high vs low: opposite ends of every feature
+        self.assertEqual(cells[2][0], 1.0)  # identical profiles
+        self.assertEqual(cells[3][0], 0.5)
+
+    def test_structural_equivalence_ignores_the_pairs_own_tie(self) -> None:
+        from network.community_stats import _compute_structural_equivalence
+
+        graph = nx.DiGraph()
+        # x and y cite each other and both cite p and q; they are structurally equivalent.
+        for s, t in [("x", "y"), ("y", "x"), ("x", "p"), ("x", "q"), ("y", "p"), ("y", "q")]:
+            graph.add_edge(s, t, weight=1.0)
+        nodes = [{"id": n} for n in ["x", "y", "p", "q"]]
+        cells = _compute_structural_equivalence(graph, {"nodes": nodes}, [])["cells_lower"]
+        self.assertEqual(cells[1][0], 1.0)

@@ -198,6 +198,37 @@ def to_undirected_sum(graph: nx.DiGraph, weight: str = "weight") -> nx.Graph:
     return undirected
 
 
+def without_self_loops(graph: nx.DiGraph) -> nx.DiGraph:
+    """``graph`` itself when it has no self-loop, else a copy without them (graph attributes kept).
+
+    Self-loops exist only under ``--self-references``. A channel citing itself is not a contact of its
+    own, so the structural measures — PageRank, HITS, the degree centralities, Burt's constraint, the
+    whole-network reciprocity / degree statistics — read the graph without them (a self-loop would credit
+    a channel with prestige it gave itself, and count it as its own redundant contact in Burt's constraint).
+    """
+    loops = list(nx.selfloop_edges(graph))
+    if not loops:
+        return graph
+    stripped = graph.copy()
+    stripped.remove_edges_from(loops)
+    return stripped
+
+
+#: ``graph.graph`` key under which :func:`network.graph_builder.build_graph` stores the dead-leaf node ids.
+DEAD_LEAVES_KEY = "dead_leaves"
+
+
+def dead_leaf_ids(graph: nx.DiGraph) -> frozenset[str]:
+    """The graph's *dead leaves*: out-of-target channels drawn only because a monitored channel cited them.
+
+    Their own messages are outside the analysis, so their **outgoing** citations are never observed: every
+    measure that reads a channel's own citing behaviour (out-degree, hub score, reciprocity, Burt's
+    constraint, local clustering) is censored for them rather than zero. Empty for a graph that did not
+    come from ``build_graph`` or was built without dead leaves.
+    """
+    return frozenset(graph.graph.get(DEAD_LEAVES_KEY) or ())
+
+
 def make_date_q(
     start_date: datetime.date | None,
     end_date: datetime.date | None,

@@ -423,7 +423,11 @@ function _render(d) {
         stratNote.className = "text-muted small mb-2";
         var nComm = rows.length;
         var modStr = (stratData.modularity !== null && stratData.modularity !== undefined) ?
-            " Network modularity Q = " + sigFig(stratData.modularity, 3) + "." : "";
+            " Network modularity Q = " + sigFig(stratData.modularity, 3) +
+            ((stratData.modularity_z !== null && stratData.modularity_z !== undefined) ?
+                " (z = " + sigFig(stratData.modularity_z, 3) + " against random graphs with the same degrees" +
+                ((stratData.modularity_p !== null && stratData.modularity_p !== undefined) ?
+                    ", p = " + sigFig(stratData.modularity_p, 2) : "") + ")" : "") + "." : "";
         stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr +
             " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
         container.appendChild(stratNote);
