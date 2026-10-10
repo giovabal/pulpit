@@ -1464,6 +1464,70 @@ class ReplyTargetLinkTests(TestCase):
         self.assertContains(response, "(not crawled)")
 
 
+class CrossChatReplyTests(TestCase):
+    """``reply_to_peer_id`` points a reply at a message in another chat."""
+
+    def setUp(self) -> None:
+        from webapp.models.telegram_models import CHANNEL_PEER_MARK
+
+        self.mark = CHANNEL_PEER_MARK
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, label=self.org, username="chan")
+        self.other = make_channel(telegram_id=12, label=self.org, username="other", title="Other channel")
+        Message.objects.create(telegram_id=5, channel=self.channel)  # same id, wrong chat
+        self.original = Message.objects.create(telegram_id=5, channel=self.other)
+        peer = -(self.mark + 12)
+        self.stored = Message.objects.create(
+            telegram_id=1, channel=self.channel, reply_to_msg_id=5, reply_to_peer_id=peer
+        )
+        self.unknown = Message.objects.create(
+            telegram_id=2, channel=self.channel, reply_to_msg_id=8, reply_to_peer_id=-(self.mark + 4242)
+        )
+        self.user_chat = Message.objects.create(
+            telegram_id=3, channel=self.channel, reply_to_msg_id=9, reply_to_peer_id=777
+        )
+
+    def test_channel_id_from_peer_id(self) -> None:
+        from webapp.models.telegram_models import channel_id_from_peer_id
+
+        self.assertEqual(channel_id_from_peer_id(-(self.mark + 1234567890)), 1234567890)
+        self.assertIsNone(channel_id_from_peer_id(777))  # user
+        self.assertIsNone(channel_id_from_peer_id(-4567))  # basic group
+        self.assertIsNone(channel_id_from_peer_id(None))
+
+    def test_attach_reply_targets_resolves_the_other_chat(self) -> None:
+        page = list(Message.objects.filter(channel=self.channel, reply_to_msg_id__isnull=False).order_by("telegram_id"))
+        with self.assertNumQueries(2):
+            Message.attach_reply_targets(page)
+        with self.assertNumQueries(0):
+            resolved = {m.telegram_id: (m.reply_chat, m.reply_target, m.reply_to_telegram_url) for m in page}
+        self.assertEqual(resolved[1][0].pk, self.other.pk)
+        self.assertEqual(resolved[1][1].pk, self.original.pk)
+        self.assertEqual(resolved[1][2], "https://t.me/other/5")
+        # A channel Pulpit never stored: private-link form, no target.
+        self.assertEqual(resolved[2][:2], (None, None))
+        self.assertEqual(resolved[2][2], "https://t.me/c/4242/8")
+        # A user chat: nothing to link.
+        self.assertEqual(resolved[3], (None, None, ""))
+
+    def test_uncached_properties_agree(self) -> None:
+        reply = Message.objects.get(pk=self.stored.pk)
+        self.assertEqual(reply.reply_target.pk, self.original.pk)
+        self.assertTrue(reply.reply_to_channel_peer)
+        self.assertFalse(Message.objects.get(pk=self.user_chat.pk).reply_to_channel_peer)
+
+    def test_post_card_names_the_other_chat(self) -> None:
+        response = self.client.get(reverse("message-search") + "?replies=only")
+        jump = reverse("message-jump", kwargs={"channel_pk": self.other.pk, "telegram_id": 5})
+        self.assertContains(response, f'href="{jump}"')
+        self.assertContains(response, f'in <a href="{self.other.get_absolute_url()}">Other channel</a>')
+        self.assertContains(response, 'href="https://t.me/other/5"')
+        self.assertContains(response, "in another channel")
+        self.assertContains(response, 'href="https://t.me/c/4242/8"')
+        self.assertContains(response, "in another chat")
+        self.assertNotContains(response, "https://t.me/chan/9")
+
+
 class ChannelListViewTests(TestCase):
     def test_label_filter_excludes_container_group_labels(self) -> None:
         # Even when the primary group is a container, its labels can never be held

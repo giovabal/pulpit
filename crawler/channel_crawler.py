@@ -29,6 +29,7 @@ from webapp.models.tag_models import link_stored_message
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
 from telethon.tl.types import InputChannel, MessageService, PeerChannel, User
+from telethon.utils import get_peer_id
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,27 @@ def _factcheck_data(telegram_message: Any) -> dict | None:
     }
 
 
+def _reply_peer_id(telegram_message: Any) -> int | None:
+    """The ``Message.reply_to_peer_id`` for a Telethon message: the marked peer id of the chat
+    holding the replied-to message when it is another chat (a cross-chat reply), else ``None``.
+
+    Telegram sets the reply header's ``reply_to_peer_id`` only for such replies; it is ignored
+    when it names the message's own channel or comes without a ``reply_to_msg_id``.
+    """
+    reply_to = getattr(telegram_message, "reply_to", None)
+    peer = getattr(reply_to, "reply_to_peer_id", None)
+    if peer is None or getattr(reply_to, "reply_to_msg_id", None) is None:
+        return None
+    try:
+        marked = get_peer_id(peer)
+    except TypeError:
+        return None
+    own = getattr(getattr(telegram_message, "peer_id", None), "channel_id", None)
+    if own is not None and marked == get_peer_id(PeerChannel(own)):
+        return None
+    return marked
+
+
 def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> dict:
     """Build the volatile-stats update dict used to refresh a stored Message row.
 
@@ -128,7 +150,10 @@ def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> d
     and an older policy of "refresh everything" would silently overwrite the original
     text we captured at first crawl. The first-crawl record is treated as the canonical
     copy; only fields that legitimately change over time on Telegram's side — views,
-    forwards, replies, pinned, edit_date, factcheck — are refreshed here.
+    forwards, replies, pinned, edit_date, factcheck — are refreshed here, plus the
+    cross-chat reply header (``reply_to_peer_id`` with its ``reply_to_msg_id``), which
+    older crawls did not record: it is written only when present, so a stub cannot
+    erase it.
 
     Stats counters (``views``, ``forwards``, ``replies``) are only emitted when
     Telegram returned a non-null value. Restricted/banned channels frequently
@@ -156,6 +181,10 @@ def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> d
         update_kwargs["replies"] = replies_count
     if telegram_message.pinned:
         update_kwargs["has_been_pinned"] = True
+    reply_peer = _reply_peer_id(telegram_message)
+    if reply_peer is not None:
+        update_kwargs["reply_to_msg_id"] = telegram_message.reply_to.reply_to_msg_id
+        update_kwargs["reply_to_peer_id"] = reply_peer
     return update_kwargs
 
 
@@ -915,6 +944,7 @@ class ChannelCrawler:
                 fields["webpage_type"] = getattr(media.webpage, "type", None) or ""
         fields["replies"] = getattr(getattr(telegram_message, "replies", None), "replies", None)
         fields["reply_to_msg_id"] = getattr(getattr(telegram_message, "reply_to", None), "reply_to_msg_id", None)
+        fields["reply_to_peer_id"] = _reply_peer_id(telegram_message)
         factcheck = _factcheck_data(telegram_message)
         if factcheck is not None:
             fields["factcheck"] = factcheck
