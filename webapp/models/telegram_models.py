@@ -18,6 +18,16 @@ from webapp.models.base import TelegramBaseModel
 from webapp.utils.dates import fmt_month_year
 from webapp.utils.emoji import emoji_present
 
+# Bot-API / Telethon peer marks: a channel's marked id is -(CHANNEL_PEER_MARK + channel id).
+CHANNEL_PEER_MARK = 1_000_000_000_000
+
+
+def channel_id_from_peer_id(peer_id: int | None) -> int | None:
+    """The raw channel id inside a marked peer id; None for a user, a basic group or None."""
+    if peer_id is None or peer_id >= -CHANNEL_PEER_MARK:
+        return None
+    return -peer_id - CHANNEL_PEER_MARK
+
 
 class Channel(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (
@@ -387,6 +397,12 @@ class Message(TelegramBaseModel):
     replies_unavailable = models.BooleanField(default=False)
     silent = models.BooleanField(default=False)
     reply_to_msg_id = models.PositiveBigIntegerField(null=True)
+    # The chat holding the replied-to message when it is not this message's own (Telegram's
+    # cross-chat reply), as a *marked* peer id — Telethon's ``utils.get_peer_id``, the Bot API
+    # chat id: users positive, basic groups negated, channels -(10**12 + id). The mark keeps a
+    # user or basic-group chat, which has no public link, from being read as a channel.
+    # NULL for a same-chat reply, a non-reply, and replies crawled before the field existed.
+    reply_to_peer_id = models.BigIntegerField(null=True)
     fwd_from_channel_post = models.PositiveBigIntegerField(null=True)
     fwd_from_from_name = models.CharField(max_length=255, blank=True)
     fwd_from_date = models.DateTimeField(null=True)
@@ -685,54 +701,110 @@ class Message(TelegramBaseModel):
 
     @classmethod
     def attach_reply_targets(cls, messages: "Iterable[Message]") -> None:
-        """Bulk-load, for a page of messages, the stored messages they reply to.
+        """Bulk-load, for a page of messages, the chats and stored messages they reply to.
 
-        One query for the whole page instead of one per reply in
-        :attr:`reply_target`; each reply gets ``_reply_target_cache`` (the
-        target, or None when it was never crawled).
+        At most two queries for the whole page — the channels of cross-chat
+        replies, then the replied-to messages — instead of up to two per reply in
+        :attr:`reply_chat` / :attr:`reply_target`. Each reply gets
+        ``_reply_target_cache`` (the target, or None when it was never crawled)
+        and each cross-chat reply ``_reply_chat_cache``.
         """
         replies = [m for m in messages if m.reply_to_msg_id is not None]
         if not replies:
             return
-        targets: dict[tuple[int, int], Message] = {}
-        rows = (
-            cls.objects.filter(
-                channel_id__in={m.channel_id for m in replies},
-                telegram_id__in={m.reply_to_msg_id for m in replies},
-            )
-            .only("id", "channel_id", "telegram_id", "date")
-            .order_by("pk")
-        )
-        for row in rows:
-            targets.setdefault((row.channel_id, row.telegram_id), row)
+        peer_tids = {channel_id_from_peer_id(m.reply_to_peer_id) for m in replies if m.reply_to_peer_id is not None}
+        peer_tids.discard(None)
+        chats: dict[int, Channel] = {}
+        if peer_tids:
+            for chat in Channel.objects.filter(telegram_id__in=peer_tids).order_by("pk"):
+                chats.setdefault(chat.telegram_id, chat)
         for msg in replies:
-            msg._reply_target_cache = targets.get((msg.channel_id, msg.reply_to_msg_id))
+            if msg.reply_to_peer_id is not None:
+                msg._reply_chat_cache = chats.get(channel_id_from_peer_id(msg.reply_to_peer_id))
+        keys = {(msg._reply_chat_pk, msg.reply_to_msg_id) for msg in replies if msg._reply_chat_pk is not None}
+        targets: dict[tuple[int, int], Message] = {}
+        if keys:
+            rows = (
+                cls.objects.filter(
+                    channel_id__in={chat_pk for chat_pk, _ in keys},
+                    telegram_id__in={msg_id for _, msg_id in keys},
+                )
+                .only("id", "channel_id", "telegram_id", "date")
+                .order_by("pk")
+            )
+            for row in rows:
+                targets.setdefault((row.channel_id, row.telegram_id), row)
+        for msg in replies:
+            msg._reply_target_cache = targets.get((msg._reply_chat_pk, msg.reply_to_msg_id))
+
+    @property
+    def reply_chat(self) -> "Channel | None":
+        """The stored channel holding the replied-to message.
+
+        This message's own channel for a same-chat reply; for a cross-chat reply
+        the channel ``reply_to_peer_id`` names, or None when that chat is not a
+        channel or was never stored. None when this message is not a reply.
+        Reads the cache :meth:`attach_reply_targets` fills, else costs one query.
+        """
+        if self.reply_to_msg_id is None:
+            return None
+        if self.reply_to_peer_id is None:
+            return self.channel
+        if not hasattr(self, "_reply_chat_cache"):
+            tid = channel_id_from_peer_id(self.reply_to_peer_id)
+            self._reply_chat_cache = (
+                Channel.objects.filter(telegram_id=tid).order_by("pk").first() if tid is not None else None
+            )
+        return self._reply_chat_cache
+
+    @property
+    def _reply_chat_pk(self) -> int | None:
+        """Primary key of :attr:`reply_chat`, without loading this message's own channel."""
+        if self.reply_to_peer_id is None:
+            return self.channel_id
+        chat = self.reply_chat
+        return chat.pk if chat is not None else None
+
+    @property
+    def reply_to_channel_peer(self) -> bool:
+        """True when this message replies to a message in another *channel* (stored or not)."""
+        return channel_id_from_peer_id(self.reply_to_peer_id) is not None
 
     @property
     def reply_target(self) -> "Message | None":
         """The stored message this one replies to; None when it is not a reply or the target was not crawled.
 
-        A reply header names a message of the same chat (the crawler keeps only
-        ``reply_to_msg_id``). Reads the cache :meth:`attach_reply_targets` fills,
-        else costs one query.
+        Reads the cache :meth:`attach_reply_targets` fills, else costs up to two queries.
         """
         if self.reply_to_msg_id is None:
             return None
         if not hasattr(self, "_reply_target_cache"):
+            chat_pk = self._reply_chat_pk
             self._reply_target_cache = (
-                Message.objects.filter(channel_id=self.channel_id, telegram_id=self.reply_to_msg_id)
+                Message.objects.filter(channel_id=chat_pk, telegram_id=self.reply_to_msg_id)
                 .only("id", "channel_id", "telegram_id", "date")
                 .order_by("pk")
                 .first()
+                if chat_pk is not None
+                else None
             )
         return self._reply_target_cache
 
     @property
     def reply_to_telegram_url(self) -> str:
-        """The replied-to message on Telegram, or "" when this message is not a reply."""
+        """The replied-to message on Telegram; "" when this message is not a reply or the chat has no link.
+
+        A cross-chat reply to a channel Pulpit never stored gets the ``t.me/c/``
+        form, which opens for members of that channel. A user or basic-group chat
+        has no link.
+        """
         if self.reply_to_msg_id is None:
             return ""
-        return f"{self.channel.telegram_url}/{self.reply_to_msg_id}"
+        chat = self.reply_chat
+        if chat is not None:
+            return f"{chat.telegram_url}/{self.reply_to_msg_id}"
+        tid = channel_id_from_peer_id(self.reply_to_peer_id)
+        return f"https://t.me/c/{tid}/{self.reply_to_msg_id}" if tid is not None else ""
 
     @property
     def telegram_url(self) -> str:

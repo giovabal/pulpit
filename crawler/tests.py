@@ -2730,6 +2730,71 @@ class GetMessageFirstSaveTests(TestCase):
         self.assertEqual(Message.objects.get(channel=self.channel, telegram_id=14).missing_references, "")
 
 
+class ReplyPeerIdTests(SimpleTestCase):
+    """``reply_to_peer_id`` is recorded only for replies to a message in another chat."""
+
+    def _tg_message(self, reply_to: Any) -> Any:
+        from telethon.tl.types import PeerChannel
+
+        return types.SimpleNamespace(
+            id=3,
+            peer_id=PeerChannel(11),
+            reply_to=reply_to,
+            pinned=False,
+            edit_date=None,
+            views=None,
+            forwards=None,
+            replies=None,
+        )
+
+    def _header(self, msg_id: int | None, peer: Any) -> Any:
+        from telethon.tl.types import MessageReplyHeader
+
+        return MessageReplyHeader(reply_to_msg_id=msg_id, reply_to_peer_id=peer)
+
+    def test_marks_the_other_chat(self) -> None:
+        from crawler.channel_crawler import _reply_peer_id
+
+        from telethon.tl.types import PeerChannel, PeerChat, PeerUser
+
+        self.assertEqual(_reply_peer_id(self._tg_message(self._header(5, PeerChannel(12)))), -1000000000012)
+        self.assertEqual(_reply_peer_id(self._tg_message(self._header(5, PeerUser(77)))), 77)
+        self.assertEqual(_reply_peer_id(self._tg_message(self._header(5, PeerChat(88)))), -88)
+
+    def test_ignores_same_chat_and_headerless_replies(self) -> None:
+        from crawler.channel_crawler import _reply_peer_id
+
+        from telethon.tl.types import PeerChannel
+
+        self.assertIsNone(_reply_peer_id(self._tg_message(self._header(5, None))))
+        self.assertIsNone(_reply_peer_id(self._tg_message(self._header(5, PeerChannel(11)))))
+        self.assertIsNone(_reply_peer_id(self._tg_message(self._header(None, PeerChannel(12)))))
+        self.assertIsNone(_reply_peer_id(self._tg_message(None)))
+
+    def test_first_save_fields_carry_it(self) -> None:
+        from telethon.tl.types import PeerChannel
+
+        fields = ChannelCrawler._message_fields(
+            types.SimpleNamespace(
+                **vars(self._tg_message(self._header(5, PeerChannel(12)))), fwd_from=None, media=None, factcheck=None
+            )
+        )
+        self.assertEqual((fields["reply_to_msg_id"], fields["reply_to_peer_id"]), (5, -1000000000012))
+
+    def test_stats_refresh_backfills_but_never_clears(self) -> None:
+        from crawler.channel_crawler import _build_msg_update_kwargs
+
+        from telethon.tl.types import PeerChannel
+
+        now = timezone.now()
+        cross = _build_msg_update_kwargs(self._tg_message(self._header(5, PeerChannel(12))), now)
+        self.assertEqual((cross["reply_to_msg_id"], cross["reply_to_peer_id"]), (5, -1000000000012))
+        for reply_to in (None, self._header(5, None)):
+            kwargs = _build_msg_update_kwargs(self._tg_message(reply_to), now)
+            self.assertNotIn("reply_to_peer_id", kwargs)
+            self.assertNotIn("reply_to_msg_id", kwargs)
+
+
 # ---------------------------------------------------------------------------
 # search_channels management command
 # ---------------------------------------------------------------------------

@@ -104,7 +104,7 @@ TOML file. Built-in factory-empty defaults live in `webapp_engine/config/default
 | `downloads.stickers` | Download stickers attached to messages (static webp, animated TGS, video webm) | `false` |
 | `downloads.other_media` | Download non-photo, non-video, non-audio, non-sticker documents (PDFs, archives, etc.) | `false` |
 
-> **Message statistics:** view counts, forward counts, reply counts, and reactions are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `crawl_channels` to re-fetch them; combine with `--refresh-limit N`, `--refresh-from YYYY-MM-DD`, and `--refresh-to YYYY-MM-DD` to restrict the scope.
+> **Message statistics:** view counts, forward counts, reply counts, and reactions are recorded when a message is first crawled and are not automatically updated on subsequent runs. Use `--refresh-messages-stats` on `crawl_channels` to re-fetch them; combine with `--refresh-limit N`, `--refresh-from YYYY-MM-DD`, and `--refresh-to YYYY-MM-DD` to restrict the scope. The refresh also records which chat a cross-chat reply answers, for messages crawled before Pulpit stored it.
 
 ## `[scope]` — channel-type filter
 
