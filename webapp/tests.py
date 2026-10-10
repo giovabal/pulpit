@@ -1422,6 +1422,48 @@ class ReplyMessageFilterTests(TestCase):
         self.assertContains(response, 'name="replies" value="only"')
 
 
+class ReplyTargetLinkTests(TestCase):
+    """A reply links to its original — in Pulpit when crawled, always on Telegram."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, label=self.org, username="chan")
+        self.post = Message.objects.create(telegram_id=1, channel=self.channel)
+        self.reply = Message.objects.create(telegram_id=2, channel=self.channel, reply_to_msg_id=1)
+        self.orphan = Message.objects.create(telegram_id=3, channel=self.channel, reply_to_msg_id=99)
+        # Same telegram_id in another channel: must not be taken for the target.
+        other = make_channel(telegram_id=12, label=self.org)
+        Message.objects.create(telegram_id=99, channel=other)
+
+    def test_attach_reply_targets_batches_the_lookup(self) -> None:
+        page = list(Message.objects.filter(channel=self.channel).order_by("telegram_id"))
+        with self.assertNumQueries(1):
+            Message.attach_reply_targets(page)
+        with self.assertNumQueries(0):
+            targets = {m.telegram_id: m.reply_target for m in page}
+        self.assertIsNone(targets[1])
+        self.assertEqual(targets[2].pk, self.post.pk)
+        self.assertIsNone(targets[3])
+
+    def test_reply_target_without_cache_queries_once(self) -> None:
+        reply = Message.objects.get(pk=self.reply.pk)
+        self.assertEqual(reply.reply_target.pk, self.post.pk)
+        self.assertEqual(reply.reply_to_telegram_url, "https://t.me/chan/1")
+        self.assertEqual(self.post.reply_to_telegram_url, "")
+
+    def test_post_card_links_to_original(self) -> None:
+        response = self.client.get(reverse("message-search") + "?replies=only")
+        jump = reverse("message-jump", kwargs={"channel_pk": self.channel.pk, "telegram_id": 1})
+        self.assertContains(response, f'href="{jump}"')
+        self.assertContains(response, 'href="https://t.me/chan/1"')
+        # The uncrawled target gets the Telegram link only.
+        self.assertContains(response, 'href="https://t.me/chan/99"')
+        self.assertNotContains(
+            response, reverse("message-jump", kwargs={"channel_pk": self.channel.pk, "telegram_id": 99})
+        )
+        self.assertContains(response, "(not crawled)")
+
+
 class ChannelListViewTests(TestCase):
     def test_label_filter_excludes_container_group_labels(self) -> None:
         # Even when the primary group is a container, its labels can never be held

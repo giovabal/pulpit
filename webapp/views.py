@@ -454,6 +454,7 @@ class HomeView(ListView):
 
         ctx = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(ctx["object_list"])
+        Message.attach_reply_targets(ctx["object_list"])
 
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
@@ -643,6 +644,7 @@ class MessageSearchView(ListView):
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(ctx["object_list"])
+        Message.attach_reply_targets(ctx["object_list"])
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET, self.request.user))
@@ -687,6 +689,7 @@ class MessageHighlightsView(ListView):
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(ctx["object_list"])
+        Message.attach_reply_targets(ctx["object_list"])
         q = self.request.GET.get("q", "").strip()
         ctx["query"] = q
         ctx.update(_message_options_context(self._params(), self.request.user))
@@ -746,6 +749,7 @@ class ChannelDetailView(ListView):
 
         context_data = super().get_context_data(*args, **kwargs)
         Message.attach_album_data(context_data["object_list"])
+        Message.attach_reply_targets(context_data["object_list"])
         ch = self.selected_channel
         q = self.request.GET.get("q", "").strip()
         context_data["query"] = q
