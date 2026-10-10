@@ -24,6 +24,10 @@ tagger) to avoid N+1 queries — webapp.views._MESSAGE_LIST_PREFETCH carries the
 full set. A message's tag_links include the tags put on its original or on any
 other share of the same post (webapp.models.tag_models).
 
+A reply's "Reply to" row links to the original in Pulpit when it was crawled
+(Message.reply_target — views batch it with Message.attach_reply_targets) and
+always to the original on Telegram.
+
 Pictures link to their full-size file; pages that load webapp/js/post_lightbox.js
 open them in an overlay that steps through the post's pictures.
 
@@ -221,7 +225,7 @@ sharing the same (channel_id, grouped_id).
     <dl class="post-details-dl">
       {% if post.replies or post.reply_to_msg_id or post.fwd_from_channel_post or post.fwd_from_from_name or post.silent or post.factcheck %}
         {% if post.replies %}<dt><i class="bi bi-chat" aria-hidden="true"></i> Replies</dt><dd>{{ post.replies }}</dd>{% endif %}
-        {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>#{{ post.reply_to_msg_id }}</dd>{% endif %}
+        {% if post.reply_to_msg_id %}<dt><i class="bi bi-reply" aria-hidden="true"></i> Reply to</dt><dd>{% with target=post.reply_target %}{% if target %}<a href="{% url 'message-jump' channel_pk=post.channel.pk telegram_id=post.reply_to_msg_id %}" title="Show the original message">#{{ post.reply_to_msg_id }}</a>{% if target.date %} · posted <time datetime="{{ target.date|date:'c' }}">{{ target.date }}</time>{% endif %}{% else %}#{{ post.reply_to_msg_id }} <span class="post-details-muted">(not crawled)</span>{% endif %}{% endwith %} · <a href="{{ post.reply_to_telegram_url }}" target="_blank" rel="noopener noreferrer" aria-label="Open the original message on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i> Telegram</a></dd>{% endif %}
         {% if post.fwd_from_channel_post %}<dt><i class="bi bi-link-45deg" aria-hidden="true"></i> Source post</dt><dd>{% if post.forwarded_from %}<a href="{% url 'message-jump' channel_pk=post.forwarded_from.pk telegram_id=post.fwd_from_channel_post %}">#{{ post.fwd_from_channel_post }}</a>{% else %}#{{ post.fwd_from_channel_post }}{% endif %}{% if post.fwd_from_date %} · posted <time datetime="{{ post.fwd_from_date|date:'c' }}">{{ post.fwd_from_date }}</time>{% if post.date and post.date > post.fwd_from_date %} <span class="post-details-muted">({{ post.fwd_from_date|timesince:post.date }} before this share)</span>{% endif %}{% endif %}</dd>{% endif %}
         {% if post.fwd_from_from_name %}<dt><i class="bi bi-person" aria-hidden="true"></i> Forwarded by</dt><dd>{{ post.fwd_from_from_name }}</dd>{% endif %}
         {% if post.silent %}<dt><i class="bi bi-bell-slash" aria-hidden="true"></i> Silent</dt><dd>Sent without notification</dd>{% endif %}

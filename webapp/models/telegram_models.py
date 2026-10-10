@@ -683,6 +683,57 @@ class Message(TelegramBaseModel):
             msg._album_size_cache = sizes.get(key, 1)
             msg._album_sibling_type_counts = dict(sibling_type_counts.get(key, {}))
 
+    @classmethod
+    def attach_reply_targets(cls, messages: "Iterable[Message]") -> None:
+        """Bulk-load, for a page of messages, the stored messages they reply to.
+
+        One query for the whole page instead of one per reply in
+        :attr:`reply_target`; each reply gets ``_reply_target_cache`` (the
+        target, or None when it was never crawled).
+        """
+        replies = [m for m in messages if m.reply_to_msg_id is not None]
+        if not replies:
+            return
+        targets: dict[tuple[int, int], Message] = {}
+        rows = (
+            cls.objects.filter(
+                channel_id__in={m.channel_id for m in replies},
+                telegram_id__in={m.reply_to_msg_id for m in replies},
+            )
+            .only("id", "channel_id", "telegram_id", "date")
+            .order_by("pk")
+        )
+        for row in rows:
+            targets.setdefault((row.channel_id, row.telegram_id), row)
+        for msg in replies:
+            msg._reply_target_cache = targets.get((msg.channel_id, msg.reply_to_msg_id))
+
+    @property
+    def reply_target(self) -> "Message | None":
+        """The stored message this one replies to; None when it is not a reply or the target was not crawled.
+
+        A reply header names a message of the same chat (the crawler keeps only
+        ``reply_to_msg_id``). Reads the cache :meth:`attach_reply_targets` fills,
+        else costs one query.
+        """
+        if self.reply_to_msg_id is None:
+            return None
+        if not hasattr(self, "_reply_target_cache"):
+            self._reply_target_cache = (
+                Message.objects.filter(channel_id=self.channel_id, telegram_id=self.reply_to_msg_id)
+                .only("id", "channel_id", "telegram_id", "date")
+                .order_by("pk")
+                .first()
+            )
+        return self._reply_target_cache
+
+    @property
+    def reply_to_telegram_url(self) -> str:
+        """The replied-to message on Telegram, or "" when this message is not a reply."""
+        if self.reply_to_msg_id is None:
+            return ""
+        return f"{self.channel.telegram_url}/{self.reply_to_msg_id}"
+
     @property
     def telegram_url(self) -> str:
         return f"{self.channel.telegram_url}/{self.telegram_id}"
