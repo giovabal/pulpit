@@ -249,6 +249,18 @@ class EmojiPackViewsTests(_EmojiFixture):
         self.assertEqual({r["pack_short_name"]: r["pack_in_target"] for r in rows("")}, {"firepack": "1", "": "0"})
         self.assertEqual([r["pack_title"] for r in rows("?target=out")], ["Other pack"])
 
+    def test_group_packs_are_shown_and_exported(self) -> None:
+        group = make_channel(telegram_id=55, title="Org chat", megagroup=True, emoji_pack=self.pack)
+
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": group.pk})).content.decode()
+        self.assertIn("Group emoji pack:", html)
+        self.assertIn(reverse("emoji-pack-detail", kwargs={"pk": self.pack.pk}), html)
+        self.assertContains(self.client.get(reverse("emoji-packs")), "The own emoji pack of Org chat")
+        detail = self.client.get(reverse("emoji-pack-detail", kwargs={"pk": self.pack.pk})).content.decode()
+        self.assertIn(f'The own emoji pack of <a href="{group.get_absolute_url()}">Org chat</a>', detail)
+        body = self.client.get(reverse("emoji-pack-usage-csv")).content.decode()
+        self.assertEqual(list(csv.DictReader(io.StringIO(body)))[0]["pack_group_channel_ids"], "55")
+
     def test_channel_page_marks_in_target_packs(self) -> None:
         self.pack.is_in_target = True
         self.pack.save()

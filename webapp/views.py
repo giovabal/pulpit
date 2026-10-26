@@ -635,8 +635,9 @@ def _channel_csv_cells(channel: Channel | None) -> list[Any]:
 
 def _pack_csv_cells(pack: CustomEmojiPack | None) -> list[Any]:
     if pack is None:
-        return ["", "", "", "", ""]
-    return [pack.pk, pack.telegram_id, pack.short_name, pack.title, int(pack.is_in_target)]
+        return ["", "", "", "", "", ""]
+    groups = ";".join(str(channel.telegram_id) for channel in pack.group_channels.all())
+    return [pack.pk, pack.telegram_id, pack.short_name, pack.title, int(pack.is_in_target), groups]
 
 
 def _usage_csv_cells(row: dict[str, Any]) -> list[Any]:
@@ -652,7 +653,14 @@ def _usage_csv_cells(row: dict[str, Any]) -> list[Any]:
 
 
 _CHANNEL_CSV_COLUMNS = ("channel_id", "channel_telegram_id", "channel_username", "channel_title", "label")
-_PACK_CSV_COLUMNS = ("pack_id", "pack_telegram_id", "pack_short_name", "pack_title", "pack_in_target")
+_PACK_CSV_COLUMNS = (
+    "pack_id",
+    "pack_telegram_id",
+    "pack_short_name",
+    "pack_title",
+    "pack_in_target",
+    "pack_group_channel_ids",
+)
 _USAGE_CSV_COLUMNS = (
     "own_uses",
     "own_messages",
@@ -724,7 +732,7 @@ class EmojiPackDetailView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         ctx = super().get_context_data(**kwargs)
-        pack = get_object_or_404(CustomEmojiPack, pk=kwargs["pk"])
+        pack = get_object_or_404(CustomEmojiPack.objects.prefetch_related("group_channels"), pk=kwargs["pk"])
         messages = emoji_usage.messages_touching(emoji_usage.scope_messages(), emoji__pack=pack)
         rows = [row for row in emoji_usage.usage_rows(messages, "pack") if row["pack_id"] == pack.pk]
         emoji_usage.attach_channels(rows)
@@ -799,7 +807,9 @@ class CustomEmojiDetailView(ListView):
     page_kwarg = "page"
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-        self.emoji = get_object_or_404(CustomEmoji.objects.select_related("pack"), pk=kwargs["pk"])
+        self.emoji = get_object_or_404(
+            CustomEmoji.objects.select_related("pack").prefetch_related("pack__group_channels"), pk=kwargs["pk"]
+        )
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
@@ -958,7 +968,8 @@ class ChannelDetailView(ListView):
         # Prefetch the label periods with their group: the header resolves the channel's
         # affiliations across *every* group, which would otherwise cost a query per label.
         self.selected_channel = get_object_or_404(
-            Channel.objects.prefetch_related("channel_labels__label__group"), pk=kwargs.get("pk")
+            Channel.objects.select_related("emoji_pack").prefetch_related("channel_labels__label__group"),
+            pk=kwargs.get("pk"),
         )
         return super().get(request, *args, **kwargs)
 

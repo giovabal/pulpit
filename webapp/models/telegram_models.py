@@ -120,6 +120,12 @@ class Channel(TelegramBaseModel):
     has_scheduled = models.BooleanField(default=False)
     pinned_msg_id = models.PositiveBigIntegerField(null=True, blank=True)
     migrated_from_chat_id = models.BigIntegerField(null=True, blank=True)
+    # The custom emoji pack a boosted supergroup set as its own (ChannelFull.emojiset) — the one
+    # documented tie between a pack and a chat; recorded by the channel-details fetch, NULL when
+    # the chat has none (broadcast channels never do).
+    emoji_pack = models.ForeignKey(
+        "webapp.CustomEmojiPack", on_delete=models.SET_NULL, null=True, blank=True, related_name="group_channels"
+    )
 
     def __str__(self) -> str:
         return self.title or str(self.telegram_id)

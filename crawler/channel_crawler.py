@@ -12,7 +12,12 @@ from django.utils import timezone
 
 from crawler import coverage
 from crawler.client import TelegramAPIClient
-from crawler.custom_emoji import custom_emoji_pks, resolve_custom_emoji, save_message_custom_emoji
+from crawler.custom_emoji import (
+    custom_emoji_pks,
+    pack_from_sticker_set,
+    resolve_custom_emoji,
+    save_message_custom_emoji,
+)
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import ReferenceResolver, message_references
@@ -338,6 +343,8 @@ class ChannelCrawler:
         channel.has_scheduled = bool(getattr(full, "has_scheduled", False))
         channel.pinned_msg_id = getattr(full, "pinned_msg_id", None) or None
         channel.migrated_from_chat_id = getattr(full, "migrated_from_chat_id", None) or None
+        # A boosted supergroup's own custom emoji pack; cleared when the group drops it.
+        channel.emoji_pack = pack_from_sticker_set(getattr(full, "emojiset", None))
         channel.save(
             update_fields=[
                 "participants_count",
@@ -363,6 +370,7 @@ class ChannelCrawler:
                 "has_scheduled",
                 "pinned_msg_id",
                 "migrated_from_chat_id",
+                "emoji_pack",
             ]
         )
 

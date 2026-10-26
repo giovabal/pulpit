@@ -1224,6 +1224,13 @@ class CustomEmojiPackViewSetTests(_ApiTestCase):
         self.assertIn("stickers/emoji/77.webp", fire["preview_html"])
         self.assertEqual(fire["telegram_url"], "https://t.me/addemoji/firepack")
 
+    def test_list_names_the_groups_using_a_pack_as_their_own(self):
+        group = make_channel(telegram_id=55, title="Org chat", emoji_pack=self.pack)
+        fire = self.jget(_api("emoji-packs/")).json()["results"][0]
+        self.assertEqual(
+            fire["group_channels"], [{"id": group.pk, "title": "Org chat", "url": group.get_absolute_url()}]
+        )
+
     def test_filters(self):
         def titles(query):
             return [r["title"] for r in self.jget(_api(f"emoji-packs/?{query}")).json()["results"]]

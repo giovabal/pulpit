@@ -71,6 +71,7 @@
         {% if selected_channel.available_min_id %}<span class="ch-meta-item ch-meta-item--warn" data-bs-toggle="tooltip" title="Oldest message accessible via the Telegram API — messages before ID {{ selected_channel.available_min_id }} have been permanently deleted"><i class="bi bi-trash" aria-hidden="true"></i>History from msg #{{ selected_channel.available_min_id }}</span>{% endif %}
         {% if message_ttl_display %}<span class="ch-meta-item ch-meta-item--warn" data-bs-toggle="tooltip" title="Telegram automatically deletes all messages in this channel after {{ message_ttl_display }}"><i class="bi bi-clock-history" aria-hidden="true"></i>Auto-delete: {{ message_ttl_display }}</span>{% endif %}
         {% if selected_channel.theme_emoticon %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="Custom emoji theme applied to this channel">{{ selected_channel.theme_emoticon }}</span>{% endif %}
+        {% if selected_channel.emoji_pack %}<span class="ch-meta-item" data-bs-toggle="tooltip" title="The custom emoji pack this group set as its own, a feature of boosted groups: every member can use its emoji, Premium or not"><i class="bi bi-emoji-smile" aria-hidden="true"></i>Group emoji pack: <a href="{% url 'emoji-pack-detail' pk=selected_channel.emoji_pack_id %}">{{ selected_channel.emoji_pack.display_title }}</a></span>{% endif %}
       </div>
     </div>
   </div>

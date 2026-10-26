@@ -46,8 +46,7 @@
           <span class="emoji-pack-preview">{% for emoji in row.preview %}{% custom_emoji emoji play="hover" %}{% endfor %}</span>
           <a href="{% url 'emoji-pack-detail' pk=row.pack.pk %}">{{ row.pack.display_title }}</a>
           {% if row.pack.telegram_url %}<a href="{{ row.pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link ms-1" title="Open the pack on Telegram" aria-label="Open {{ row.pack.display_title }} on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>{% endif %}
-          {% if row.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
-          {% if row.pack.is_unavailable %}<span class="ch-badge ch-badge--muted ms-1">no longer on Telegram</span>{% endif %}
+          {% include "webapp/_emoji_pack_badges.html" with pack=row.pack %}
           {% else %}
           <span class="text-muted">Not resolved yet</span>
           <span class="text-muted small">— emoji whose pack the next crawl looks up</span>

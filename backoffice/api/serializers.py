@@ -573,6 +573,7 @@ class CustomEmojiPackSerializer(serializers.ModelSerializer):
     display_title = serializers.CharField(read_only=True)
     telegram_url = serializers.CharField(read_only=True)
     preview_html = serializers.SerializerMethodField()
+    group_channels = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomEmojiPack
@@ -591,6 +592,7 @@ class CustomEmojiPackSerializer(serializers.ModelSerializer):
             "channels",
             "emoji_used",
             "preview_html",
+            "group_channels",
         ]
         read_only_fields = ["telegram_id", "title", "short_name", "emoji_count", "is_unavailable"]
 
@@ -602,6 +604,10 @@ class CustomEmojiPackSerializer(serializers.ModelSerializer):
             setattr(instance, field, value)
         instance.save(update_fields=[*validated_data, "_updated"])
         return instance
+
+    def get_group_channels(self, obj: CustomEmojiPack) -> list[dict]:
+        """The groups that set this pack as their own emoji pack (``Channel.emoji_pack``)."""
+        return [{"id": c.pk, "title": c.title, "url": c.get_absolute_url()} for c in obj.group_channels.all()]
 
     def get_preview_html(self, obj: CustomEmojiPack) -> str:
         return "".join(str(emoji_html(e, play="hover")) for e in self.context.get("previews", {}).get(obj.pk, [])[:3])
