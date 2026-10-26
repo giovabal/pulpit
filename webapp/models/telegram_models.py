@@ -73,6 +73,9 @@ class Channel(TelegramBaseModel):
     # purge_out_of_target_messages), like to_inspect does for analyst-picked channels.
     environment_depth = models.PositiveSmallIntegerField(null=True, blank=True)
     is_user_account = models.BooleanField(default=False)
+    # A user account that is a Telegram bot (Telethon ``User.bot``); only meaningful with
+    # is_user_account, which stays the analysis bucket (USER) for people and bots alike.
+    is_bot = models.BooleanField(default=False)
     are_messages_crawled = models.BooleanField(default=False)
     # Inclusive local-date intervals ``[[start, end], …]`` (ISO strings, ``None`` = open) inside
     # which every message the channel was required to keep is stored — see
@@ -131,7 +134,7 @@ class Channel(TelegramBaseModel):
     @property
     def channel_type(self) -> str:
         if self.is_user_account:
-            return "user"
+            return "bot" if self.is_bot else "user"
         if self.gigagroup:
             return "gigagroup"
         if self.megagroup:

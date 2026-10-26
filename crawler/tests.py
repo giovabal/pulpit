@@ -652,6 +652,8 @@ class ResolveOneTests(TestCase):
         self.assertIsNotNone(result)
         result.refresh_from_db()
         self.assertTrue(result.is_user_account)
+        self.assertTrue(result.is_bot)
+        self.assertEqual(result.channel_type, "bot")
         self.assertFalse(result.broadcast)
         self.assertEqual(result.channel_type_key, "USER")
         self.assertEqual(result.username, "SomeBot")
@@ -660,6 +662,14 @@ class ResolveOneTests(TestCase):
         again, _ = self.resolver._resolve_one("somebot")
         self.assertEqual(again, result)
         self.api_client.client.get_entity.assert_called_once_with("somebot")
+
+    def test_person_entity_recorded_as_user_not_bot(self) -> None:
+        self.api_client.client.get_entity.return_value = User(id=4244, username="SomeContact")
+        result, _ = self.resolver._resolve_one("somecontact")
+        result.refresh_from_db()
+        self.assertTrue(result.is_user_account)
+        self.assertFalse(result.is_bot)
+        self.assertEqual(result.channel_type, "user")
 
     def test_user_entity_never_overwrites_a_channel_with_the_same_numeric_id(self) -> None:
         # User and channel ids are separate namespaces that can coincide numerically.
@@ -2047,16 +2057,18 @@ class ChannelCrawlerGetBasicChannelTests(TestCase):
     def test_resolving_real_channel_clears_stale_user_account_flag(self) -> None:
         # A row mislabelled is_user_account/is_lost is self-healed the moment its id
         # resolves to a real Channel entity again.
-        make_channel(telegram_id=8, username="healme", is_user_account=True, is_lost=True)
+        make_channel(telegram_id=8, username="healme", is_user_account=True, is_bot=True, is_lost=True)
         self.api_client.client.get_entity.return_value = _make_telegram_channel(telegram_id=8, username="healme")
 
         channel, tc = self.crawler.get_basic_channel(8)
 
         self.assertIsNotNone(channel)
         self.assertFalse(channel.is_user_account)
+        self.assertFalse(channel.is_bot)
         self.assertFalse(channel.is_lost)
         refreshed = Channel.objects.get(telegram_id=8)
         self.assertFalse(refreshed.is_user_account)
+        self.assertFalse(refreshed.is_bot)
         self.assertFalse(refreshed.is_lost)
 
 
@@ -2152,10 +2164,25 @@ class ChannelCrawlerResolveRecycledHandleTests(TestCase):
         # No channel was ever known under this id → a genuine user account.
         from telethon.tl.types import User
 
-        self.api_client.client.get_entity.return_value = User(id=700)
+        user = User(id=700)
+        self.api_client.client.get_entity.return_value = user
         channel, tg_ch, status = self.crawler.resolve_channel_or_classify(700)
         self.assertEqual(status, "user_account")
         self.assertIsNone(channel)
+        self.assertIs(tg_ch, user)
+
+    def test_user_account_seed_stamps_bot_flag(self) -> None:
+        from telethon.tl.types import User
+
+        person = make_channel(telegram_id=701, username="contact")
+        bot = make_channel(telegram_id=702, username="helper_bot")
+        for row, entity in ((person, User(id=701)), (bot, User(id=702, bot=True))):
+            self.api_client.client.get_entity.return_value = entity
+            self.assertEqual(self.crawler.refresh_channel_info(row.telegram_id), "user_account")
+            row.refresh_from_db()
+            self.assertTrue(row.is_user_account)
+        self.assertFalse(person.is_bot)
+        self.assertTrue(bot.is_bot)
 
 
 # ---------------------------------------------------------------------------

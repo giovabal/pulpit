@@ -161,7 +161,7 @@ Bulk management of the channel database:
 - **Assign label** — select multiple channels and replace their periods *within one label's group* with a single period under one label in one action
 - **Source chips** — add or remove ChannelSource memberships inline
 - **Edit individual** — click through to edit a channel's details, its **label periods** (label + optional start/end, non-overlapping within a partition group), `to_inspect` flag, and vacancy record
-- **Filter** — by label, group, in-target status, entity type
+- **Filter** — by label, group, in-target status, entity type; *User accounts* and *Bots* split the Telegram users that citations point to (a bot shows as type `bot`)
 
 ### Labels — `/manage/labels/`
 

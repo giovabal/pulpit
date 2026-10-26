@@ -43,6 +43,17 @@ _UNRESOLVABLE_THIS_RUN: set[int] = set()
 class _UserAccountSeed(Exception):
     """Sentinel raised by get_basic_channel when the seed resolves to a Telegram User."""
 
+    def __init__(self, user: User) -> None:
+        super().__init__(user)
+        self.user = user
+
+
+def user_account_fields(user: Any) -> dict[str, bool]:
+    """The fields stamped on a row whose seed resolved to *user* (the ``"user_account"``
+    status's entity, ``None`` when unknown): the USER bucket, not lost, and bot or person
+    as Telegram says."""
+    return {"is_user_account": True, "is_lost": False, "is_bot": getattr(user, "bot", None) is True}
+
 
 def _save_reactions(message_pk: int, telegram_message: Any) -> None:
     """Persist the current emoji reactions for *message_pk* from a Telethon message object.
@@ -425,7 +436,8 @@ class ChannelCrawler:
                            recycled onto a different channel or a user account
                            (see the username fallback)
           "user_account" — seed itself resolves to a user account and no known channel
-                           exists under it
+                           exists under it; tg_channel is the Telegram User (see
+                           user_account_fields)
 
         FloodWaitError is always propagated to the caller.
         """
@@ -516,7 +528,7 @@ class ChannelCrawler:
             # "lost", not a user account. Genuine user accounts are caught by
             # the _UserAccountSeed handler below.
             return None, None, "lost"
-        except _UserAccountSeed:
+        except _UserAccountSeed as user_seed:
             # The initial get_basic_channel(seed) saw a User entity (the username fallback
             # handles its own _UserAccountSeed above). Trust that verdict only when we hold
             # no evidence the seed was ever a real channel — otherwise the id/handle has
@@ -529,7 +541,7 @@ class ChannelCrawler:
                     seed,
                 )
                 return None, None, "lost"
-            return None, None, "user_account"
+            return None, user_seed.user, "user_account"
 
     def get_basic_channel(self, seed: int | str) -> tuple[Channel, Any] | tuple[None, None]:
         self.api_client.wait()
@@ -543,15 +555,16 @@ class ChannelCrawler:
             return None, None
         if isinstance(telegram_channel, User):
             # Don't build a Channel row from User fields — signal to the caller instead.
-            raise _UserAccountSeed
+            raise _UserAccountSeed(telegram_channel)
         channel = Channel.from_telegram_object(telegram_channel, force_update=True)
         if channel.is_user_account or channel.is_lost:
             # We just resolved a real Channel entity under this id, so any earlier "user
             # account" / "lost" verdict was a recycled-handle / entity-cache artefact.
             # Clear it so the row is no longer dropped from channel-scope crawls (self-heal
             # for rows mislabelled before the guards above existed).
-            Channel.objects.filter(pk=channel.pk).update(is_user_account=False, is_lost=False)
+            Channel.objects.filter(pk=channel.pk).update(is_user_account=False, is_bot=False, is_lost=False)
             channel.is_user_account = False
+            channel.is_bot = False
             channel.is_lost = False
         return channel, telegram_channel
 
@@ -577,7 +590,9 @@ class ChannelCrawler:
             return status
         if status == "user_account":
             logger.info("Seed is a user account not resolvable by username: %s", seed)
-            Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(is_user_account=True, is_lost=False)
+            Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
+                **user_account_fields(telegram_channel)
+            )
             update_status(f"[telegram_id={seed}] | skipped (user account)")
             return status
 
@@ -646,7 +661,7 @@ class ChannelCrawler:
             logger.info("Seed is a user account not resolvable by username: %s", seed)
             if update_info:
                 Channel.objects.filter(Q(telegram_id=seed) | Q(username=seed)).update(
-                    is_user_account=True, is_lost=False
+                    **user_account_fields(telegram_channel)
                 )
             update_status(f"[telegram_id={seed}] | skipped (user account)")
             return 0

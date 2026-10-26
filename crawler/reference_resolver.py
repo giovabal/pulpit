@@ -151,7 +151,7 @@ class ReferenceResolver:
         "user_account" verdicts) instead, the reference still attaches — a USER-inclusive
         analysis sees the citation, a channel-only one filters it out — and the stored
         handle short-circuits the next lookup instead of calling get_entity again. Only the
-        handle is kept, no personal fields.
+        handle and whether it is a bot are kept, no personal fields.
 
         User and channel ids are separate Telegram namespaces that can coincide
         numerically, so a stored non-user row already holding this id is left untouched
@@ -169,7 +169,12 @@ class ReferenceResolver:
             return None
         channel, _ = Channel.objects.update_or_create(
             telegram_id=user.id,
-            defaults={"username": user.username or reference, "is_user_account": True, "broadcast": False},
+            defaults={
+                "username": user.username or reference,
+                "is_user_account": True,
+                "is_bot": user.bot is True,
+                "broadcast": False,
+            },
         )
         return channel
 
