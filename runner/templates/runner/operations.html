@@ -285,7 +285,7 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="download_stickers" {% if ad.CRAWL_DOWNLOAD_STICKERS %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Sticker download
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Download stickers — static webp, animated TGS, and video webm stickers."></i>
+                       title="Download stickers — static webp, animated TGS, and video webm stickers — and the custom emoji used in posts and reactions."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="download_other_media" {% if ad.CRAWL_DOWNLOAD_OTHER_MEDIA %}checked{% endif %} data-requires-any-flag="get_new_messages,fix_holes,fix_missing_media">Other media download
@@ -341,7 +341,7 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="environment_download_stickers" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_STICKERS %}checked{% endif %} data-requires-flag="environment">Sticker download
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Download stickers attached to environment channels' messages — static webp, animated TGS, and video webm stickers."></i>
+                       title="Download stickers attached to environment channels' messages — static webp, animated TGS, and video webm stickers — and the custom emoji they use."></i>
                   </label>
                   <label class="ops-flag">
                     <input type="checkbox" name="environment_download_other_media" {% if ad.CRAWL_ENVIRONMENT_DOWNLOAD_OTHER_MEDIA %}checked{% endif %} data-requires-flag="environment">Other media download

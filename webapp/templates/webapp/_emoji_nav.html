@@ -1,0 +1,21 @@
+{% comment %}
+Tabs (Packs / Emoji), the pack in-target filter and the CSV link shared by the
+emoji-packs and custom-emoji list pages.
+
+Required context:
+    active      — "packs" or "emoji"
+    target      — "", "in" or "out" (webapp.emoji_usage.TARGET_FILTERS)
+    csv_url     — the page's channel × pack / channel × emoji CSV
+{% endcomment %}
+<div class="emoji-nav">
+  <nav class="emoji-nav-tabs" aria-label="Custom emoji views">
+    <a href="{% url 'emoji-packs' %}{% if target %}?target={{ target }}{% endif %}" class="emoji-nav-tab{% if active == 'packs' %} active{% endif %}"{% if active == 'packs' %} aria-current="page"{% endif %}>Packs</a>
+    <a href="{% url 'custom-emoji-list' %}{% if target %}?target={{ target }}{% endif %}" class="emoji-nav-tab{% if active == 'emoji' %} active{% endif %}"{% if active == 'emoji' %} aria-current="page"{% endif %}>Emoji</a>
+  </nav>
+  <div class="emoji-nav-filter" role="group" aria-label="Pack in-target filter">
+    <a href="?" class="emoji-nav-chip{% if not target %} active{% endif %}"{% if not target %} aria-current="true"{% endif %}>All packs</a>
+    <a href="?target=in" class="emoji-nav-chip{% if target == 'in' %} active{% endif %}"{% if target == 'in' %} aria-current="true"{% endif %}><i class="bi bi-bullseye" aria-hidden="true"></i> In target</a>
+    <a href="?target=out" class="emoji-nav-chip{% if target == 'out' %} active{% endif %}"{% if target == 'out' %} aria-current="true"{% endif %}>Not in target</a>
+  </div>
+  <a href="{{ csv_url }}{% if target %}?target={{ target }}{% endif %}" class="channels-vacancies-link"><i class="bi bi-filetype-csv" aria-hidden="true"></i> Channel × {% if active == 'emoji' %}emoji{% else %}pack{% endif %} CSV</a>
+</div>

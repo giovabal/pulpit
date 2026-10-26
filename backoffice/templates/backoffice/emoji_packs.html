@@ -1,0 +1,59 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% load vstatic %}
+
+{% block bo_heading %}Emoji packs{% endblock bo_heading %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Custom emoji packs</h2>
+    <a class="bo-btn bo-btn--ghost" href="{% url 'emoji-packs' %}"><i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Usage</a>
+  </div>
+  <p class="text-muted small">
+    The packs the crawler found in posts and reactions. Mark <strong>in target</strong> the packs your study is about —
+    an organisation's own pack, say; every pack starts out of target. The flag classifies a pack: the
+    <a href="{% url 'emoji-packs' %}">Emoji packs</a> and <a href="{% url 'custom-emoji-list' %}">Emoji</a> pages and their CSVs
+    can be filtered by it, and it never removes a pack's uses from a count. Uses and channels here count every stored post;
+    the usage pages count in-target channels inside their in-target periods. Changes save as you make them.
+  </p>
+  <div class="bo-toolbar">
+    <input class="bo-search" id="ep-search" type="search" placeholder="Search by title or short name…" autocomplete="off" aria-label="Search packs by title or short name">
+    <select class="bo-select" id="ep-target" aria-label="Filter by in-target status">
+      <option value="">All packs</option>
+      <option value="in">In target</option>
+      <option value="out">Not in target</option>
+    </select>
+    <span class="bo-count" id="ep-count"></span>
+    <div class="bo-pagination" id="ep-pagination-top"></div>
+  </div>
+  <div class="table-responsive">
+    <table class="bo-table" id="ep-table">
+      <caption class="sr-only">Custom emoji packs</caption>
+      <thead>
+        <tr>
+          <th scope="col"><span class="sr-only">Preview</span></th>
+          <th scope="col">Pack</th>
+          <th scope="col">Short name</th>
+          <th class="bo-th--num" scope="col">Emoji used</th>
+          <th class="bo-th--num" scope="col">Uses</th>
+          <th class="bo-th--num" scope="col">Channels</th>
+          <th scope="col">In target</th>
+          <th scope="col">Note</th>
+        </tr>
+      </thead>
+      <tbody id="ep-tbody">
+        <tr><td colspan="8" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="bo-pagination bo-pagination--bottom" id="ep-pagination-bottom"></div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>window.EMOJI_PACK_URL = "{% url 'emoji-pack-detail' pk=0 %}";</script>
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/emoji_packs.js' %}"></script>
+{% endblock extra_scripts %}

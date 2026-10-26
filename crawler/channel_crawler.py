@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from crawler import coverage
 from crawler.client import TelegramAPIClient
+from crawler.custom_emoji import custom_emoji_pks, resolve_custom_emoji, save_message_custom_emoji
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import ReferenceResolver, message_references
@@ -19,6 +20,7 @@ from webapp.models import (
     Channel,
     ChannelLabel,
     Message,
+    MessageCustomReaction,
     MessageReaction,
     MessageReply,
     Poll,
@@ -60,9 +62,12 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
 
     Replaces any existing reactions — always reflects the current Telegram state.
     Custom-emoji / sticker reactions are tallied together under the synthetic emoji "custom"
-    so that total reaction counts are not understated on channels that use custom emoji packs.
+    so that total reaction counts are not understated on channels that use custom emoji packs;
+    the custom-emoji part of that bucket is also kept per emoji (``MessageCustomReaction``,
+    pointing at the ``CustomEmoji`` placeholder ``crawler.custom_emoji`` resolves later).
     """
     to_create: list[MessageReaction] = []
+    custom_counts: dict[int, int] = {}
     reactions_obj = getattr(telegram_message, "reactions", None)
     if reactions_obj:
         custom_total = 0
@@ -71,14 +76,24 @@ def _save_reactions(message_pk: int, telegram_message: Any) -> None:
                 to_create.append(MessageReaction(message_id=message_pk, emoji=rc.reaction.emoticon, count=rc.count))
             else:
                 custom_total += rc.count
+                document_id = getattr(rc.reaction, "document_id", None)
+                if isinstance(document_id, int):
+                    custom_counts[document_id] = custom_counts.get(document_id, 0) + rc.count
         if custom_total:
             to_create.append(MessageReaction(message_id=message_pk, emoji="custom", count=custom_total))
+    emoji_pks = custom_emoji_pks(custom_counts)
     # Wrap delete + insert + total update so a mid-flight crash can't leave the
     # message with no reactions and a stale total_reactions count.
     with transaction.atomic():
         MessageReaction.objects.filter(message_id=message_pk).delete()
+        MessageCustomReaction.objects.filter(message_id=message_pk).delete()
         if to_create:
             MessageReaction.objects.bulk_create(to_create)
+        if custom_counts:
+            MessageCustomReaction.objects.bulk_create(
+                MessageCustomReaction(message_id=message_pk, emoji_id=emoji_pks[document_id], count=count)
+                for document_id, count in custom_counts.items()
+            )
         # Keep Message.total_reactions in sync — including the N → 0 case, so
         # the denormalised sort key never goes stale.
         Message.objects.filter(pk=message_pk).update(total_reactions=sum(r.count for r in to_create))
@@ -809,6 +824,7 @@ class ChannelCrawler:
             image_count += hole_image_count
 
         self._resolve_pending_forwards(status_callback)
+        self.resolve_custom_emoji(status_callback)
         channel.are_messages_crawled = True
         channel.is_lost = False
         channel.is_private = False
@@ -1018,6 +1034,7 @@ class ChannelCrawler:
 
         _save_reactions(message.pk, telegram_message)
         _save_poll(message.pk, telegram_message)
+        save_message_custom_emoji(message.pk, telegram_message)
         # A share of a tagged post — or a tagged share's original — takes the post's tags now.
         link_stored_message(message.pk, self._post_origin(channel, telegram_message))
 
@@ -1104,6 +1121,14 @@ class ChannelCrawler:
                     exc_info=True,
                 )
 
+    def resolve_custom_emoji(self, status_callback: Callable[[str], None] | None = None) -> tuple[int, int]:
+        """Resolve the custom emoji stored messages named, and their packs (``crawler.custom_emoji``).
+
+        Files are downloaded when this crawler's media handler downloads stickers. Returns
+        ``(emoji resolved, files downloaded)``; Telegram errors leave the rest pending.
+        """
+        return resolve_custom_emoji(self.api_client, self.media_handler, status_callback)
+
     def refresh_message_stats(
         self,
         channel: Channel,
@@ -1116,6 +1141,8 @@ class ChannelCrawler:
     ) -> int:
         """Re-fetch messages and update views/forwards/pinned in place.
 
+        Reactions are replaced with the current ones, and a message whose text is still the
+        stored one gets its custom-emoji spans (back)filled — older crawls did not record them.
         ``limit`` restricts to the N most recent messages **within the date window**.
         ``min_date`` / ``max_date`` define the inclusive date window; iteration stops
         as soon as a message older than ``min_date`` is found.
@@ -1198,7 +1225,7 @@ class ChannelCrawler:
             update_kwargs = _build_msg_update_kwargs(telegram_message, now)
             msg_row = (
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                .values("pk", "replies_unavailable", "is_lost", "views", "forwards", "replies")
+                .values("pk", "replies_unavailable", "is_lost", "views", "forwards", "replies", "message")
                 .first()
             )
             if msg_row is not None:
@@ -1235,6 +1262,10 @@ class ChannelCrawler:
                 visited_ids.add(telegram_message.id)
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
+                # Custom emoji spans are offsets into the text, so they are (back)filled only while
+                # Telegram still serves the text stored at first crawl — never from a stub.
+                if (telegram_message.message or "") == msg_row["message"]:
+                    save_message_custom_emoji(msg_pk, telegram_message)
             update_status(f"refreshing message stats … {updated}/{total_in_db}")
         newly_lost = 0
         if not limit_hit:

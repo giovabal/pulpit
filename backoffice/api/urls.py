@@ -15,6 +15,7 @@ from .views import (
     ChannelSourceViewSet,
     ChannelVacancyViewSet,
     ChannelViewSet,
+    CustomEmojiPackViewSet,
     EventTypeViewSet,
     EventViewSet,
     LabelGroupViewSet,
@@ -43,6 +44,7 @@ router.register("users", UserViewSet, basename="api-users")
 router.register("vacancies", ChannelVacancyViewSet, basename="api-vacancies")
 router.register("message-tags", MessageTagViewSet, basename="api-message-tags")
 router.register("message-taggings", MessageTaggingViewSet, basename="api-message-taggings")
+router.register("emoji-packs", CustomEmojiPackViewSet, basename="api-emoji-packs")
 
 urlpatterns = [
     *router.urls,

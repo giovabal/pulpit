@@ -5,12 +5,13 @@ and their related media files in step, but every previous deletion path
 (crashed crawler runs, interrupted imports, the buggy ``delete_unused_messages``
 script that left payloads behind) can have produced orphan files. This command
 walks the on-disk directories that hold media payloads and removes anything
-that isn't pointed to by one of the seven file-bearing model fields:
+that isn't pointed to by one of the eight file-bearing model fields:
 
 * ``MessagePicture.picture`` (under ``photos/``)
 * ``MessageVideo.video`` (under ``videos/``)
 * ``MessageAudio.audio`` (under ``audios/``)
 * ``MessageSticker.sticker`` (under ``stickers/``)
+* ``CustomEmoji.file`` (under ``stickers/emoji/``)
 * ``MessageOtherMedia.media_file`` (under ``others/``)
 * ``ProfilePicture.picture`` (under ``channels/<X>/profile/``)
 * ``ProfilePicture.thumbnail`` (under ``channels/<X>/profile/``)
@@ -45,6 +46,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from webapp.models import (
+    CustomEmoji,
     MessageAudio,
     MessageOtherMedia,
     MessagePicture,
@@ -61,6 +63,7 @@ _REFERENCED_FIELDS: tuple[tuple[type, str], ...] = (
     (MessageVideo, "video"),
     (MessageAudio, "audio"),
     (MessageSticker, "sticker"),
+    (CustomEmoji, "file"),
     (MessageOtherMedia, "media_file"),
     (ProfilePicture, "picture"),
     (ProfilePicture, "thumbnail"),

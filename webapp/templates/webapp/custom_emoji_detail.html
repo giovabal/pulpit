@@ -1,0 +1,165 @@
+{% extends "webapp/index.html" %}
+{% load vstatic %}
+{% load custom_emoji %}
+
+{% block title %}{{ emoji.alt|default:"Custom emoji" }} · Emoji · {{ block.super }}{% endblock title %}
+
+{% block content %}
+<div class="channels-header">
+  <div class="d-flex align-items-baseline gap-2 flex-wrap">
+    <h1 class="h5 fw-semibold mb-0">
+      <a href="{% url 'channel-list' %}" class="text-decoration-none text-muted">Channels</a>
+      <span class="text-muted mx-1">/</span>
+      <a href="{% url 'custom-emoji-list' %}" class="text-decoration-none text-muted">Emoji</a>
+      <span class="text-muted mx-1">/</span>{{ emoji.alt|default:"?" }} <span class="text-muted small fw-normal">#{{ emoji.telegram_id }}</span>
+    </h1>
+  </div>
+</div>
+
+<div class="custom-emoji-hero">
+  <span class="custom-emoji-hero-glyph">{% custom_emoji emoji %}</span>
+  <dl class="custom-emoji-facts">
+    <dt>Pack</dt>
+    <dd>
+      {% if emoji.pack %}
+      <a href="{% url 'emoji-pack-detail' pk=emoji.pack.pk %}">{{ emoji.pack.display_title }}</a>
+      {% if emoji.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+      {% if emoji.pack.telegram_url %}<a href="{{ emoji.pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link ms-1" title="Open the pack on Telegram" aria-label="Open {{ emoji.pack.display_title }} on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>{% endif %}
+      {% else %}<span class="text-muted">Not resolved yet</span>{% endif %}
+    </dd>
+    <dt>Stands for</dt>
+    <dd>{{ emoji.alt|default:"—" }}</dd>
+    <dt>Format</dt>
+    <dd>{% if emoji.mime_type %}{% if emoji.kind == "lottie" %}Animated (TGS){% elif emoji.kind == "video" %}Video (webm){% else %}Static (webp){% endif %}{% else %}—{% endif %}{% if emoji.text_color %} · drawn in the text colour{% endif %}</dd>
+    <dt>Premium</dt>
+    <dd>{% if emoji.is_free is None %}—{% elif emoji.is_free %}Usable without Premium{% else %}Premium only{% endif %}</dd>
+  </dl>
+</div>
+
+{% if summary %}
+<div class="ch-summary-grid">
+  <div class="summary-card">
+    <i class="bi bi-chat-left-text sc-icon" aria-hidden="true"></i>
+    <span class="sc-label">Own uses</span>
+    <div class="sc-value-row"><span class="sc-value">{{ summary.own_uses }}</span></div>
+    <span class="sc-secondary"><strong>{{ summary.own_messages }}</strong> own post{{ summary.own_messages|pluralize }}</span>
+  </div>
+  <div class="summary-card">
+    <i class="bi bi-broadcast sc-icon" aria-hidden="true"></i>
+    <span class="sc-label">Channels</span>
+    <div class="sc-value-row"><span class="sc-value">{{ summary.channels }}</span></div>
+    <span class="sc-secondary">using it in own posts</span>
+  </div>
+  <div class="summary-card">
+    <i class="bi bi-forward sc-icon" aria-hidden="true"></i>
+    <span class="sc-label">Uses in forwards</span>
+    <div class="sc-value-row"><span class="sc-value">{{ summary.forwarded_uses }}</span></div>
+    <span class="sc-secondary"><strong>{{ summary.forwarded_messages }}</strong> forwarded post{{ summary.forwarded_messages|pluralize }}</span>
+  </div>
+  <div class="summary-card">
+    <i class="bi bi-emoji-smile sc-icon" aria-hidden="true"></i>
+    <span class="sc-label">Reactions</span>
+    <div class="sc-value-row"><span class="sc-value">{{ summary.reactions }}</span></div>
+  </div>
+  <div class="summary-card">
+    <i class="bi bi-calendar-range sc-icon" aria-hidden="true"></i>
+    <span class="sc-label">Used</span>
+    <div class="sc-value-row"><span class="sc-value custom-emoji-dates">{% if summary.first_used %}{{ summary.first_used|date:"N j, Y" }} – {{ summary.last_used|date:"N j, Y" }}{% else %}—{% endif %}</span></div>
+  </div>
+</div>
+{% else %}
+<div class="channels-empty">No in-target channel uses this emoji inside its in-target periods.</div>
+{% endif %}
+
+{% if monthly.labels %}
+<div class="stats-panel">
+  <div class="stats-toggle-wrap">
+    <h2 class="stats-toggle mb-0"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Uses in own posts per month</h2>
+  </div>
+  <div class="stats-panel-body">
+    <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas id="emoji-monthly"></canvas></div>
+  </div>
+</div>
+{{ monthly|json_script:"emoji-monthly-data" }}
+{% endif %}
+
+{% if rows %}
+<h2 class="emoji-section-title">Channels</h2>
+<div class="table-responsive">
+  <table class="stats-table emoji-pack-table">
+    <thead>
+      <tr>
+        <th scope="col">Channel</th>
+        <th scope="col" class="text-end">Own uses</th>
+        <th scope="col" class="text-end">Own posts</th>
+        <th scope="col" class="text-end">Uses in forwards</th>
+        <th scope="col" class="text-end">Reactions</th>
+        <th scope="col">First used</th>
+        <th scope="col">Last used</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          {% if row.channel %}
+          {% if row.channel.current_label %}<span class="org-dot" style="background: {{ row.channel.current_label.color }};" aria-hidden="true"></span>{% endif %}
+          <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-end">{{ row.own_uses }}</td>
+        <td class="text-end">{{ row.own_messages }}</td>
+        <td class="text-end">{{ row.forwarded_uses }}</td>
+        <td class="text-end">{{ row.reactions }}</td>
+        <td>{% if row.first_used %}<time datetime="{{ row.first_used|date:'Y-m-d' }}">{{ row.first_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+        <td>{% if row.last_used %}<time datetime="{{ row.last_used|date:'Y-m-d' }}">{{ row.last_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 class="emoji-section-title" id="emoji-posts">Posts drawing it</h2>
+<form method="get" action="" class="search-form" role="search">
+  <div class="search-input-wrap">
+    <i class="bi bi-search search-icon" aria-hidden="true"></i>
+    <input type="search" name="q" value="{{ query }}" placeholder="Search these posts…" class="search-input" aria-label="Search the posts drawing this emoji">
+    <button type="submit" class="search-btn">Search</button>
+  </div>
+  {% include "webapp/message_options.html" %}
+</form>
+
+{% include "webapp/pagination.html" %}
+<ol class="post-list list-unstyled mt-2">
+  {% for post in page_obj %}
+  <li>
+    {% include "webapp/_post_card.html" with post=post show_channel_chip=True %}
+  </li>
+  {% empty %}
+  <li class="channels-empty">No post matches.</li>
+  {% endfor %}
+</ol>
+{% include "webapp/pagination.html" %}
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
+  (function () {
+    var source = document.getElementById("emoji-monthly-data");
+    var canvas = document.getElementById("emoji-monthly");
+    if (!source || !canvas) return;
+    var data = JSON.parse(source.textContent);
+    data.y_label = "Uses in own posts";
+    fetchJson("{% url 'events-data' %}")
+      .catch(function () { return []; })
+      .then(function (events) { renderChart(canvas, data, events); });
+  })();
+</script>
+<script src="{% vstatic 'webapp/js/post_replies.js' %}"></script>
+<script src="{% vstatic 'webapp/js/post_lightbox.js' %}"></script>
+{% if CAN_EDIT_TAGS %}<script src="{% vstatic 'webapp/js/post_tags.js' %}"></script>{% endif %}
+{% endblock extra_scripts %}

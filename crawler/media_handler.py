@@ -8,6 +8,7 @@ import shutil
 from typing import Any
 
 from django.conf import settings
+from django.core.files import File
 
 from crawler.client import TelegramAPIClient
 from webapp.models import (
@@ -537,6 +538,39 @@ class MediaHandler:
                 "Couldn't download the sticker in message %s: %s", telegram_message.id, _friendly_media_error(e)
             )
         return 0
+
+    def download_custom_emoji(self, document: Any, emoji: Any) -> bool:
+        """Store a custom emoji's file from its *document* on the ``CustomEmoji`` row *emoji* (unsaved).
+
+        Gated by the sticker toggle — a custom emoji is a small sticker document. The file is
+        keyed on the document id (``CustomEmoji.get_media_path``), so every post using the
+        emoji shares it. *document* must carry a fresh file reference, as the ones
+        ``messages.getCustomEmojiDocuments`` returns do; the caller saves the row.
+        """
+        if not self.download_stickers:
+            return False
+        filename: str | None = None
+        try:
+            filename = self._download_media(document)
+            if not filename:
+                return False
+            with open(filename, "rb") as f:
+                emoji.file.save(os.path.basename(filename), File(f), save=False)
+            return True
+        except (
+            errors.rpcerrorlist.FileMigrateError,
+            errors.rpcerrorlist.FileReferenceExpiredError,
+            errors.rpcerrorlist.FileReferenceInvalidError,
+            ValueError,
+        ) as e:
+            logger.warning(
+                "Couldn't download the custom emoji %s: %s",
+                getattr(emoji, "telegram_id", "?"),
+                _friendly_media_error(e),
+            )
+            return False
+        finally:
+            self._cleanup_downloaded_file(filename)
 
     def download_message_other_media(self, telegram_message: Any) -> int:
         """Download documents that aren't video, audio, or stickers.

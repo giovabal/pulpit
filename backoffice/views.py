@@ -68,6 +68,10 @@ class UsersView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/users.html"
 
 
+class EmojiPacksManageView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/emoji_packs.html"
+
+
 class VacanciesManageView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/vacancies.html"
 
