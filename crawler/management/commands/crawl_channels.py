@@ -19,7 +19,7 @@ from django.core.management.base import BaseCommand
 from django.db import OperationalError, connection
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q
 
-from crawler.channel_crawler import ChannelCrawler
+from crawler.channel_crawler import ChannelCrawler, user_account_fields
 from crawler.client import TelegramAPIClient
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
@@ -1913,9 +1913,7 @@ class Command(BaseCommand):
                                         Channel.objects.filter(pk=meta_ch.pk).update(is_lost=True, is_private=False)
                                         continue
                                     if status == "user_account":
-                                        Channel.objects.filter(pk=meta_ch.pk).update(
-                                            is_user_account=True, is_lost=False
-                                        )
+                                        Channel.objects.filter(pk=meta_ch.pk).update(**user_account_fields(tg_ch))
                                         continue
                                     try:
                                         crawler.media_handler.download_profile_picture(tg_ch)

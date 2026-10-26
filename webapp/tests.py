@@ -632,6 +632,26 @@ class RepairReferenceUsersAndEnvironmentStampsMigrationTests(TestCase):
         self.assertEqual(depths, {lost.telegram_id: None, private.telegram_id: None, 3: 1, live.telegram_id: 1})
 
 
+class ChannelIsBotMigrationTests(TestCase):
+    """Data migration 0068: user accounts whose handle ends in "bot" are bots."""
+
+    def test_backfill_flags_bot_handles_of_user_accounts_only(self) -> None:
+        import importlib
+
+        from django.apps import apps
+
+        bot = Channel.objects.create(telegram_id=1, username="Florida_Bot", is_user_account=True)
+        person = Channel.objects.create(telegram_id=2, username="FloridaContact", is_user_account=True)
+        nameless = Channel.objects.create(telegram_id=3, is_user_account=True)
+        channel = Channel.objects.create(telegram_id=4, username="newsbot", title="News bot")
+        importlib.import_module("webapp.migrations.0068_channel_is_bot").backfill(apps, None)
+        flags = dict(Channel.objects.values_list("telegram_id", "is_bot"))
+        self.assertEqual(
+            flags, {bot.telegram_id: True, person.telegram_id: False, nameless.telegram_id: False, 4: False}
+        )
+        self.assertEqual(Channel.objects.get(pk=channel.pk).channel_type_key, "CHANNEL")
+
+
 class MessageGetTelegramReferencesTests(TestCase):
     def test_extracts_username(self) -> None:
         msg = Message(message="Check t.me/somechannel for info")

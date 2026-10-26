@@ -183,6 +183,10 @@ class ChannelViewSet(
             qs = qs.filter(to_inspect=True)
         elif status_filter == "environment":
             qs = qs.filter(environment_depth__isnull=False)
+        elif status_filter == "user":
+            qs = qs.filter(is_user_account=True, is_bot=False)
+        elif status_filter == "bot":
+            qs = qs.filter(is_user_account=True, is_bot=True)
 
         return qs
 

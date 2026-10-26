@@ -497,6 +497,15 @@ class ChannelViewSetTests(_ApiTestCase):
         ids = [c["id"] for c in resp.json()["results"]]
         self.assertIn(self.ch_private.pk, ids)
 
+    def test_status_filter_user_and_bot(self):
+        person = make_channel(telegram_id=97, username="SomeContact", is_user_account=True)
+        bot = make_channel(telegram_id=98, username="SomeBot", is_user_account=True, is_bot=True)
+        users = [c["id"] for c in self.jget(_api("channels/?status=user")).json()["results"]]
+        bots = self.jget(_api("channels/?status=bot")).json()["results"]
+        self.assertEqual(users, [person.pk])
+        self.assertEqual([c["id"] for c in bots], [bot.pk])
+        self.assertEqual(bots[0]["channel_type"], "bot")
+
     def test_status_filter_unassigned(self):
         unassigned = make_channel(telegram_id=99, title="Unassigned")
         resp = self.jget(_api("channels/?status=unassigned"))
