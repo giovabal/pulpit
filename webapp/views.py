@@ -1,3 +1,4 @@
+import csv
 import datetime
 import math
 import re
@@ -45,6 +46,7 @@ from network.vacancy_analysis import (
     configured_max_candidates,
     orphaned_amplifier_pks,
 )
+from webapp import emoji_usage
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -52,9 +54,13 @@ from .models import (
     ChannelLabel,
     ChannelSource,
     ChannelVacancy,
+    CustomEmoji,
+    CustomEmojiPack,
     Label,
     LabelGroup,
     Message,
+    MessageCustomEmoji,
+    MessageCustomReaction,
     MessageReaction,
     MessageReply,
     MessageTag,
@@ -100,8 +106,8 @@ def _channel_message_stats() -> dict[str, Any]:
 # ---- message list options ------------------------------------------------
 
 # Standard prefetch set for every Message-list view: each card needs all five
-# media types plus reactions, and rendering them per-row without prefetching
-# fires a query storm. ChannelDetailView additionally prefetches
+# media types plus reactions and custom emoji, and rendering them per-row without
+# prefetching fires a query storm. ChannelDetailView additionally prefetches
 # ``references`` because its template shows the t.me link column.
 _MESSAGE_LIST_PREFETCH: tuple[str | Prefetch, ...] = (
     "messagepicture_set",
@@ -110,6 +116,8 @@ _MESSAGE_LIST_PREFETCH: tuple[str | Prefetch, ...] = (
     "messagesticker_set",
     "messageothermedia_set",
     "reactions",
+    Prefetch("custom_emoji_spans", queryset=MessageCustomEmoji.objects.select_related("emoji__pack")),
+    Prefetch("custom_reactions", queryset=MessageCustomReaction.objects.select_related("emoji__pack")),
     "channel__channel_labels__label__group",
     Prefetch("tag_links", queryset=TaggedMessage.objects.select_related("tagging__tag", "tagging__tagged_by")),
 )
@@ -587,6 +595,7 @@ class ChannelListView(ListView):
             ChannelSource.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )
         ctx["has_vacancies"] = ChannelVacancy.objects.exists()
+        ctx["has_custom_emoji"] = MessageCustomEmoji.objects.exists()
         return ctx
 
 
@@ -611,6 +620,247 @@ class VacanciesView(TemplateView):
         ]
         ctx["vacancies"] = rows
         return ctx
+
+
+def _iso_day(value: Any) -> str:
+    return timezone.localdate(value).isoformat() if value else ""
+
+
+def _channel_csv_cells(channel: Channel | None) -> list[Any]:
+    label = channel.current_label if channel is not None else None
+    if channel is None:
+        return ["", "", "", ""]
+    return [channel.telegram_id, channel.username, channel.title, label.name if label else ""]
+
+
+def _pack_csv_cells(pack: CustomEmojiPack | None) -> list[Any]:
+    if pack is None:
+        return ["", "", "", "", ""]
+    return [pack.pk, pack.telegram_id, pack.short_name, pack.title, int(pack.is_in_target)]
+
+
+def _usage_csv_cells(row: dict[str, Any]) -> list[Any]:
+    return [
+        row["own_uses"],
+        row["own_messages"],
+        row["forwarded_uses"],
+        row["forwarded_messages"],
+        row["reactions"],
+        _iso_day(row["first_used"]),
+        _iso_day(row["last_used"]),
+    ]
+
+
+_CHANNEL_CSV_COLUMNS = ("channel_id", "channel_telegram_id", "channel_username", "channel_title", "label")
+_PACK_CSV_COLUMNS = ("pack_id", "pack_telegram_id", "pack_short_name", "pack_title", "pack_in_target")
+_USAGE_CSV_COLUMNS = (
+    "own_uses",
+    "own_messages",
+    "forwarded_uses",
+    "forwarded_messages",
+    "reactions",
+    "first_used",
+    "last_used",
+)
+#: Columns of the channel × pack usage CSV (``EmojiPackUsageCSVView``).
+EMOJI_PACK_CSV_COLUMNS = (*_CHANNEL_CSV_COLUMNS, *_PACK_CSV_COLUMNS, *_USAGE_CSV_COLUMNS)
+#: Columns of the channel × emoji usage CSV (``CustomEmojiUsageCSVView``).
+CUSTOM_EMOJI_CSV_COLUMNS = (
+    *_CHANNEL_CSV_COLUMNS,
+    "emoji_id",
+    "emoji_telegram_id",
+    "emoji_alt",
+    *_PACK_CSV_COLUMNS,
+    *_USAGE_CSV_COLUMNS,
+)
+
+
+def _csv_response(filename: str, columns: tuple[str, ...], rows: list[list[Any]]) -> HttpResponse:
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(columns)
+    writer.writerows(rows)
+    return response
+
+
+def _target_query(target: str) -> str:
+    return f"?target={target}" if target else ""
+
+
+class EmojiPacksView(TemplateView):
+    """``/channels/emoji-packs/`` — the custom emoji packs in-target channels use (``webapp.emoji_usage``)."""
+
+    template_name = "webapp/emoji_packs.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        target = emoji_usage.target_filter(self.request.GET.get("target"))
+        messages = emoji_usage.scope_messages()
+        rows = emoji_usage.usage_rows(messages, "pack")
+        packs = emoji_usage.summaries(rows, "pack")
+        emoji_usage.attach_packs(packs)
+        in_target_count = sum(1 for p in packs if p["pack"] is not None and p["pack"].is_in_target)
+        packs = emoji_usage.in_target_only(packs, target)
+        previews = emoji_usage.pack_previews(messages, {p["pack_id"] for p in packs if p["pack_id"] is not None})
+        for summary in packs:
+            summary["preview"] = previews.get(summary["pack_id"], [])
+        ctx.update(
+            {
+                "packs": packs,
+                "target": target,
+                "target_query": _target_query(target),
+                "in_target_count": in_target_count,
+                "channel_count": len({row["channel_id"] for row in rows if row["own_uses"]}),
+            }
+        )
+        return ctx
+
+
+class EmojiPackDetailView(TemplateView):
+    """``/channels/emoji-packs/<pk>/`` — one pack: its emoji's usage, and the channels using it."""
+
+    template_name = "webapp/emoji_pack_detail.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        pack = get_object_or_404(CustomEmojiPack, pk=kwargs["pk"])
+        messages = emoji_usage.messages_touching(emoji_usage.scope_messages(), emoji__pack=pack)
+        rows = [row for row in emoji_usage.usage_rows(messages, "pack") if row["pack_id"] == pack.pk]
+        emoji_usage.attach_channels(rows)
+        rows.sort(key=lambda r: (-r["own_uses"], -r["forwarded_uses"], -r["reactions"], r["channel_id"]))
+        emoji_rows = emoji_usage.summaries(emoji_usage.usage_rows(messages, "emoji"), "emoji")
+        emoji_usage.attach_emoji(emoji_rows)
+        emoji_rows = [row for row in emoji_rows if row["emoji"] is not None and row["emoji"].pack_id == pack.pk]
+        ctx.update({"pack": pack, "rows": rows, "emoji_rows": emoji_rows})
+        return ctx
+
+
+class EmojiPackUsageCSVView(View):
+    """``/channels/emoji-packs/usage.csv`` — one row per (in-target channel, pack), for analysis elsewhere."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        rows = emoji_usage.usage_rows(emoji_usage.scope_messages(), "pack")
+        emoji_usage.attach_packs(rows)
+        rows = emoji_usage.in_target_only(rows, emoji_usage.target_filter(request.GET.get("target")))
+        emoji_usage.attach_channels(rows)
+        rows.sort(key=lambda r: (r["channel_id"], r["pack_id"] is None, r["pack_id"] or 0))
+        return _csv_response(
+            "emoji_pack_usage.csv",
+            EMOJI_PACK_CSV_COLUMNS,
+            [
+                [
+                    row["channel_id"],
+                    *_channel_csv_cells(row["channel"]),
+                    *_pack_csv_cells(row["pack"]),
+                    *_usage_csv_cells(row),
+                ]
+                for row in rows
+            ],
+        )
+
+
+class CustomEmojiListView(ListView):
+    """``/channels/emoji-packs/emoji/`` — every custom emoji in-target channels use, with its usage."""
+
+    template_name = "webapp/custom_emoji_list.html"
+    paginator_class = DiggPaginator
+    paginate_by = 100
+    paginate_orphans = 20
+    page_kwarg = "page"
+
+    def get_queryset(self) -> list[dict[str, Any]]:  # type: ignore[override]
+        self.target = emoji_usage.target_filter(self.request.GET.get("target"))
+        rows = emoji_usage.summaries(emoji_usage.usage_rows(emoji_usage.scope_messages(), "emoji"), "emoji")
+        emoji_usage.attach_emoji(rows)
+        return emoji_usage.in_target_only([row for row in rows if row["emoji"] is not None], self.target)
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        ctx.update(
+            {
+                "target": self.target,
+                "target_query": _target_query(self.target),
+                "original_query": f"&target={self.target}" if self.target else "",
+            }
+        )
+        return ctx
+
+
+class CustomEmojiDetailView(ListView):
+    """``/channels/emoji-packs/emoji/<pk>/`` — one custom emoji: its usage, uses per month, the channels
+    using it, and the posts drawing it (a message list with the usual options)."""
+
+    template_name = "webapp/custom_emoji_detail.html"
+    model = Message
+    paginator_class = DiggPaginator
+    paginate_by = 20
+    paginate_orphans = 5
+    page_kwarg = "page"
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        self.emoji = get_object_or_404(CustomEmoji.objects.select_related("pack"), pk=kwargs["pk"])
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
+        qs = (
+            emoji_usage.messages_with_emoji(emoji_usage.scope_messages(), self.emoji)
+            .select_related("channel", "forwarded_from")
+            .prefetch_related(*_MESSAGE_LIST_PREFETCH)
+        )
+        return _apply_message_options(qs, self.request.GET, self.request.user)
+
+    def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(*args, **kwargs)
+        Message.attach_album_data(ctx["object_list"])
+        Message.attach_reply_targets(ctx["object_list"])
+        ctx["query"] = self.request.GET.get("q", "").strip()
+        ctx.update(_message_options_context(self.request.GET, self.request.user))
+        scope = emoji_usage.scope_messages()
+        rows = [
+            row
+            for row in emoji_usage.usage_rows(emoji_usage.messages_touching(scope, emoji=self.emoji), "emoji")
+            if row["emoji_id"] == self.emoji.pk
+        ]
+        summary = next(iter(emoji_usage.summaries(rows, "emoji")), None)
+        emoji_usage.attach_channels(rows)
+        rows.sort(key=lambda r: (-r["own_uses"], -r["forwarded_uses"], -r["reactions"], r["channel_id"]))
+        ctx.update(
+            {
+                "emoji": self.emoji,
+                "summary": summary,
+                "rows": rows,
+                "monthly": emoji_usage.monthly_own_uses(scope, self.emoji),
+            }
+        )
+        return ctx
+
+
+class CustomEmojiUsageCSVView(View):
+    """``/channels/emoji-packs/emoji/usage.csv`` — one row per (in-target channel, custom emoji)."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        rows = emoji_usage.usage_rows(emoji_usage.scope_messages(), "emoji")
+        emoji_usage.attach_emoji(rows)
+        rows = emoji_usage.in_target_only(rows, emoji_usage.target_filter(request.GET.get("target")))
+        emoji_usage.attach_channels(rows)
+        rows.sort(key=lambda r: (r["channel_id"], r["emoji_id"]))
+        return _csv_response(
+            "custom_emoji_usage.csv",
+            CUSTOM_EMOJI_CSV_COLUMNS,
+            [
+                [
+                    row["channel_id"],
+                    *_channel_csv_cells(row["channel"]),
+                    row["emoji_id"],
+                    row["emoji"].telegram_id if row["emoji"] else "",
+                    row["emoji"].alt if row["emoji"] else "",
+                    *_pack_csv_cells(row["pack"]),
+                    *_usage_csv_cells(row),
+                ]
+                for row in rows
+            ],
+        )
 
 
 def serve_export(request: HttpRequest, name: str, path: str = "") -> HttpResponse:
@@ -947,6 +1197,16 @@ class ChannelDetailView(ListView):
         top_reactions_raw = list(top_reactions_qs)
         total_reactions = sum(r["total"] for r in top_reactions_raw)
         top_reactions = [{"emoji": emoji_present(r["emoji"]), "total": f"{r['total']:,}"} for r in top_reactions_raw]
+        # Custom emoji packs the channel draws from in its own posts, over the same period-scoped
+        # messages (webapp.emoji_usage); forwards carry their source's emoji and are left out.
+        emoji_packs = [
+            row for row in emoji_usage.usage_rows(msg_qs, "pack") if row["own_uses"] and row["pack_id"] is not None
+        ]
+        emoji_packs.sort(key=lambda row: (-row["own_uses"], row["pack_id"]))
+        emoji_usage.attach_packs(emoji_packs)
+        previews = emoji_usage.pack_previews(msg_qs, {row["pack_id"] for row in emoji_packs})
+        for row in emoji_packs:
+            row["preview"] = previews.get(row["pack_id"], [])[:3]
 
         if not is_in_target:
             for card in summary:
@@ -1040,6 +1300,7 @@ class ChannelDetailView(ListView):
                 "message_ttl_display": fmt_ttl(ch.message_ttl) if ch.message_ttl else "",
                 "top_reactions": top_reactions,
                 "total_reactions": f"{total_reactions:,}",
+                "emoji_packs": emoji_packs,
                 "channel_sources": list(ch.sources.order_by("name")),
                 "vacancy": vacancy,
                 "linked_channel": linked_channel,

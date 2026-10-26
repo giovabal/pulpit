@@ -62,7 +62,7 @@ Everything is written at its path **relative to the project root**, which is wha
 | `IMAGES` | `media/photos/` | Message photos |
 | `VIDEO` | `media/videos/` | Message videos, GIFs, round videos |
 | `AUDIO` | `media/audios/` | Message audio and voice notes |
-| `STICKERS` | `media/stickers/` | Stickers (static and animated) |
+| `STICKERS` | `media/stickers/` | Stickers (static and animated) and custom emoji (`stickers/emoji/`) |
 | `OTHER_MEDIA` | `media/others/` | Documents and any other files |
 | `PROFILE` | `media/channels/` | Channel profile pictures (avatars) |
 | `ALL` | — | Every type above (the default) |

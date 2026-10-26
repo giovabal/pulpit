@@ -47,7 +47,7 @@
               <a class="nav-link{% if url_name == 'home' %} active{% endif %}" href="{% url 'home' %}">Network</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' or url_name == 'channel-vacancies' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
+              <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' or url_name == 'channel-vacancies' or url_name == 'emoji-packs' or url_name == 'emoji-pack-detail' or url_name == 'custom-emoji-list' or url_name == 'custom-emoji-detail' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
             </li>
             <li class="nav-item">
               <a class="nav-link{% if url_name == 'operations' %} active{% endif %}" href="{% url 'operations' %}">Operations</a>
@@ -96,6 +96,7 @@
     <script src="{% vstatic 'webapp/js/a11y.js' %}"></script>
     <script src="{% vstatic 'webapp/js/http.js' %}"></script>
     <script src="{% vstatic 'webapp/js/version_check.js' %}"></script>
+    <script src="{% vstatic 'webapp/js/custom_emoji.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script>
       // Log out posts the token rendered into this page; refresh it from the cookie on

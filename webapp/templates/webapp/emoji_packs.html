@@ -1,0 +1,73 @@
+{% extends "webapp/index.html" %}
+{% load custom_emoji %}
+
+{% block title %}Emoji packs · {{ block.super }}{% endblock title %}
+
+{% block content %}
+<div class="channels-header">
+  <div class="d-flex align-items-baseline gap-2 flex-wrap">
+    <h1 class="h5 fw-semibold mb-0">
+      <a href="{% url 'channel-list' %}" class="text-decoration-none text-muted">Channels</a>
+      <span class="text-muted mx-1">/</span>Emoji packs
+    </h1>
+  </div>
+  <p class="text-muted small mb-0 mt-1">
+    Custom emoji packs drawn in the posts of in-target channels, inside their in-target periods.
+    A forward carries its source's emoji, so uses in <strong>own posts</strong> (no forward header) — the packs a channel picks itself — are counted apart from uses in <strong>forwards</strong>.
+    Reactions are the custom-emoji reactions readers left on those posts.
+    {% if channel_count %}{{ channel_count }} channel{{ channel_count|pluralize }} use{{ channel_count|pluralize:"s," }} custom emoji in own posts.{% endif %}
+    {{ in_target_count }} pack{{ in_target_count|pluralize }} in target — packs start out of target{% if WEB_ACCESS == "ALL" or request.user.is_staff %}; mark them in <a href="{% url 'backoffice:custom-emoji-packs' %}">Manage → Emoji</a>{% endif %}.
+  </p>
+</div>
+
+{% url 'emoji-pack-usage-csv' as csv_url %}
+{% include "webapp/_emoji_nav.html" with active="packs" csv_url=csv_url %}
+
+{% if packs %}
+<div class="table-responsive">
+  <table class="stats-table emoji-pack-table">
+    <thead>
+      <tr>
+        <th scope="col">Pack</th>
+        <th scope="col" class="text-end">Channels</th>
+        <th scope="col" class="text-end">Own uses</th>
+        <th scope="col" class="text-end">Own posts</th>
+        <th scope="col" class="text-end">Uses in forwards</th>
+        <th scope="col" class="text-end">Reactions</th>
+        <th scope="col">First used</th>
+        <th scope="col">Last used</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in packs %}
+      <tr>
+        <td>
+          {% if row.pack %}
+          <span class="emoji-pack-preview">{% for emoji in row.preview %}{% custom_emoji emoji play="hover" %}{% endfor %}</span>
+          <a href="{% url 'emoji-pack-detail' pk=row.pack.pk %}">{{ row.pack.display_title }}</a>
+          {% if row.pack.telegram_url %}<a href="{{ row.pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link ms-1" title="Open the pack on Telegram" aria-label="Open {{ row.pack.display_title }} on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>{% endif %}
+          {% if row.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+          {% if row.pack.is_unavailable %}<span class="ch-badge ch-badge--muted ms-1">no longer on Telegram</span>{% endif %}
+          {% else %}
+          <span class="text-muted">Not resolved yet</span>
+          <span class="text-muted small">— emoji whose pack the next crawl looks up</span>
+          {% endif %}
+        </td>
+        <td class="text-end">{{ row.channels }}</td>
+        <td class="text-end">{{ row.own_uses }}</td>
+        <td class="text-end">{{ row.own_messages }}</td>
+        <td class="text-end">{{ row.forwarded_uses }}</td>
+        <td class="text-end">{{ row.reactions }}</td>
+        <td>{% if row.first_used %}<time datetime="{{ row.first_used|date:'Y-m-d' }}">{{ row.first_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+        <td>{% if row.last_used %}<time datetime="{{ row.last_used|date:'Y-m-d' }}">{{ row.last_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif target %}
+<div class="channels-empty">No pack {% if target == "in" %}in{% else %}out of{% endif %} target is used in scope.</div>
+{% else %}
+<div class="channels-empty">No custom emoji recorded yet. They are captured as messages are crawled; <em>Refresh messages stats</em> fills them in for messages crawled earlier.</div>
+{% endif %}
+{% endblock content %}

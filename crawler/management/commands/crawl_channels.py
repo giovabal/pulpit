@@ -21,6 +21,7 @@ from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q
 
 from crawler.channel_crawler import ChannelCrawler, user_account_fields
 from crawler.client import TelegramAPIClient
+from crawler.custom_emoji import resolve_custom_emoji
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, ReferenceResolver, extract_text_references
@@ -534,8 +535,8 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Download stickers attached to messages — static webp, animated TGS, and "
-                "video webm stickers. Applies to --get-new-messages, --fix-holes, and "
-                "--fix-missing-media. Off by default."
+                "video webm stickers — and the custom emoji used in posts and reactions. "
+                "Applies to --get-new-messages, --fix-holes, and --fix-missing-media. Off by default."
             ),
         )
         parser.add_argument(
@@ -650,7 +651,10 @@ class Command(BaseCommand):
             "--environment-download-stickers",
             action=BooleanOptionalAction,
             default=None,
-            help="Download stickers attached to environment channels' messages. Off by default.",
+            help=(
+                "Download stickers attached to environment channels' messages, and the custom emoji "
+                "they use. Off by default."
+            ),
         )
         parser.add_argument(
             "--environment-download-other-media",
@@ -923,6 +927,25 @@ class Command(BaseCommand):
         ):
             crawler._resolve_pending_forwards(lambda message, idx=index: printer.status(message, idx))
 
+    def _resolve_custom_emoji(self, crawler: ChannelCrawler) -> None:
+        """Resolve the custom emoji the messages loop left pending, without ever aborting the run.
+
+        ``get_channel`` resolves them after each channel; the fix-holes, refresh and retry-lost
+        passes store messages without doing so, and an interrupted channel skips it. A failure
+        only postpones them: the placeholders stay and the next call resolves them.
+        """
+        try:
+            resolved, downloaded = crawler.resolve_custom_emoji()
+        except Exception as exc:  # noqa: BLE001 - e.g. a database lock held by another program
+            if _db_locked(exc):
+                _recover_db_lock(self.stdout, self.style, action="resolving custom emoji", channel="this run")
+            else:
+                self.stdout.write(self.style.WARNING(f"Error resolving custom emoji: {exc}"))
+                logger.exception("Custom emoji resolution failed")
+            return
+        if resolved or downloaded:
+            self.stdout.write(f"Custom emoji: {resolved} resolved, {downloaded} file(s) downloaded.")
+
     def _retry_lost_for_channel(
         self,
         channel: Channel,
@@ -1059,6 +1082,13 @@ class Command(BaseCommand):
             download_other_media=opts.download_other_media,
             download_timeout=opts.download_timeout,
         )
+
+        # Custom emoji files ride on the sticker toggle and are fetched by document id, not
+        # through their messages: re-request every emoji whose file is missing or was never stored.
+        if opts.download_stickers:
+            _, emoji_downloaded = resolve_custom_emoji(api_client, fix_handler, check_files=True)
+            if emoji_downloaded:
+                self.stdout.write(f"\nCustom emoji: {emoji_downloaded} missing file(s) downloaded.")
 
         # Messages with each media_type but no corresponding record.
         # Each media-type bucket is only scanned when its toggle is on.
@@ -2118,6 +2148,7 @@ class Command(BaseCommand):
                                         logger.warning("Could not refresh interest scores for %s: %s", channel, exc)
 
                             printer.newline()
+                            self._resolve_custom_emoji(crawler)
 
                         if retry_references:
                             if force_retry:

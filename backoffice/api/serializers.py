@@ -7,6 +7,7 @@ from webapp.models import (
     ChannelLabel,
     ChannelSource,
     ChannelVacancy,
+    CustomEmojiPack,
     Label,
     LabelGroup,
     LabelParent,
@@ -17,6 +18,7 @@ from webapp.models import (
     SearchTerm,
 )
 from webapp.models.tag_models import message_origin, normalize_tag_name, tag_key, tag_post
+from webapp.templatetags.custom_emoji import emoji_html
 
 from rest_framework import serializers
 
@@ -555,3 +557,51 @@ class MessageTaggingSerializer(serializers.ModelSerializer):
         instance.note = validated_data["note"]
         instance.save(update_fields=["note", "_updated"])
         return instance
+
+
+class CustomEmojiPackSerializer(serializers.ModelSerializer):
+    """Manage → Emoji: the crawler's packs, of which the analyst sets ``is_in_target`` and ``note``.
+
+    ``uses`` / ``channels`` / ``emoji_used`` count every stored post (the queryset annotates them);
+    ``preview_html`` draws the pack's most used emoji, read from the ``previews`` context the
+    viewset builds for the page.
+    """
+
+    uses = serializers.IntegerField(read_only=True)
+    channels = serializers.IntegerField(read_only=True)
+    emoji_used = serializers.IntegerField(read_only=True)
+    display_title = serializers.CharField(read_only=True)
+    telegram_url = serializers.CharField(read_only=True)
+    preview_html = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomEmojiPack
+        fields = [
+            "id",
+            "telegram_id",
+            "title",
+            "short_name",
+            "display_title",
+            "telegram_url",
+            "emoji_count",
+            "is_unavailable",
+            "is_in_target",
+            "note",
+            "uses",
+            "channels",
+            "emoji_used",
+            "preview_html",
+        ]
+        read_only_fields = ["telegram_id", "title", "short_name", "emoji_count", "is_unavailable"]
+
+    def update(self, instance: CustomEmojiPack, validated_data: dict) -> CustomEmojiPack:
+        # Save only the fields sent: the page PATCHes the toggle and the note separately, often a
+        # moment apart (the note's change event fires as the checkbox is clicked), and a whole-row
+        # save from the second request would write back the first one's field as it was before.
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save(update_fields=[*validated_data, "_updated"])
+        return instance
+
+    def get_preview_html(self, obj: CustomEmojiPack) -> str:
+        return "".join(str(emoji_html(e, play="hover")) for e in self.context.get("previews", {}).get(obj.pk, [])[:3])

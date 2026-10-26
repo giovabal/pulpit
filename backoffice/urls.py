@@ -4,6 +4,7 @@ from django.views.generic import RedirectView
 from .views import (
     ChannelsView,
     ChannelUpdateView,
+    EmojiPacksManageView,
     EventsView,
     LabelsView,
     MaintenanceView,
@@ -23,6 +24,7 @@ urlpatterns = [
     path("channels/<int:pk>/", ChannelUpdateView.as_view(), name="channel-update"),
     path("labels/", LabelsView.as_view(), name="labels"),
     path("tags/", MessageTagsView.as_view(), name="tags"),
+    path("emoji-packs/", EmojiPacksManageView.as_view(), name="custom-emoji-packs"),
     path("sources/", SourcesView.as_view(), name="sources"),
     path("search-terms/", SearchTermsView.as_view(), name="search-terms"),
     path("events/", EventsView.as_view(), name="events"),

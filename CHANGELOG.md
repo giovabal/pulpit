@@ -1,6 +1,9 @@
 # Changelog
 ## [1.0] - To be announced
-*Methodology review of the measures and community detection. Bots detection.*
+*Methodology review of the measures and community detection. Bots detection. Emojis.*
+
+### New features
+- **Custom emoji are kept, drawn, and tracked by pack.** The crawler now records the custom emoji in a post's text and its custom-emoji reactions, looks up each emoji's pack, and — with *Sticker download* on — stores each emoji's file once. Post cards draw them in place, animated TGS and webm ones included, and so are animated stickers, previously only a download link. A new **Emoji packs** page (from the channel list) shows which packs and which emoji in-target channels use, with own posts counted apart from forwards, which carry their source's emoji. Each emoji has its own page: uses per month, the channels using it and the posts drawing it. Channel × pack and channel × emoji CSVs export the figures, and each channel page lists its own packs. Packs can be marked in target in **Manage → Emoji** (all start out of target), and every list and CSV filters by it. `--refresh-messages-stats` fills in messages crawled earlier. See [Workflow § Custom emoji](docs/workflow.md#custom-emoji).
 
 ### Improvements
 - **Community partitions are the best of many fits, and record how stable they are.** Every stochastic detector used to report a single seeded run, and on real data single runs disagree: Leiden seeds agreed at a median ARI of 0.68. Leiden-family strategies and Louvain now keep the best of 50 seeded runs, and the SBM family the lowest description length of 10 refined fits. Each partition's fit summary — runs, best and worst objective, and *stability* (how far the other fits agree with the reported partition) — goes to `summary.json` (`community_fits`), `PARAMETERS.md` and the run log. See [Best of many fits](docs/community-detection.md#best-of-many-fits-and-how-stable-the-answer-is).

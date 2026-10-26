@@ -1,0 +1,54 @@
+{% comment %}
+Per-emoji usage table (webapp.emoji_usage.summaries at the "emoji" level, with
+attach_emoji): the emoji list page and a pack's page.
+
+Required context:
+    emoji_rows  — the summaries (each with "emoji" and "pack" attached)
+Optional:
+    show_pack   — add the Pack column (the list page; a pack's page omits it)
+{% endcomment %}
+{% load custom_emoji %}
+<div class="table-responsive">
+  <table class="stats-table emoji-pack-table custom-emoji-table">
+    <thead>
+      <tr>
+        <th scope="col">Emoji</th>
+        {% if show_pack %}<th scope="col">Pack</th>{% endif %}
+        <th scope="col" class="text-end">Channels</th>
+        <th scope="col" class="text-end">Own uses</th>
+        <th scope="col" class="text-end">Own posts</th>
+        <th scope="col" class="text-end">Uses in forwards</th>
+        <th scope="col" class="text-end">Reactions</th>
+        <th scope="col">First used</th>
+        <th scope="col">Last used</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in emoji_rows %}
+      <tr>
+        <td>
+          <a href="{% url 'custom-emoji-detail' pk=row.emoji.pk %}" class="custom-emoji-cell" title="Usage of this emoji">
+            <span class="custom-emoji-glyph">{% custom_emoji row.emoji play="hover" %}</span>
+            <span class="text-muted small">{{ row.emoji.alt|default:"?" }}</span>
+          </a>
+        </td>
+        {% if show_pack %}
+        <td>
+          {% if row.pack %}
+          <a href="{% url 'emoji-pack-detail' pk=row.pack.pk %}">{{ row.pack.display_title }}</a>
+          {% if row.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+          {% else %}<span class="text-muted">Not resolved yet</span>{% endif %}
+        </td>
+        {% endif %}
+        <td class="text-end">{{ row.channels }}</td>
+        <td class="text-end">{{ row.own_uses }}</td>
+        <td class="text-end">{{ row.own_messages }}</td>
+        <td class="text-end">{{ row.forwarded_uses }}</td>
+        <td class="text-end">{{ row.reactions }}</td>
+        <td>{% if row.first_used %}<time datetime="{{ row.first_used|date:'Y-m-d' }}">{{ row.first_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+        <td>{% if row.last_used %}<time datetime="{{ row.last_used|date:'Y-m-d' }}">{{ row.last_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

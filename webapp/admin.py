@@ -9,6 +9,8 @@ from .models import (
     Channel,
     ChannelLabel,
     ChannelSource,
+    CustomEmoji,
+    CustomEmojiPack,
     Label,
     LabelGroup,
     Message,
@@ -275,3 +277,31 @@ class PollAdmin(admin.ModelAdmin):
     search_fields = ("question",)
     inlines = [PollAnswerInline]
     raw_id_fields = ("message",)
+
+
+@admin.register(CustomEmojiPack)
+class CustomEmojiPackAdmin(admin.ModelAdmin):
+    # Filled by the crawler (crawler.custom_emoji); nothing here is meant to be typed in.
+    list_display = (
+        "display_title",
+        "short_name",
+        "telegram_id",
+        "emoji_count",
+        "is_in_target",
+        "is_unavailable",
+        "fetched_at",
+    )
+    list_editable = ("is_in_target",)
+    list_filter = ("is_in_target", "is_unavailable")
+    search_fields = ("title", "short_name")
+    readonly_fields = ("telegram_id", "access_hash", "fetched_at")
+
+
+@admin.register(CustomEmoji)
+class CustomEmojiAdmin(admin.ModelAdmin):
+    list_display = ("telegram_id", "alt", "pack", "mime_type", "is_free", "text_color", "is_unavailable", "fetched_at")
+    list_filter = ("mime_type", "is_unavailable", "is_free")
+    search_fields = ("alt", "pack__title", "pack__short_name")
+    list_select_related = ("pack",)
+    raw_id_fields = ("pack",)
+    readonly_fields = ("telegram_id", "fetched_at")

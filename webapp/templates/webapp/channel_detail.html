@@ -1,6 +1,7 @@
 {% extends "webapp/index.html" %}
 {% load static %}
 {% load vstatic %}
+{% load custom_emoji %}
 
 
 {% block content %}
@@ -120,6 +121,23 @@
   <div class="ch-reactions-pills">
     {% for r in top_reactions %}
     <span class="reaction-pill">{{ r.emoji }} <span class="reaction-pill-count">{{ r.total }}</span></span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if emoji_packs %}
+<div class="ch-reactions-block">
+  <span class="ch-reactions-label">{{ emoji_packs|length }} custom emoji pack{{ emoji_packs|pluralize }} in own posts</span>
+  <div class="ch-reactions-pills">
+    {% for row in emoji_packs %}
+    <a class="reaction-pill emoji-pack-pill" href="{% url 'emoji-pack-detail' pk=row.pack_id %}"
+       title="{% if row.pack.is_in_target %}In-target pack · {% endif %}{{ row.own_uses }} use{{ row.own_uses|pluralize }} in {{ row.own_messages }} own post{{ row.own_messages|pluralize }}">
+      {% for emoji in row.preview %}{% custom_emoji emoji play="hover" %}{% endfor %}
+      {{ row.pack.display_title }}
+      {% if row.pack.is_in_target %}<i class="bi bi-bullseye emoji-pack-target" aria-hidden="true"></i><span class="visually-hidden">(in target)</span>{% endif %}
+      <span class="reaction-pill-count">{{ row.own_uses }}</span>
+    </a>
     {% endfor %}
   </div>
 </div>

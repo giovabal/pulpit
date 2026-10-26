@@ -63,6 +63,8 @@ Each channel has a dedicated detail page with:
 - **Replies** — in a message list's *Options* menu (every list), a tristate control (Include / Exclude / Only; default Include) for messages posted in answer to another one — the ones whose details show a *Reply to* line. Comments fetched from a channel's discussion group are not messages of the list and are not affected.
 - **Source post** — a forward's details (the ⓘ button) name the original post with the date and time it was published there, and how long before this share.
 - **Lost messages filter** — tristate control (Exclude / Include / Only; default Exclude). Lost messages are rows that Telegram no longer returns; they remain in the database but are excluded from every aggregate, edge weight, and citation measure. Switching to *Include* or *Only* renders them faded with a strikethrough body and a small "lost" chip in the footer.
+- **Custom emoji** — a post's custom emoji are drawn in its text where Telegram draws them, and custom-emoji reactions get a pill each instead of one *custom* count (what is left of that count — paid reactions, emoji not downloaded yet — stays a *custom* pill). Animated (TGS) custom emoji and stickers are played with [lottie-web](https://github.com/airbnb/lottie-web), loaded from the CDN when a page shows one; webm ones are videos. They animate while on screen (reaction pills and pack previews only on hover) and stay still under the system's *reduce motion* setting. Hovering one names its pack. An emoji whose file isn't downloaded shows the plain emoji it stands for. Files come with **Sticker download** — see [Workflow § Custom emoji](workflow.md#custom-emoji).
+- **Custom emoji packs** — under the reactions, the packs the channel draws from in its own posts (forwards carry their source's emoji and are left out), with its most used emoji of each and how many times; in-target packs carry a ◎ mark, and each links to the pack's page.
 
 <figure>
 <img src="../webapp_engine/static/screenshot_12.jpg" alt="Channel detail showing vacancy analysis">
@@ -81,6 +83,19 @@ Lists all channels registered as vacancies with:
 - Closure date
 
 See [Vacancy analysis](vacancy-analysis.md) for the full documentation.
+
+---
+
+## Emoji packs — `/channels/emoji-packs/`
+
+The custom emoji in-target channels use, by pack and by emoji, linked from the channel list once any custom emoji is recorded. Which packs a channel picks is part of its visual identity — posting most custom emoji takes Telegram Premium — and two channels sharing an uncommon pack is worth a look.
+
+Every figure is counted over the in-target channels' alive messages inside their in-target periods, like every figure on the site, and comes in the same columns: **channels** using the pack or emoji in their **own posts**, uses and posts in own posts, uses in **forwards**, custom-emoji **reactions** readers left with it, and the first and last day it was used. A forward carries its source's text, emoji included, so only own posts — messages with no forward header — say which emoji a channel picks itself. Emoji not resolved yet are counted under *Not resolved yet* until the next crawl looks them up.
+
+- **Packs / Emoji tabs** — one row per pack (with its most used emoji and its `t.me/addemoji/…` link), or one row per emoji with its pack. Both filter by the pack's classification: *All packs*, *In target*, *Not in target* (set in [Manage → Emoji](#emoji--manageemoji-packs); every pack starts out of target).
+- **Pack page** (`/channels/emoji-packs/<id>/`) — the usage of each of its emoji, and of the pack per channel.
+- **Emoji page** (`/channels/emoji-packs/emoji/<id>/`) — the emoji drawn large with its pack, the emoji it stands for, its format and whether it needs Premium; its usage; its **uses in own posts per month**, with event markers; the channels using it; and the **posts drawing it**, a message list with the usual search and *Options*.
+- **CSVs** — *Channel × pack* (`/channels/emoji-packs/usage.csv`) and *Channel × emoji* (`/channels/emoji-packs/emoji/usage.csv`): one row per channel and pack or emoji, with the channel's ids, handle, title and label, the emoji's and pack's ids, names and `pack_in_target`, and the usage columns above, for analysis elsewhere. Both follow the page's in-target filter.
 
 ---
 
@@ -176,6 +191,10 @@ A group can additionally be flagged as a **container**: its labels are purely st
 ### Tags — `/manage/tags/`
 
 The shared list of [message tags](#message-tags) with the number of messages carrying each one (the count links to them). Add a tag ahead of use, rename it, change its colour or description, or delete it, which removes it from all its messages. **Merge** moves a tag's posts onto another tag and deletes the first — use it when near-duplicates like `ukraine` and `Ukraine war` pile up. A post that already carries the target keeps the target's note, or takes the merged tag's note if the target's was empty. The message counts include every share of a tagged post.
+
+### Emoji — `/manage/emoji-packs/`
+
+The custom emoji packs the crawler found, most used first, with their preview, `t.me/addemoji/` link, and how many emoji, uses and channels each has across every stored post. Tick **In target** for the packs your study is about — an organisation's own pack, say — and add a note; both save as you change them. Every pack starts out of target. The flag classifies: it drives the in-target filter of the [Emoji packs](#emoji-packs--channelsemoji-packs) pages and the `pack_in_target` CSV column, and never removes a pack's uses from a count. Search by title or short name, or filter by status.
 
 ### Sources — `/manage/sources/`
 

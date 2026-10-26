@@ -1,0 +1,33 @@
+{% extends "webapp/index.html" %}
+
+{% block title %}Custom emoji · {{ block.super }}{% endblock title %}
+
+{% block content %}
+<div class="channels-header">
+  <div class="d-flex align-items-baseline gap-2 flex-wrap">
+    <h1 class="h5 fw-semibold mb-0">
+      <a href="{% url 'channel-list' %}" class="text-decoration-none text-muted">Channels</a>
+      <span class="text-muted mx-1">/</span>
+      <a href="{% url 'emoji-packs' %}" class="text-decoration-none text-muted">Emoji packs</a>
+      <span class="text-muted mx-1">/</span>Emoji
+    </h1>
+  </div>
+  <p class="text-muted small mb-0 mt-1">
+    Every custom emoji drawn in, or reacted to, the posts of in-target channels inside their in-target periods, most widely used first.
+    <strong>Channels</strong> counts the channels using the emoji in their own posts; uses in forwards are the source's emoji. Open an emoji for its uses per month, its channels and its posts.
+  </p>
+</div>
+
+{% url 'custom-emoji-usage-csv' as csv_url %}
+{% include "webapp/_emoji_nav.html" with active="emoji" csv_url=csv_url %}
+
+{% if page_obj.object_list %}
+{% include "webapp/pagination.html" %}
+{% include "webapp/_custom_emoji_table.html" with emoji_rows=page_obj.object_list show_pack=True %}
+{% include "webapp/pagination.html" %}
+{% elif target %}
+<div class="channels-empty">No emoji from a pack {% if target == "in" %}in{% else %}out of{% endif %} target is used in scope.</div>
+{% else %}
+<div class="channels-empty">No custom emoji recorded yet.</div>
+{% endif %}
+{% endblock content %}

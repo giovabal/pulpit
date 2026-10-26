@@ -19,9 +19,13 @@ Optional context:
 
 Views including this partial should prefetch_related("messagepicture_set",
 "messagevideo_set", "messageaudio_set", "messagesticker_set",
-"messageothermedia_set", "reactions", "tag_links" with their tagging, tag and
-tagger) to avoid N+1 queries — webapp.views._MESSAGE_LIST_PREFETCH carries the
-full set. A message's tag_links include the tags put on its original or on any
+"messageothermedia_set", "reactions", "custom_emoji_spans" and "custom_reactions"
+with their emoji and pack, "tag_links" with their tagging, tag and tagger) to
+avoid N+1 queries — webapp.views._MESSAGE_LIST_PREFETCH carries the full set.
+
+Custom emoji (webapp/templatetags/custom_emoji.py) are drawn in the text and the
+reaction pills; animated ones — TGS custom emoji and stickers — and webm video
+are played by webapp/js/custom_emoji.js, loaded by the base template. A message's tag_links include the tags put on its original or on any
 other share of the same post (webapp.models.tag_models).
 
 A reply's "Reply to" row links to the original in Pulpit when it was crawled
@@ -43,6 +47,7 @@ each album reaches this template; the head's `album_pictures` /
 `album_videos` / etc. properties gather media from every sibling message
 sharing the same (channel_id, grouped_id).
 {% endcomment %}
+{% load custom_emoji %}
 <article id="post-{{ post.pk }}" class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and not received_view %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
   {% if show_channel_chip %}
   <div class="search-result-channel">
@@ -127,6 +132,16 @@ sharing the same (channel_id, grouped_id).
   <figure class="mb-0">
     <img src="{{ sticker.sticker.url }}" class="post-sticker" alt="Sticker from {{ post.channel.title }}">
   </figure>
+  {% elif sticker.mime_type == "application/x-tgsticker" %}
+  <figure class="mb-0">
+    <span class="post-sticker post-sticker--animated" data-tgs-src="{{ sticker.sticker.url }}" data-label="Animated sticker from {{ post.channel.title }}">
+      <a href="{{ sticker.sticker.url }}" download>Animated sticker</a>
+    </span>
+  </figure>
+  {% elif sticker.mime_type|slice:":6" == "video/" %}
+  <figure class="mb-0">
+    <video src="{{ sticker.sticker.url }}" class="post-sticker post-sticker--animated" data-play="loop" loop muted playsinline preload="auto" aria-label="Video sticker from {{ post.channel.title }}"></video>
+  </figure>
   {% else %}
   <div class="media-placeholder">
     <i class="bi bi-emoji-smile" aria-hidden="true"></i>
@@ -156,7 +171,7 @@ sharing the same (channel_id, grouped_id).
   </div>
   {% endfor %}
   {% endwith %}
-  <div class="post-body">{{ post.message|linebreaks|urlize }}</div>
+  <div class="post-body">{{ post|message_html }}</div>
   {% if post.post_author %}
   <div class="pin-banner subtle">
     <i class="bi bi-pen" aria-hidden="true"></i> {{ post.post_author }}
@@ -181,8 +196,9 @@ sharing the same (channel_id, grouped_id).
       {% if post.post_copies > 1 %}<span class="post-meta-item" data-bs-toggle="tooltip" title="This post appears {{ post.post_copies }} times in this list (original and shares); Unique shows it once"><i class="bi bi-files" aria-hidden="true"></i> {{ post.post_copies }}<span class="visually-hidden"> copies in this list</span></span>{% endif %}
       {% if post.edit_date %}<span class="post-meta-item" data-bs-toggle="tooltip" title="Last edited"><i class="bi bi-pencil" aria-hidden="true"></i> {{ post.edit_date }}</span>{% endif %}
       {% if post.is_lost %}<span class="post-lost-badge" data-bs-toggle="tooltip" title="No longer exists on Telegram">lost</span>{% endif %}
-      {% for reaction in post.reactions.all %}
-      <span class="post-meta-item post-reaction">{{ reaction.display_emoji }} {{ reaction.count }}</span>
+      {% reaction_pills post as pills %}
+      {% for pill in pills %}
+      <span class="post-meta-item post-reaction">{{ pill.html }} {{ pill.count }}</span>
       {% endfor %}
     </div>
     <div class="post-footer-actions">

@@ -150,6 +150,9 @@ class BackofficePageTests(TestCase):
     def test_users_page(self):
         self._check("users")
 
+    def test_emoji_packs_page(self):
+        self._check("custom-emoji-packs")
+
 
 # ---------------------------------------------------------------------------
 # Helpers shared by API tests
@@ -1191,3 +1194,66 @@ class MessageTagsPageTests(TestCase):
         resp = self.client.get(reverse("backoffice:tags"))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "backoffice/js/tags.js")
+
+
+# ---------------------------------------------------------------------------
+# backoffice/api — CustomEmojiPackViewSet
+# ---------------------------------------------------------------------------
+
+
+class CustomEmojiPackViewSetTests(_ApiTestCase):
+    def setUp(self):
+        from webapp.models import CustomEmoji, CustomEmojiPack, Message, MessageCustomEmoji
+
+        self.pack = CustomEmojiPack.objects.create(telegram_id=900, title="Fire pack", short_name="firepack")
+        self.quiet = CustomEmojiPack.objects.create(telegram_id=901, title="Quiet pack", is_in_target=True)
+        fire = CustomEmoji.objects.create(
+            telegram_id=77, alt="🔥", mime_type="image/webp", pack=self.pack, file="stickers/emoji/77.webp"
+        )
+        channel = make_channel(telegram_id=1, title="A", label=make_label("Org"))
+        for tid in (1, 2):
+            message = Message.objects.create(channel=channel, telegram_id=tid, message="🔥")
+            MessageCustomEmoji.objects.create(message=message, emoji=fire, offset=0, length=2)
+
+    def test_list_counts_uses_and_draws_a_preview(self):
+        results = self.jget(_api("emoji-packs/")).json()["results"]
+        self.assertEqual([r["title"] for r in results], ["Fire pack", "Quiet pack"])
+        fire = results[0]
+        self.assertEqual((fire["uses"], fire["channels"], fire["emoji_used"]), (2, 1, 1))
+        self.assertFalse(fire["is_in_target"])
+        self.assertIn("stickers/emoji/77.webp", fire["preview_html"])
+        self.assertEqual(fire["telegram_url"], "https://t.me/addemoji/firepack")
+
+    def test_filters(self):
+        def titles(query):
+            return [r["title"] for r in self.jget(_api(f"emoji-packs/?{query}")).json()["results"]]
+
+        self.assertEqual(titles("target=in"), ["Quiet pack"])
+        self.assertEqual(titles("target=out"), ["Fire pack"])
+        self.assertEqual(titles("q=fireP"), ["Fire pack"])
+
+    def test_only_the_classification_is_editable(self):
+        resp = self.jpatch(
+            _api(f"emoji-packs/{self.pack.pk}/"), {"is_in_target": True, "note": "Org X", "title": "Hacked"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.pack.refresh_from_db()
+        self.assertEqual((self.pack.is_in_target, self.pack.note, self.pack.title), (True, "Org X", "Fire pack"))
+        self.assertEqual(resp.json()["uses"], 2)
+
+    def test_an_update_saves_only_the_fields_it_sends(self):
+        from backoffice.api.serializers import CustomEmojiPackSerializer
+        from webapp.models import CustomEmojiPack
+
+        stale = CustomEmojiPack.objects.get(pk=self.pack.pk)  # loaded before the toggle's PATCH lands
+        self.jpatch(_api(f"emoji-packs/{self.pack.pk}/"), {"is_in_target": True})
+        serializer = CustomEmojiPackSerializer(stale, data={"note": "Org X"}, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        self.pack.refresh_from_db()
+        self.assertEqual((self.pack.is_in_target, self.pack.note), (True, "Org X"))
+
+    def test_packs_cannot_be_created_or_deleted(self):
+        self.assertEqual(self.jpost(_api("emoji-packs/"), {"telegram_id": 5}).status_code, 405)
+        self.assertEqual(self.jdelete(_api(f"emoji-packs/{self.pack.pk}/")).status_code, 405)

@@ -1,0 +1,68 @@
+{% extends "webapp/index.html" %}
+{% load custom_emoji %}
+
+{% block title %}{{ pack.display_title }} · Emoji packs · {{ block.super }}{% endblock title %}
+
+{% block content %}
+<div class="channels-header">
+  <div class="d-flex align-items-baseline gap-2 flex-wrap">
+    <h1 class="h5 fw-semibold mb-0">
+      <a href="{% url 'channel-list' %}" class="text-decoration-none text-muted">Channels</a>
+      <span class="text-muted mx-1">/</span>
+      <a href="{% url 'emoji-packs' %}" class="text-decoration-none text-muted">Emoji packs</a>
+      <span class="text-muted mx-1">/</span>{{ pack.display_title }}
+    </h1>
+    {% if pack.is_in_target %}<span class="ch-badge ch-badge--verified"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+    {% if pack.telegram_url %}<a href="{{ pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="channels-vacancies-link"><i class="bi bi-telegram" aria-hidden="true"></i> t.me/addemoji/{{ pack.short_name }}</a>{% endif %}
+  </div>
+  <p class="text-muted small mb-0 mt-1">
+    {% if pack.emoji_count %}{{ pack.emoji_count }} emoji in the pack, {{ emoji_rows|length }} used in scope.{% else %}{{ emoji_rows|length }} emoji used in scope.{% endif %}
+    {% if pack.is_unavailable %}Telegram no longer serves this pack.{% endif %}
+    Counted over in-target channels' posts inside their in-target periods; uses in forwards are the source's emoji.
+  </p>
+</div>
+
+{% if emoji_rows %}
+<h2 class="emoji-section-title">Emoji</h2>
+{% include "webapp/_custom_emoji_table.html" %}
+{% endif %}
+
+<h2 class="emoji-section-title">Channels</h2>
+{% if rows %}
+<div class="table-responsive">
+  <table class="stats-table emoji-pack-table">
+    <thead>
+      <tr>
+        <th scope="col">Channel</th>
+        <th scope="col" class="text-end">Own uses</th>
+        <th scope="col" class="text-end">Own posts</th>
+        <th scope="col" class="text-end">Uses in forwards</th>
+        <th scope="col" class="text-end">Reactions</th>
+        <th scope="col">First used</th>
+        <th scope="col">Last used</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          {% if row.channel %}
+          {% if row.channel.current_label %}<span class="org-dot" style="background: {{ row.channel.current_label.color }};" aria-hidden="true"></span>{% endif %}
+          <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-end">{{ row.own_uses }}</td>
+        <td class="text-end">{{ row.own_messages }}</td>
+        <td class="text-end">{{ row.forwarded_uses }}</td>
+        <td class="text-end">{{ row.reactions }}</td>
+        <td>{% if row.first_used %}<time datetime="{{ row.first_used|date:'Y-m-d' }}">{{ row.first_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+        <td>{% if row.last_used %}<time datetime="{{ row.last_used|date:'Y-m-d' }}">{{ row.last_used|date:"N j, Y" }}</time>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="channels-empty">No in-target channel uses this pack inside its in-target periods.</div>
+{% endif %}
+{% endblock content %}

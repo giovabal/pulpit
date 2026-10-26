@@ -5,11 +5,13 @@ from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Prefetch, ProtectedError, Q
 
 from events.models import Event, EventType
+from webapp.emoji_usage import pack_previews
 from webapp.models import (
     Channel,
     ChannelLabel,
     ChannelSource,
     ChannelVacancy,
+    CustomEmojiPack,
     Label,
     LabelGroup,
     LabelParent,
@@ -28,6 +30,7 @@ from .serializers import (
     ChannelSerializer,
     ChannelSourceSerializer,
     ChannelVacancySerializer,
+    CustomEmojiPackSerializer,
     EventSerializer,
     EventTypeSerializer,
     LabelGroupSerializer,
@@ -512,6 +515,41 @@ class MessageTaggingViewSet(
             link.tagging.member_count = counts.get(link.tagging_id, 0)
             out[str(link.message_id)].append(self.get_serializer(link.tagging).data)
         return Response(out)
+
+
+class CustomEmojiPackViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Manage → Emoji. Packs come from the crawler (``crawler.custom_emoji``); only
+    ``is_in_target`` and ``note`` are editable. ``?q=`` searches title and short name,
+    ``?target=in|out`` keeps the packs in / out of target; most used first."""
+
+    serializer_class = CustomEmojiPackSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_queryset(self):
+        qs = CustomEmojiPack.objects.annotate(
+            uses=Count("emoji__uses", distinct=True),
+            channels=Count("emoji__uses__message__channel", distinct=True),
+            emoji_used=Count("emoji", filter=Q(emoji__uses__isnull=False), distinct=True),
+        )
+        q = self.request.query_params.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(title__icontains=q) | Q(short_name__icontains=q))
+        target = self.request.query_params.get("target", "")
+        if target in ("in", "out"):
+            qs = qs.filter(is_in_target=target == "in")
+        return qs.order_by("-uses", "title", "pk")
+
+    def list(self, request, *args, **kwargs):
+        page = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
+        packs = page if page is not None else list(self.filter_queryset(self.get_queryset()))
+        context = {**self.get_serializer_context(), "previews": pack_previews(None, {p.pk for p in packs})}
+        data = self.get_serializer_class()(packs, many=True, context=context).data
+        return self.get_paginated_response(data) if page is not None else Response(data)
 
 
 class UserViewSet(viewsets.ModelViewSet):
