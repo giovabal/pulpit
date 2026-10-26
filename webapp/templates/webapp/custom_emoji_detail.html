@@ -23,7 +23,7 @@
     <dd>
       {% if emoji.pack %}
       <a href="{% url 'emoji-pack-detail' pk=emoji.pack.pk %}">{{ emoji.pack.display_title }}</a>
-      {% if emoji.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+      {% include "webapp/_emoji_pack_badges.html" with pack=emoji.pack %}
       {% if emoji.pack.telegram_url %}<a href="{{ emoji.pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="tg-link ms-1" title="Open the pack on Telegram" aria-label="Open {{ emoji.pack.display_title }} on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>{% endif %}
       {% else %}<span class="text-muted">Not resolved yet</span>{% endif %}
     </dd>

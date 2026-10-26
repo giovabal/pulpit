@@ -167,6 +167,8 @@ The options panel is organized into three independent groups — each is its own
 
 A post's custom emoji — the premium, often animated emoji drawn over a span of its text — and its custom-emoji reactions are recorded as the post is stored, whatever the media toggles say: which emoji, at which position, and how many readers reacted with each. After each channel, Pulpit asks Telegram in batches what those emoji are — the plain emoji each stands for, its format and its **pack** (the custom emoji set, titled with one more lookup) — and, when **Sticker download** is on, downloads each emoji's file once, however many posts use it (`media/stickers/emoji/`). An emoji file is shared by every channel using it, so any pass with sticker downloads on — the main one or the environment one — fetches the files still missing. That is what the post cards draw and what the [Emoji packs](web-interface.md#emoji-packs--channelsemoji-packs) page counts per channel. A lookup cut short by a flood wait is resumed by the next crawl.
 
+A boosted group can also set a custom emoji pack as its own, which all its members can use; **Get channels info** records it with the channel details (cleared when the group drops it), and the channel page, the pack's page and the CSVs show it.
+
 Messages crawled before this was kept carry no custom emoji. **Refresh message stats** fills them in for every message whose text Telegram still serves unchanged (never from the stub Telegram puts in place of a restricted channel's post); **Fix missing media** with **Sticker download** on fetches the files of emoji recorded while downloads were off or whose files went missing.
 
 ---

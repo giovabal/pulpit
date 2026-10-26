@@ -121,6 +121,31 @@ def _pack_for(attribute: Any) -> CustomEmojiPack | None:
     return pack
 
 
+def _fill_pack(pack: CustomEmojiPack, sticker_set: Any) -> None:
+    """Write a Telegram ``StickerSet``'s title, short name, size and access hash onto *pack*, and save it."""
+    access_hash = getattr(sticker_set, "access_hash", None)
+    if isinstance(access_hash, int):
+        pack.access_hash = access_hash
+    pack.title = (getattr(sticker_set, "title", "") or "")[:255]
+    pack.short_name = (getattr(sticker_set, "short_name", "") or "")[:255]
+    count = getattr(sticker_set, "count", None)
+    pack.emoji_count = count if isinstance(count, int) else None
+    pack.fetched_at = timezone.now()
+    pack.is_unavailable = False
+    pack.save()
+
+
+def pack_from_sticker_set(sticker_set: Any) -> CustomEmojiPack | None:
+    """The ``CustomEmojiPack`` for a full Telegram ``StickerSet`` — a supergroup's ``ChannelFull.emojiset`` —
+    created or refreshed from it (it carries the title, so no ``messages.getStickerSet`` lookup is due)."""
+    pack_id = getattr(sticker_set, "id", None)
+    if not isinstance(pack_id, int):
+        return None
+    pack, _ = CustomEmojiPack.objects.get_or_create(telegram_id=pack_id)
+    _fill_pack(pack, sticker_set)
+    return pack
+
+
 def _needs_file(emoji: CustomEmoji, check_files: bool) -> bool:
     if not emoji.file:
         return True
@@ -233,13 +258,7 @@ def _resolve_packs(api_client: TelegramAPIClient, update_status: Callable[[str],
         sticker_set = getattr(result, "set", None)
         if sticker_set is None:
             continue
-        pack.title = (getattr(sticker_set, "title", "") or "")[:255]
-        pack.short_name = (getattr(sticker_set, "short_name", "") or "")[:255]
-        count = getattr(sticker_set, "count", None)
-        pack.emoji_count = count if isinstance(count, int) else None
-        pack.fetched_at = timezone.now()
-        pack.is_unavailable = False
-        pack.save()
+        _fill_pack(pack, sticker_set)
         titled += 1
     return titled
 

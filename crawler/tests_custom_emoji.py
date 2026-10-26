@@ -336,3 +336,48 @@ class ResolveCustomEmojiTests(TestCase):
         pack = CustomEmojiPack.objects.get()
         self.assertTrue(pack.is_unavailable)
         self.assertEqual(pack.display_title, "Pack 900")
+
+
+class GroupEmojiPackTests(TestCase):
+    """A boosted supergroup's own emoji pack (ChannelFull.emojiset) is recorded with the channel details."""
+
+    def setUp(self) -> None:
+        self.api_client = MagicMock()
+        self.crawler = ChannelCrawler(self.api_client, MagicMock(), MagicMock())
+        self.channel = make_channel(telegram_id=1, label=make_label("Org"))
+
+    def _details(self, emojiset: Any) -> None:
+        full = types.SimpleNamespace(
+            participants_count=10, about="", location=None, linked_chat_id=None, emojiset=emojiset
+        )
+        self.api_client.client.return_value = types.SimpleNamespace(full_chat=full, chats=[])
+        telegram_channel = MagicMock(restriction_reason=None, usernames=None)
+        self.crawler.set_more_channel_details(self.channel, telegram_channel)
+        self.channel.refresh_from_db()
+
+    def test_the_group_pack_is_recorded_and_titled(self) -> None:
+        self._details(types.SimpleNamespace(id=900, access_hash=7, title="Org pack", short_name="orgpack", count=30))
+
+        pack = self.channel.emoji_pack
+        self.assertEqual((pack.telegram_id, pack.access_hash, pack.title, pack.emoji_count), (900, 7, "Org pack", 30))
+        self.assertIsNotNone(pack.fetched_at)
+        self.assertEqual(list(pack.group_channels.all()), [self.channel])
+
+    def test_an_existing_pack_is_reused_and_refreshed(self) -> None:
+        existing = CustomEmojiPack.objects.create(telegram_id=900, title="Old title")
+        self._details(types.SimpleNamespace(id=900, access_hash=7, title="New title", short_name="orgpack", count=30))
+
+        self.assertEqual(self.channel.emoji_pack, existing)
+        existing.refresh_from_db()
+        self.assertEqual(existing.title, "New title")
+
+    def test_a_dropped_pack_is_cleared(self) -> None:
+        self._details(types.SimpleNamespace(id=900, access_hash=7, title="Org pack", short_name="orgpack", count=30))
+        self._details(None)
+        self.assertIsNone(self.channel.emoji_pack)
+        self.assertTrue(CustomEmojiPack.objects.filter(telegram_id=900).exists())
+
+    def test_no_stickerset_object_records_nothing(self) -> None:
+        self._details(MagicMock())  # what an under-specified (mocked) response carries
+        self.assertIsNone(self.channel.emoji_pack)
+        self.assertFalse(CustomEmojiPack.objects.exists())

@@ -11,11 +11,12 @@
     <a class="bo-btn bo-btn--ghost" href="{% url 'emoji-packs' %}"><i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Usage</a>
   </div>
   <p class="text-muted small">
-    The packs the crawler found in posts and reactions. Mark <strong>in target</strong> the packs your study is about —
+    The packs the crawler found in posts, reactions and groups' details. Mark <strong>in target</strong> the packs your study is about —
     an organisation's own pack, say; every pack starts out of target. The flag classifies a pack: the
     <a href="{% url 'emoji-packs' %}">Emoji packs</a> and <a href="{% url 'custom-emoji-list' %}">Emoji</a> pages and their CSVs
     can be filtered by it, and it never removes a pack's uses from a count. Uses and channels here count every stored post;
-    the usage pages count in-target channels inside their in-target periods. Changes save as you make them.
+    the usage pages count in-target channels inside their in-target periods. A <em>group pack</em> is one a boosted group set as
+    its own (recorded when the crawler fetches channel details). Changes save as you make them.
   </p>
   <div class="bo-toolbar">
     <input class="bo-search" id="ep-search" type="search" placeholder="Search by title or short name…" autocomplete="off" aria-label="Search packs by title or short name">

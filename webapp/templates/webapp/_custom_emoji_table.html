@@ -36,7 +36,7 @@ Optional:
         <td>
           {% if row.pack %}
           <a href="{% url 'emoji-pack-detail' pk=row.pack.pk %}">{{ row.pack.display_title }}</a>
-          {% if row.pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+          {% include "webapp/_emoji_pack_badges.html" with pack=row.pack %}
           {% else %}<span class="text-muted">Not resolved yet</span>{% endif %}
         </td>
         {% endif %}

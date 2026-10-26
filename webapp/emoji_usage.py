@@ -192,14 +192,20 @@ def monthly_own_uses(messages: QuerySet[Message], emoji: CustomEmoji) -> dict[st
 
 def attach_packs(items: list[dict[str, Any]]) -> None:
     """Set ``item["pack"]`` (``CustomEmojiPack`` or ``None``) on every item carrying a ``pack_id``."""
-    packs = CustomEmojiPack.objects.in_bulk({item["pack_id"] for item in items if item["pack_id"] is not None})
+    packs = CustomEmojiPack.objects.prefetch_related("group_channels").in_bulk(
+        {item["pack_id"] for item in items if item["pack_id"] is not None}
+    )
     for item in items:
         item["pack"] = packs.get(item["pack_id"])
 
 
 def attach_emoji(items: list[dict[str, Any]]) -> None:
     """Set ``item["emoji"]`` (pack selected) and ``item["pack"]`` on every item carrying an ``emoji_id``."""
-    emoji = CustomEmoji.objects.select_related("pack").in_bulk({item["emoji_id"] for item in items})
+    emoji = (
+        CustomEmoji.objects.select_related("pack")
+        .prefetch_related("pack__group_channels")
+        .in_bulk({item["emoji_id"] for item in items})
+    )
     for item in items:
         item["emoji"] = emoji.get(item["emoji_id"])
         item["pack"] = item["emoji"].pack if item["emoji"] is not None else None

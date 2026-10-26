@@ -531,7 +531,7 @@ class CustomEmojiPackViewSet(
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        qs = CustomEmojiPack.objects.annotate(
+        qs = CustomEmojiPack.objects.prefetch_related("group_channels").annotate(
             uses=Count("emoji__uses", distinct=True),
             channels=Count("emoji__uses__message__channel", distinct=True),
             emoji_used=Count("emoji", filter=Q(emoji__uses__isnull=False), distinct=True),

@@ -57,6 +57,19 @@
             tg.innerHTML = '<i class="bi bi-telegram" aria-hidden="true"></i>';
             wrap.appendChild(tg);
         }
+        if (pack.group_channels && pack.group_channels.length) {
+            var groups = document.createElement("div");
+            groups.className = "text-muted small";
+            groups.appendChild(document.createTextNode("Group pack of "));
+            pack.group_channels.forEach(function(group, i) {
+                if (i) groups.appendChild(document.createTextNode(", "));
+                var g = document.createElement("a");
+                g.href = group.url;
+                g.textContent = group.title;
+                groups.appendChild(g);
+            });
+            wrap.appendChild(groups);
+        }
         if (pack.is_unavailable) {
             var gone = document.createElement("span");
             gone.className = "text-muted small ms-2";

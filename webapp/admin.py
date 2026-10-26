@@ -95,6 +95,7 @@ class ChannelAdmin(admin.ModelAdmin):
         "environment_depth",
     )
     search_fields = ["username", "title", "about"]
+    raw_id_fields = ["emoji_pack"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Channel]:
         return (

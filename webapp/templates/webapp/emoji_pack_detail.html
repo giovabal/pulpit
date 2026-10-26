@@ -12,12 +12,12 @@
       <a href="{% url 'emoji-packs' %}" class="text-decoration-none text-muted">Emoji packs</a>
       <span class="text-muted mx-1">/</span>{{ pack.display_title }}
     </h1>
-    {% if pack.is_in_target %}<span class="ch-badge ch-badge--verified"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+    {% include "webapp/_emoji_pack_badges.html" %}
     {% if pack.telegram_url %}<a href="{{ pack.telegram_url }}" target="_blank" rel="noopener noreferrer" class="channels-vacancies-link"><i class="bi bi-telegram" aria-hidden="true"></i> t.me/addemoji/{{ pack.short_name }}</a>{% endif %}
   </div>
   <p class="text-muted small mb-0 mt-1">
     {% if pack.emoji_count %}{{ pack.emoji_count }} emoji in the pack, {{ emoji_rows|length }} used in scope.{% else %}{{ emoji_rows|length }} emoji used in scope.{% endif %}
-    {% if pack.is_unavailable %}Telegram no longer serves this pack.{% endif %}
+    {% with groups=pack.group_channels.all %}{% if groups %}The own emoji pack of {% for group in groups %}<a href="{{ group.get_absolute_url }}">{{ group.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %} — set by the group, so every member can use it.{% endif %}{% endwith %}
     Counted over in-target channels' posts inside their in-target periods; uses in forwards are the source's emoji.
   </p>
 </div>

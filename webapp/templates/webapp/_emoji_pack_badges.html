@@ -1,0 +1,11 @@
+{% comment %}
+Status badges after a pack's name: in target (Manage → Emoji), the group(s)
+that set it as their own emoji pack (Channel.emoji_pack — the lists prefetch
+"group_channels"), and gone from Telegram.
+
+Required context:
+    pack — a CustomEmojiPack
+{% endcomment %}
+{% if pack.is_in_target %}<span class="ch-badge ch-badge--verified ms-1"><i class="bi bi-bullseye" aria-hidden="true"></i> in target</span>{% endif %}
+{% with groups=pack.group_channels.all %}{% if groups %}<span class="ch-badge ch-badge--muted ms-1" title="The own emoji pack of {% for group in groups %}{{ group.title }}{% if not forloop.last %}, {% endif %}{% endfor %}"><i class="bi bi-people" aria-hidden="true"></i> group pack{% if groups|length > 1 %} ×{{ groups|length }}{% endif %}</span>{% endif %}{% endwith %}
+{% if pack.is_unavailable %}<span class="ch-badge ch-badge--muted ms-1">no longer on Telegram</span>{% endif %}
