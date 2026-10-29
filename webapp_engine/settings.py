@@ -490,6 +490,9 @@ SA_BEHAVIOURAL_EQUIVALENCE = _structural.outputs.behavioural_equivalence
 SA_DOMINANCE = _structural.outputs.dominance
 SA_DOMINANCE_MIN_EVENTS = _structural.computation.dominance_min_events
 SA_DOMINANCE_PERMUTATIONS = _structural.computation.dominance_permutations
+SA_MRQAP = _structural.outputs.mrqap
+SA_MRQAP_PERMUTATIONS = _structural.computation.mrqap_permutations
+SA_DYADIC_EXPORT = _structural.outputs.dyadic_export
 SA_CONSENSUS_MATRIX = _structural.outputs.consensus_matrix
 # CPM resolution moved into the per-instance community-strategy tokens (v0.25).
 SA_COMMUNITY_DISTRIBUTION_THRESHOLD = _structural.computation.community_distribution_threshold

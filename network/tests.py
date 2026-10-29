@@ -4955,12 +4955,13 @@ class NetworkSummaryRowsTests(TestCase):
             "centralizations": {},
         }
 
-    def test_returns_list_of_three_tuples(self) -> None:
+    def test_returns_list_of_four_tuples(self) -> None:
         rows = network_summary_rows(self._make_summary())
         self.assertIsInstance(rows, list)
         for row in rows:
             self.assertIsInstance(row, tuple)
-            self.assertEqual(len(row), 3)
+            self.assertEqual(len(row), 4)
+            self.assertIsNone(row[3])  # no SIGNIFICANCE / HOMOPHILY in the summary → no tests
 
     def test_nodes_row_present(self) -> None:
         rows = network_summary_rows(self._make_summary())
@@ -9011,7 +9012,7 @@ class NetworkSummaryCorrectionsTests(TestCase):
         self.assertEqual(censored["reciprocity"], 1.0)  # a ↔ b is the only observable dyad
         self.assertEqual(censored["out_degree_cv"], 0.0)  # a and b both cite two channels
         self.assertEqual(censored["dead_leaves"], 1)
-        labels = [label for label, _value, _group in network_summary_rows(censored)]
+        labels = [label for label, _value, _group, _significance in network_summary_rows(censored)]
         self.assertIn("Dead leaves (own citations not observed)", labels)
 
     def test_self_loops_do_not_count_as_unreciprocated_ties(self) -> None:

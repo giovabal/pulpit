@@ -7,8 +7,9 @@ from typing import Any
 from django.conf import settings
 from django.template.loader import render_to_string
 
+from network import label_mixing, mrqap
 from network.community import labelgroup_display_labels, strategy_display_label
-from network.community_stats import PARTITION_COMPARISON_METRICS, network_summary_rows
+from network.community_stats import PARTITION_COMPARISON_METRICS, SIGNIFICANCE_COLUMNS, network_summary_rows
 from network.exporter import sbm_confidence_columns
 from network.measures._registry import role_companions
 from network.utils import CommunityTableData, GraphData
@@ -188,14 +189,16 @@ def write_network_metrics_json(
     data_dir = os.path.join(graph_dir, "data")
     summary = community_table_data["network_summary"]
     summary_rows = []
-    for label, value, group in network_summary_rows(summary):
+    tested_columns: set[str] = set()
+    for label, value, group, significance in network_summary_rows(summary):
         if isinstance(value, float):
             display = _fmt(value)
         elif value is None:
             display = "—"
         else:
             display = str(value)
-        summary_rows.append({"label": label, "value": display, "group": group})
+        summary_rows.append({"label": label, "value": display, "group": group, "significance": significance})
+        tested_columns.update(significance or ())
 
     modularity_rows = []
     for strategy_key in strategies:
@@ -222,8 +225,12 @@ def write_network_metrics_json(
             summary.get("avg_path_length_directed") is not None and not summary.get("scc_path_on_full", True)
         ),
         "summary_rows": summary_rows,
+        # Baselines at least one row is tested against, in column order (network table "vs …" columns).
+        "significance_columns": [[key, label] for key, label in SIGNIFICANCE_COLUMNS if key in tested_columns],
         "modularity_rows": modularity_rows,
         "partition_comparison": community_table_data.get("partition_comparison"),
+        "label_mixing": community_table_data.get("label_mixing"),
+        "mrqap": community_table_data.get("mrqap"),
     }
     with open(os.path.join(data_dir, "network_metrics.json"), "w") as f:
         f.write(json.dumps(payload))
@@ -253,11 +260,23 @@ def write_network_table_xlsx(
 ) -> None:
     def _fill(ws: Any, ctd: CommunityTableData) -> None:
         summary = ctd["network_summary"]
-        ws.append(["Metric", "Value"])
+        rows = network_summary_rows(summary)
+        tested = {key for *_rest, significance in rows for key in (significance or ())}
+        columns = [(key, label) for key, label in SIGNIFICANCE_COLUMNS if key in tested]
+        ws.append(["Metric", "Value", *(f"{part} {label}" for _key, label in columns for part in ("z", "p"))])
         for cell in ws[1]:
             cell.font = Font(bold=True)
-        for label, value, _group in network_summary_rows(summary):
-            ws.append([label, value])
+        for label, value, _group, significance in rows:
+            cells: list[Any] = []
+            for key, _label in columns:
+                test = (significance or {}).get(key)
+                if test is None:
+                    cells += [None, None]
+                elif test.get("fixed"):
+                    cells += ["held fixed", None]
+                else:
+                    cells += [test.get("z"), test.get("p")]
+            ws.append([label, value, *cells])
         if not summary["path_on_full"]:
             ws.append([])
             ws.append(["† Computed on the largest weakly connected component (undirected)"])
@@ -308,6 +327,50 @@ def write_network_table_xlsx(
     if year_data:
         for yr, yr_ctd in year_data:
             _fill(wb.create_sheet(title=str(yr)), yr_ctd)
+
+    # Homophily, label flows and MRQAP: one long-format sheet each, the full range ("All") then every year.
+    periods: list[tuple[str, CommunityTableData]] = [("All", community_table_data)]
+    periods += [(str(yr), yr_ctd) for yr, yr_ctd in year_data or []]
+
+    def _bold_last_row(ws: Any) -> None:
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+
+    mixing = [(period, ctd["label_mixing"]) for period, ctd in periods if ctd.get("label_mixing")]
+    if any(payload.get("groups") for _period, payload in mixing):
+        ws = wb.create_sheet(title="Homophily")
+        ws.append(list(label_mixing.GROUP_COLUMNS))
+        _bold_last_row(ws)
+        for period, payload in mixing:
+            for row in label_mixing.group_rows(payload, period):
+                ws.append(row)
+        ws.append([])
+        ws.append(list(label_mixing.LABEL_COLUMNS))
+        _bold_last_row(ws)
+        for period, payload in mixing:
+            for row in label_mixing.label_rows(payload, period):
+                ws.append(row)
+        ws = wb.create_sheet(title="Label flows")
+        ws.append(list(label_mixing.FLOW_COLUMNS))
+        _bold_last_row(ws)
+        for period, payload in mixing:
+            for row in label_mixing.flow_rows(payload, period):
+                ws.append(row)
+
+    regressions = [(period, ctd["mrqap"]) for period, ctd in periods if ctd.get("mrqap")]
+    if any(payload.get("models") for _period, payload in regressions):
+        ws = wb.create_sheet(title="MRQAP")
+        ws.append(list(mrqap.MODEL_COLUMNS))
+        _bold_last_row(ws)
+        for period, payload in regressions:
+            for row in mrqap.model_rows(payload, period):
+                ws.append(row)
+        ws.append([])
+        ws.append(list(mrqap.COEFFICIENT_COLUMNS))
+        _bold_last_row(ws)
+        for period, payload in regressions:
+            for row in mrqap.coefficient_rows(payload, period):
+                ws.append(row)
 
     wb.save(output_filename)
 
@@ -495,6 +558,9 @@ def write_community_table_xlsx(
         for strategy_key in strategies:
             ws = wb.create_sheet(title=_safe_sheet_title(strategy_display_label(strategy_key)))
             _fill_strategy(ws, strategy_key, community_table_data)
+    if not wb.sheetnames:
+        # A workbook needs one sheet: an export without community strategies still writes a valid file.
+        wb.create_sheet(title="Communities").append(["No community strategy was selected for this export."])
 
     wb.save(output_filename)
 
@@ -946,6 +1012,7 @@ def write_index_html(
     include_coordination_3d: bool = False,
     include_dominance_html: bool = False,
     include_dominance_xlsx: bool = False,
+    include_dyads: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -981,6 +1048,7 @@ def write_index_html(
         "include_coordination_3d": include_coordination_3d,
         "include_dominance_html": include_dominance_html,
         "include_dominance_xlsx": include_dominance_xlsx,
+        "include_dyads": include_dyads,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

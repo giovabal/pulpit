@@ -2,6 +2,7 @@ import { strategy_label as _strat_label } from './labels.js';
 import { build_year_nav } from './year_nav.js';
 import { mini_hist as _mini_hist } from './charts.js';
 import { fetchJson, fetchJsonOrNull, arrMin, arrMax } from './utils.js';
+import { render_label_mixing, render_mrqap } from './label_mixing.js';
 
 var _dd = window.DATA_DIR || "data/";
 var _ym = _dd.match(/data_(\d{4,})\//);
@@ -152,6 +153,43 @@ var METRIC_TOOLTIPS = {
     "Amplification Ratio": "Mean number of times each message is re-shared within the network.",
 };
 
+// Tooltips of the per-label-group homophily rows, matched on the part after "<group>: ".
+var HOMOPHILY_TOOLTIPS = {
+    "assortativity r, ties": "Nominal assortativity (Newman 2003) of the ties between labelled channels: 1 = every tie stays inside its label, 0 = labels unrelated to ties, negative = ties prefer other labels. Tested against random relabellings of the same channels.",
+    "assortativity r, citations": "The same assortativity weighted by the citations on each tie.",
+    "E-I index, labelled ties": "Krackhardt & Stern's (1988) E-I over the ties between labelled channels: (external − internal) / (external + internal). Compare it with its expected value under random relabellings: a large label is inward-looking by chance too.",
+};
+
+// Column headers of the significance block: the baselines a whole-network row is tested against.
+var SIGNIFICANCE_TOOLTIPS = {
+    "configuration": "Random graphs with every channel's in/out-degree (and, approximately, strength): z and two-sided p of the statistic against them. Degree statistics are held fixed by construction.",
+    "reciprocal": "As the configuration baseline, also keeping every channel's reciprocated ties: a deviation that survives is not explained by mutual citation alone.",
+    "random": "A random network with the same channels and number of ties (dead leaves never cite) — the baseline for the degree statistics.",
+    "label_permutation": "The labels shuffled over the same channels, the graph fixed.",
+};
+
+function _significance_cell(test) {
+    var td = document.createElement("td");
+    td.className = "number";
+    if (!test) {
+        td.textContent = "";
+        return td;
+    }
+    if (test.fixed) {
+        td.textContent = "held fixed";
+        td.classList.add("text-muted");
+        td.title = "This baseline keeps the statistic constant by construction";
+        return td;
+    }
+    if (test.z === null || test.z === undefined) {
+        td.textContent = test.p !== null && test.p !== undefined ? "p " + sigFig(test.p, 2) : "—";
+    } else {
+        td.textContent = "z " + sigFig(test.z, 3) + (test.p !== null && test.p !== undefined ? " (p " + sigFig(test.p, 2) + ")" : "");
+    }
+    if (test.mean !== null && test.mean !== undefined) td.title = "Mean under the baseline: " + sigFig(test.mean, 3);
+    return td;
+}
+
 var STRATEGY_COL_TOOLTIPS = {
     "Modularity": "Newman & Girvan (2004): fraction of edges within communities minus the expected fraction under a random null model. Range −0.5–1. A high value alone is not evidence of communities — sparse random graphs reach 0.3–0.8 too (Guimerà et al. 2004); read it with the z column.",
     "Modularity z": "How many standard deviations this modularity lies above the best modularity Leiden reaches on random graphs with the same in/out-degrees and strengths but no community structure. Large and positive → real community structure; near 0 or negative → no more modular than chance. Shown for the modularity-maximising strategies (Leiden, Leiden directed, Louvain) only.",
@@ -189,11 +227,13 @@ function _render_summary(data) {
     table.className = "table table-sm table-hover";
     var thead = document.createElement("thead");
     var htr = document.createElement("tr");
-    ["Metric", "Value"].forEach(function(lbl, i) {
+    var sigCols = data.significance_columns || [];
+    ["Metric", "Value"].concat(sigCols.map(function(c) { return c[1]; })).forEach(function(lbl, i) {
         var th = document.createElement("th");
         th.scope = "col";
-        if (i === 1) th.className = "number";
+        if (i >= 1) th.className = "number";
         th.textContent = lbl;
+        if (i >= 2) th.title = SIGNIFICANCE_TOOLTIPS[sigCols[i - 2][0]] || "";
         htr.appendChild(th);
     });
     thead.appendChild(htr);
@@ -206,7 +246,7 @@ function _render_summary(data) {
             var gtr = document.createElement("tr");
             gtr.className = "summary-group-header";
             var gtd = document.createElement("td");
-            gtd.colSpan = 2;
+            gtd.colSpan = 2 + sigCols.length;
             gtd.textContent = row.group;
             gtr.appendChild(gtd);
             tbody.appendChild(gtr);
@@ -220,6 +260,7 @@ function _render_summary(data) {
             var m = baseLabel.match(/^(.*)\s+Centralization$/);
             if (m) tip = "Freeman (1978) graph-level centralization for " + m[1] + "; 0 = uniform distribution, 1 = star graph.";
         }
+        if (!tip && row.group === "Homophily") tip = HOMOPHILY_TOOLTIPS[baseLabel.replace(/^.*?:\s*/, "")];
         if (tip) td1.title = tip;
         var td2 = document.createElement("td");
         td2.className = "number";
@@ -236,10 +277,18 @@ function _render_summary(data) {
         } else { td2.textContent = row.value; }
         tr.appendChild(td1);
         tr.appendChild(td2);
+        sigCols.forEach(function(c) {
+            tr.appendChild(_significance_cell((row.significance || {})[c[0]]));
+        });
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    section.appendChild(table);
+    // The significance columns need the full width; the modularity table then wraps below.
+    section.className = sigCols.length ? "col-12" : "col-lg-7";
+    var wrap = document.createElement("div");
+    wrap.className = "table-responsive";
+    wrap.appendChild(table);
+    section.appendChild(wrap);
     if (data.wcc_note_visible) {
         var note = document.createElement("p");
         note.className = "text-muted small mt-1";
@@ -323,6 +372,13 @@ function _render_modularity(data) {
     table.appendChild(tbody);
     section.appendChild(table);
     initSortableTables();
+}
+
+function _render_inference(data) {
+    var mixing = document.getElementById("homophily-section");
+    if (mixing) render_label_mixing(mixing, data.label_mixing);
+    var regression = document.getElementById("mrqap-section");
+    if (regression) render_mrqap(regression, data.mrqap);
 }
 
 // ── Build degree-distribution section (once on initial load) ───────────────────
@@ -496,6 +552,7 @@ function _switch_year(year) {
         _render_preamble(d.meta);
         _render_summary(d.data);
         _render_modularity(d.data);
+        _render_inference(d.data);
         _update_dist_chart();
         _update_scatter_chart();
         _loading = false;
@@ -551,6 +608,7 @@ Promise.all([
         _render_preamble(meta);
         _render_summary(data);
         _render_modularity(data);
+        _render_inference(data);
         _build_dist_section();
         _build_scatter_section();
     });

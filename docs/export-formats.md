@@ -31,6 +31,12 @@ exports/
     dominance.xlsx          ← dominance channels / pairs / hierarchy (with --dominance --xlsx)
     dominance_channels.csv  ← dominance ranking (with --dominance --csv)
     dominance_pairs.csv     ← dominance pairs (with --dominance --csv)
+    label_flows.csv         ← label → label citation flows of every partition label group (HOMOPHILY group + --csv)
+    dyads/                  ← data for network-modelling tools (with --dyadic-export; see docs/dyadic-models.md)
+      README.md             ← file dictionary
+      actors.csv, edgelist.csv, events.csv
+      dyads.csv             (with --mrqap)
+      waves/wave_YYYY.csv, waves/presence.csv  (with --timeline-step year)
     network.gexf            ← GEXF network file (optional)
     network.graphml         ← GraphML network file (optional)
     nodes.csv               ← CSV node list (optional)
@@ -48,6 +54,7 @@ exports/
       behavioural_equivalence.json  (when --behavioural-equivalence)
       robustness.json       (when --robustness)
       dominance.json    (when --dominance)
+      mrqap.json            (when --mrqap)
       timeline.json         (when --timeline-step year)
     data_YYYY/              (one per year when --timeline-step year)
       ...
@@ -173,6 +180,12 @@ Click any column header to sort. Download the `.xlsx` for further analysis in a 
 ## network_table.html / .xlsx — whole-network statistics
 
 Whole-network metrics organized by group (SIZE, PATHS, COHESION, etc.), one row per metric. Includes an interactive scatter plot: drop any two measures on the axes to compare their distributions across channels. A modularity-by-strategy table shows partition quality for every active community detection algorithm. (The cross-strategy **Partition comparison** matrices are rendered on `community_table.html`; they are still written as labelled blocks in this file's XLSX `Network` sheet.)
+
+- With the `SIGNIFICANCE` group, the metrics table gains one **vs …** column per random-graph baseline (z and p); the `HOMOPHILY` rows fill the *vs label permutation* column. The XLSX `Network` sheet carries the same z / p columns.
+- With the `HOMOPHILY` group, a **Homophily by label group** section follows: per partition label group the assortativity and E-I line, a per-label table (inbreeding homophily citing / cited with BH stars, net-exporter index, out-of-scope share) and the label → label **citation-flow heat map**. The XLSX adds a `Homophily` sheet and a long-format `Label flows` sheet (a `Year` column covers the timeline).
+- With `--mrqap`, a **Dyadic regression (MRQAP)** section shows the two models' coefficients, standardised β, t and permutation p; the XLSX adds an `MRQAP` sheet. Raw payload: `data/mrqap.json` (and `data_YYYY/mrqap.json`).
+
+`network_metrics.json` carries all of it per period: `summary_rows` (each with its `significance`), `significance_columns`, `label_mixing` and `mrqap`.
 
 For a full explanation of each metric, see [Whole-network statistics](whole-network-statistics.md).
 

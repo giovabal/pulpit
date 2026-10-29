@@ -72,6 +72,21 @@ def _censor_dead_leaves(graph: nx.DiGraph, values: dict) -> dict:
     return {node: (None if node in dead else value) for node, value in values.items()}
 
 
+def pagerank_scores(graph: nx.DiGraph) -> dict[str, float]:
+    """PageRank of every node of ``graph`` with the measure's fixed settings, self-loops left out (see
+    :func:`apply_pagerank`); raises like ``nx.pagerank`` when the power iteration fails. Shared with the
+    whole-network null models, which recompute the PageRank centralisation on every random graph."""
+    return nx.pagerank(
+        without_self_loops(graph),
+        alpha=PAGERANK_ALPHA,
+        personalization=PAGERANK_PERSONALIZATION,
+        max_iter=PAGERANK_MAX_ITER,
+        tol=PAGERANK_TOL,
+        weight=PAGERANK_WEIGHT,
+        dangling=PAGERANK_DANGLING,
+    )
+
+
 def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
     """Add the PageRank score to each node.
 
@@ -97,15 +112,7 @@ def apply_pagerank(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, 
     """
     key = "pagerank"
     try:
-        pagerank_values: dict[str, float] = nx.pagerank(
-            without_self_loops(graph),
-            alpha=PAGERANK_ALPHA,
-            personalization=PAGERANK_PERSONALIZATION,
-            max_iter=PAGERANK_MAX_ITER,
-            tol=PAGERANK_TOL,
-            weight=PAGERANK_WEIGHT,
-            dangling=PAGERANK_DANGLING,
-        )
+        pagerank_values = pagerank_scores(graph)
     except Exception as exc:  # noqa: BLE001
         # PageRank rarely fails, but power iteration can diverge on adversarial /
         # degenerate graphs; degrade gracefully rather than aborting the whole

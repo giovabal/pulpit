@@ -201,6 +201,21 @@
   </div>
   {% endif %}
 
+  {% if include_dyads %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="card-title h5"><i class="bi bi-diagram-2 text-secondary me-2" aria-hidden="true"></i>Dyadic export</h3>
+        <p class="card-text text-muted small">The citation network as data for network-modelling tools: actors and their labels, every tie, every timestamped citation event and, with a year timeline, one network per year.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="dyads/README.md" class="btn btn-outline-primary btn-sm">File guide</a>
+          <a href="{{ repository_url }}/blob/main/docs/dyadic-models.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 
 {% if include_vacancy_analysis %}
