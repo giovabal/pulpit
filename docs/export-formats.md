@@ -21,6 +21,8 @@ exports/
     network_compare_table.html   ← network comparison (optional)
     robustness_table.html   ← node-removal R-index page (optional)
     dominance.html          ← dominance analysis (with --dominance)
+    events.html             ← event impact: interrupted time series around recorded events (with --event-impact --html)
+    event_impact.xlsx / .csv  ← its effects table and weekly series (with --xlsx / --csv)
     coordination.html       ← 2D co-forwarding coordination map (with --coordination-2d)
     coordination3d.html     ← 3D co-forwarding coordination map (with --coordination-3d)
     vacancy_analysis.html   ← replacement-candidate ranking (optional)
@@ -36,7 +38,7 @@ exports/
       README.md             ← file dictionary
       actors.csv, edgelist.csv, events.csv
       dyads.csv             (with --mrqap)
-      waves/wave_YYYY.csv, waves/presence.csv  (with --timeline-step year)
+      waves/wave_<period>.csv, waves/presence.csv  (with --timeline-step, no --timeline-window)
     network.gexf            ← GEXF network file (optional)
     network.graphml         ← GraphML network file (optional)
     nodes.csv               ← CSV node list (optional)
@@ -55,16 +57,17 @@ exports/
       robustness.json       (when --robustness)
       dominance.json    (when --dominance)
       mrqap.json            (when --mrqap)
-      timeline.json         (when --timeline-step year)
-    data_YYYY/              (one per year when --timeline-step year)
+      event_impact.json     (when --event-impact)
+      timeline.json         (when --timeline-step)
+    data_<period>/          (one per period with --timeline-step: data_2024/, data_2024Q1/, data_2024-03/)
       ...
     data_coordination/      (when --coordination-2d / --coordination-3d)
       channels.json
       channel_position.json
       channel_position_3d.json  (when --coordination-3d)
       communities.json
-      timeline.json         (when --timeline-step year; only years with ties)
-    data_coordination_YYYY/ (per year with ties, when combined with --timeline-step year)
+      timeline.json         (when --timeline-step; only periods with ties)
+    data_coordination_<period>/ (per period with ties, when combined with --timeline-step)
       ...
     media/
       <channel_id>.jpg      ← channel avatars
@@ -386,6 +389,20 @@ Written whenever **Include near-copies as edges** (`--near-copy-edges`) is on, w
 A match proves the same text appeared earlier in another in-scope channel, not who copied whom; read this file before interpreting a copy edge.
 
 ---
+
+## data/timeline.json — the timeline's periods
+
+Written with `--timeline-step`. `{"step", "window_months", "overlapping", "periods": [...], "events": [...]}`:
+
+- `step` — `year`, `quarter` or `month`; `window_months` — the sliding-window length (`null` = tumbling); `overlapping` — whether consecutive periods share days.
+- `periods` — one entry per exported period, in time order: `key` (its `data_<key>/` directory: `2024`, `2024Q1`, `2024-03`; a sliding window takes the key of the step it ends with), `label` (`2024 Q1`, `Mar 2024`, `Apr 2023 – Mar 2024`), inclusive `start` / `end`, node and edge counts, the `has_*` flags the viewers filter on, and the period's `community_resolutions` / `community_fits`.
+- `events` — the events recorded in Manage → Events inside the timeline: `date`, `subject`, `type`, `color`, `labels` (scope) and the `period_key` of the step containing the date (the navigators mark that period).
+
+`data_coordination/timeline.json` has the same shape, listing only the periods with coordination ties. Exports before 0.29 wrote `{"years": [{"year", …}]}`; the viewers still read that form.
+
+## events.html / event_impact.xlsx / .csv — event impact
+
+Written with `--event-impact` (`data/event_impact.json` always; the page with `--html`). For every event recorded inside the data: the weekly series of each metric around it, the fitted segments and the counterfactual continuation of the pre-event trend, and an effects table — level change (and its % for count metrics), slope change, HAC p, placebo p and BH q, plus notes (window cut by the data edge, few placebo dates, other events inside the window). A network-wide chart shows any metric's whole weekly series with the events marked. The XLSX has an `Effects` sheet (one row per event × metric, the CSV's layout) and a `Weekly series` sheet. See [Event impact](event-impact.md).
 
 ## network.gexf / network.graphml — network exchange formats
 

@@ -20,6 +20,37 @@ export function fetchJsonOrNull(url) {
         .catch(function() { return null; });
 }
 
+// ── Timeline ────────────────────────────────────────────────────────────────────
+// timeline.json (data/timeline.json, data_coordination/timeline.json) lists the exported periods —
+// calendar years, quarters, months or sliding windows — each with a `key` (its data_<key>/ directory) and a
+// display `label`. Older exports listed `years: [{year, …}]`; both shapes normalise to
+// {step, windowMonths, overlapping, periods: [{key, label, …}], events: [{date, subject, period_key, …}]}.
+export function readTimeline(json) {
+    if (!json) return { step: null, windowMonths: null, overlapping: false, periods: [], events: [] };
+    var periods = json.periods || (json.years || []).map(function(y) {
+        return Object.assign({}, y, { key: String(y.year), label: String(y.year) });
+    });
+    return {
+        step: json.step || "year",
+        windowMonths: json.window_months || null,
+        overlapping: !!json.overlapping,
+        periods: periods.map(function(p) { return Object.assign({}, p, { key: String(p.key) }); }),
+        events: json.events || [],
+    };
+}
+
+// The data directory of one period of the page's base directory: data/ → data_<key>/,
+// data_coordination/ → data_coordination_<key>/.
+export function periodDataDir(base, key) {
+    return String(base).replace(/\/+$/, "") + "_" + key + "/";
+}
+
+// A compare page reads the other export from data_2/ — it carries no timeline of its own (its period
+// directories were never copied), so it shows the full range only.
+export function isCompareDataDir(dd) {
+    return /(^|\/)data_2\/$/.test(String(dd || ""));
+}
+
 // Min / max over an array WITHOUT spreading it through Function.prototype.apply.
 // `Math.min.apply(null, arr)` / `Math.max.apply(null, arr)` push every element as a
 // separate argument and throw a RangeError once the array exceeds the engine's

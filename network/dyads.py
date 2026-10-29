@@ -9,8 +9,9 @@ read from the very graph and messages the export was computed on:
 * ``edgelist.csv`` — every tie with its raw counts (ERGM, QAP);
 * ``events.csv`` — every citation event between two nodes, timestamped (relational event models);
 * ``dyads.csv`` — the MRQAP dyad table, when ``--mrqap`` is on;
-* ``waves/`` — one adjacency matrix per timeline year and a presence table, when ``--timeline-step year``
-  is on (stochastic actor-oriented models);
+* ``waves/`` — one adjacency matrix per timeline period and a presence table, when ``--timeline-step``
+  is on without ``--timeline-window`` (stochastic actor-oriented models; overlapping sliding windows are
+  not panel waves);
 * ``README.md`` — the file dictionary.
 
 ``events.csv`` lists the forwards and mentions through :func:`network.graph_builder.forward_messages_qs` /
@@ -35,8 +36,8 @@ import networkx as nx
 DYADS_DIR = "dyads"
 
 WAVE_ACTOR_RULE = (
-    "waves cover the observed channels (dead leaves excluded) of every timeline year's graph; a channel absent "
-    "from a year's graph is marked absent in waves/presence.csv and has an empty row and column that year"
+    "waves cover the observed channels (dead leaves excluded) of every timeline period's graph; a channel absent "
+    "from a period's graph is marked absent in waves/presence.csv and has an empty row and column that period"
 )
 EVENT_RULE = (
     "one row per forward, mention and near-copy counted on an edge of the exported graph, at the citing "
@@ -58,22 +59,22 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Dyadic export: wave actors",
         value=WAVE_ACTOR_RULE,
         scope="dyads",
-        affects="Which channels the yearly adjacency matrices span and how a channel absent in a year is coded.",
+        affects="Which channels the per-period adjacency matrices span and how a channel absent in a period is coded.",
         source=f"{_SOURCE}: WAVE_ACTOR_RULE",
     ),
 )
 
-#: One timeline year's network for the waves: its observed node ids and its ties between them.
-type Wave = tuple[int, list[str], list[tuple[str, str]]]
+#: One timeline period's network for the waves: its key, its observed node ids and its ties between them.
+type Wave = tuple[str, list[str], list[tuple[str, str]]]
 
 
-def wave_of(year: int, graph: nx.DiGraph) -> Wave:
-    """The :data:`Wave` of one year graph (observed nodes, self-loops dropped)."""
+def wave_of(period_key: str, graph: nx.DiGraph) -> Wave:
+    """The :data:`Wave` of one period graph (observed nodes, self-loops dropped)."""
     dead = dead_leaf_ids(graph)
     nodes = sorted(n for n in graph if n not in dead)
     present = set(nodes)
     ties = sorted((u, v) for u, v in graph.edges() if u != v and u in present and v in present)
-    return year, nodes, ties
+    return str(period_key), nodes, ties
 
 
 def _write_csv(path: str, header: list[str], rows: list[list[Any]]) -> None:
@@ -218,21 +219,21 @@ def _dyad_rows(design: Design) -> tuple[list[str], list[list[Any]]]:
 
 def _write_waves(directory: str, waves: list[Wave]) -> None:
     os.makedirs(directory, exist_ok=True)
-    actors = sorted({n for _year, nodes, _ties in waves for n in nodes}, key=int)
-    years = [year for year, _nodes, _ties in waves]
-    presence = {year: set(nodes) for year, nodes, _ties in waves}
+    actors = sorted({n for _key, nodes, _ties in waves for n in nodes}, key=int)
+    keys = [key for key, _nodes, _ties in waves]
+    presence = {key: set(nodes) for key, nodes, _ties in waves}
     _write_csv(
         os.path.join(directory, "presence.csv"),
-        ["actor", *map(str, years)],
-        [[a, *(int(a in presence[y]) for y in years)] for a in actors],
+        ["actor", *keys],
+        [[a, *(int(a in presence[k]) for k in keys)] for a in actors],
     )
     index = {a: i for i, a in enumerate(actors)}
-    for year, _nodes, ties in waves:
+    for key, _nodes, ties in waves:
         matrix = [[0] * len(actors) for _ in actors]
         for u, v in ties:
             matrix[index[u]][index[v]] = 1
         _write_csv(
-            os.path.join(directory, f"wave_{year}.csv"),
+            os.path.join(directory, f"wave_{key}.csv"),
             ["actor", *actors],
             [[a, *row] for a, row in zip(actors, matrix, strict=True)],
         )
@@ -255,7 +256,7 @@ Typical uses:
 - **ERGM** (R `statnet`/`ergm`, valued ERGM via `ergm.count`): build the network from `edgelist.csv`, attach `actors.csv` as vertex attributes. Restrict to `observed == 1` senders — a dead leaf's own citations were never read.
 - **Relational event models** (R `goldfish`, `relevent`, `rem`; `eventnet`): `events.csv` is the event sequence, `actors.csv` the node set and covariates.
 - **QAP / MRQAP** in R (`sna::netlm`, `sna::netlogit`): `dyads.csv` holds the dependent variables and predictors of Pulpit's own MRQAP, one row per ordered pair of actors.
-- **Stochastic actor-oriented models** (R `RSiena`): each `waves/wave_YYYY.csv` is one observation; `waves/presence.csv` says which actors exist in each wave — channels that join or leave enter `sienaCompositionChange`, or their absent rows can be coded as structural zeros.
+- **Stochastic actor-oriented models** (R `RSiena`): each `waves/wave_<period>.csv` is one observation; `waves/presence.csv` says which actors exist in each wave — channels that join or leave enter `sienaCompositionChange`, or their absent rows can be coded as structural zeros.
 
 Every tie is a one-degree attribution (Telegram credits a forward to its origin): model the ties as citations, not as paths along which content travelled. See `docs/dyadic-models.md` in the Pulpit repository.
 """
@@ -272,6 +273,7 @@ def write_dyadic_bundle(
     include_mentions: bool,
     design: "Design | None" = None,
     waves: "list[Wave] | None" = None,
+    waves_skipped: bool = False,
 ) -> str:
     """Write ``dyads/`` under ``root`` (module docstring) and return its path."""
     directory = os.path.join(root, DYADS_DIR)
@@ -305,9 +307,14 @@ def write_dyadic_bundle(
     if waves:
         _write_waves(os.path.join(directory, "waves"), waves)
         waves_row = (
-            "| `waves/wave_YYYY.csv` | Binary adjacency of each timeline year over the union of the years' observed "
-            "channels (row = citing, column = cited) |\n"
-            "| `waves/presence.csv` | 1 when the channel is part of that year's graph, 0 when not |\n"
+            "| `waves/wave_<period>.csv` | Binary adjacency of each timeline period over the union of the periods' "
+            "observed channels (row = citing, column = cited) |\n"
+            "| `waves/presence.csv` | 1 when the channel is part of that period's graph, 0 when not |\n"
+        )
+    elif waves_skipped:
+        waves_row = (
+            "\nNo `waves/`: the timeline uses overlapping sliding windows (`--timeline-window`), which would count "
+            "the same tie in several waves. Re-run with a tumbling `--timeline-step` for panel waves.\n"
         )
     with open(os.path.join(directory, "README.md"), "w", encoding="utf-8") as handle:
         handle.write(_README.format(dyads_row=dyads_row, waves_row=waves_row))

@@ -416,10 +416,21 @@ class EventSerializer(serializers.ModelSerializer):
     action_id = serializers.PrimaryKeyRelatedField(source="action", queryset=EventType.objects.all())
     action_name = serializers.CharField(source="action.name", read_only=True)
     action_color = serializers.CharField(source="action.color", read_only=True)
+    # The labels the event concerns (empty = the whole network): written as ids, read back with names.
+    label_ids = serializers.PrimaryKeyRelatedField(
+        source="labels", queryset=Label.objects.all(), many=True, required=False
+    )
+    labels = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
-        fields = ["id", "date", "subject", "action_id", "action_name", "action_color"]
+        fields = ["id", "date", "subject", "action_id", "action_name", "action_color", "label_ids", "labels"]
+
+    def get_labels(self, obj: Event) -> list[dict]:
+        return [
+            {"id": label.pk, "name": label.name, "group": label.group.name, "color": label.color}
+            for label in obj.labels.all()
+        ]
 
 
 class UserSerializer(serializers.ModelSerializer):

@@ -2,8 +2,11 @@
     "use strict";
     var API_ET = "/manage/api/event-types/";
     var API_EV = "/manage/api/events/";
+    var API_LABELS = "/manage/api/labels/";
 
     var _types = [];
+    // Every label, grouped by label group, for the scope selectors (an event may concern part of the network).
+    var _labels = [];
 
     /* ── Event types ──────────────────────────────────────────────────── */
     var $etTbody = document.getElementById("et-tbody");
@@ -174,6 +177,92 @@
         $evCount.textContent = _evTotal + " event" + (_evTotal !== 1 ? "s" : "");
     }
 
+    // Fill a <select multiple> with the labels, one <optgroup> per label group, selecting `selected` ids.
+    function fillScopeSelect(sel, selected) {
+        var chosen = new Set((selected || []).map(Number));
+        sel.innerHTML = "";
+        var groups = {};
+        _labels.forEach(function(l) {
+            if (!groups[l.group_name]) {
+                groups[l.group_name] = document.createElement("optgroup");
+                groups[l.group_name].label = l.group_name;
+                sel.appendChild(groups[l.group_name]);
+            }
+            var opt = new Option(l.name, l.id, false, chosen.has(l.id));
+            groups[l.group_name].appendChild(opt);
+        });
+    }
+
+    function selectedIds(sel) {
+        return Array.from(sel.selectedOptions).map(function(o) { return parseInt(o.value, 10); });
+    }
+
+    function scopeCell(ev) {
+        var td = document.createElement("td");
+        if (!ev.labels || !ev.labels.length) {
+            td.className = "text-muted";
+            td.textContent = "Whole network";
+            return td;
+        }
+        td.textContent = ev.labels.map(function(l) { return l.group + ": " + l.name; }).join(", ");
+        return td;
+    }
+
+    function renderEventEditRow(ev, tr) {
+        var row = document.createElement("tr");
+        row.dataset.id = ev.id;
+        var dIn = document.createElement("input");
+        dIn.type = "date";
+        dIn.className = "bo-input";
+        dIn.value = ev.date;
+        dIn.setAttribute("aria-label", "Event date");
+        var tIn = document.createElement("select");
+        tIn.className = "bo-select";
+        tIn.setAttribute("aria-label", "Event type");
+        _types.forEach(function(t) { tIn.appendChild(new Option(t.name, t.id, false, t.id === ev.action_id)); });
+        var sIn = document.createElement("input");
+        sIn.className = "bo-input bo-input--wide";
+        sIn.value = ev.subject;
+        sIn.setAttribute("aria-label", "Event subject");
+        var scIn = document.createElement("select");
+        scIn.className = "bo-select bo-select--multi";
+        scIn.multiple = true;
+        scIn.size = 4;
+        scIn.setAttribute("aria-label", "Labels the event concerns (none = the whole network)");
+        fillScopeSelect(scIn, (ev.labels || []).map(function(l) { return l.id; }));
+        [dIn, tIn, sIn, scIn].forEach(function(el) {
+            var td = document.createElement("td");
+            td.appendChild(el);
+            row.appendChild(td);
+        });
+        var tdA = document.createElement("td");
+        var saveBtn = document.createElement("button");
+        saveBtn.className = "bo-btn bo-btn--sm";
+        saveBtn.textContent = "Save";
+        var cancelBtn = document.createElement("button");
+        cancelBtn.className = "bo-btn bo-btn--sm bo-btn--ghost";
+        cancelBtn.textContent = "Cancel";
+        saveBtn.addEventListener("click", function() {
+            var body = {
+                date: dIn.value,
+                subject: sIn.value.trim(),
+                action_id: parseInt(tIn.value, 10),
+                label_ids: selectedIds(scIn),
+            };
+            apiFetch(API_EV + ev.id + "/", { method: "PATCH", body: body })
+                .then(function(updated) {
+                    $evTbody.replaceChild(renderEventRow(updated), row);
+                    showToast("Saved.");
+                })
+                .catch(function(e) { showToast("Error: " + e.message, "error"); });
+        });
+        cancelBtn.addEventListener("click", function() { $evTbody.replaceChild(tr, row); });
+        tdA.appendChild(saveBtn);
+        tdA.appendChild(cancelBtn);
+        row.appendChild(tdA);
+        return row;
+    }
+
     function renderEventRow(ev) {
         var tr = document.createElement("tr");
         tr.dataset.id = ev.id;
@@ -190,7 +279,12 @@
         var tdS = document.createElement("td");
         tdS.textContent = ev.subject;
         tr.appendChild(tdS);
+        tr.appendChild(scopeCell(ev));
         var tdA = document.createElement("td");
+        var editBtn = makeEditBtn();
+        editBtn.addEventListener("click", function() {
+            $evTbody.replaceChild(renderEventEditRow(ev, tr), tr);
+        });
         var delBtn = makeDeleteBtn(ev.subject);
         delBtn.addEventListener("click", function() {
             confirmDelete(ev.subject).then(function(ok) {
@@ -205,9 +299,17 @@
                     .catch(function(e) { showToast("Error: " + e.message, "error"); });
             });
         });
+        tdA.appendChild(editBtn);
         tdA.appendChild(delBtn);
         tr.appendChild(tdA);
         return tr;
+    }
+
+    function loadLabels() {
+        return apiFetch(API_LABELS + "?limit=10000").then(function(data) {
+            _labels = data.results || [];
+            fillScopeSelect(document.getElementById("ev-scope-select"), []);
+        }).catch(function() { /* non-fatal — events stay network-wide */ });
     }
 
     function loadEvents() {
@@ -220,7 +322,7 @@
             _evTotal = data.count;
             $evTbody.innerHTML = "";
             if (!data.results.length) {
-                $evTbody.innerHTML = '<tr><td colspan="4" class="bo-empty">No events found.</td></tr>';
+                $evTbody.innerHTML = '<tr><td colspan="5" class="bo-empty">No events found.</td></tr>';
             } else {
                 data.results.forEach(function(ev) { $evTbody.appendChild(renderEventRow(ev)); });
             }
@@ -247,7 +349,13 @@
     $evAddForm.addEventListener("submit", function(e) {
         e.preventDefault();
         var fd = new FormData($evAddForm);
-        apiFetch(API_EV, { method: "POST", body: { date: fd.get("date"), subject: fd.get("subject").trim(), action_id: parseInt(fd.get("action_id"), 10) } })
+        var body = {
+            date: fd.get("date"),
+            subject: fd.get("subject").trim(),
+            action_id: parseInt(fd.get("action_id"), 10),
+            label_ids: selectedIds(document.getElementById("ev-scope-select")),
+        };
+        apiFetch(API_EV, { method: "POST", body: body })
             .then(function(ev) {
                 var empty = $evTbody.querySelector(".bo-empty");
                 if (empty) empty.parentNode.remove();
@@ -265,5 +373,5 @@
     // interact with it. Year filter loads in parallel — it does not gate
     // anything in the events table.
     loadYearFilter();
-    loadTypes().then(loadEvents);
+    Promise.all([loadTypes(), loadLabels()]).then(loadEvents);
 })();

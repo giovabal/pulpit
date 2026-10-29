@@ -71,7 +71,7 @@
     if (opts.startdate || opts.enddate)
       pills.push((opts.startdate || '…') + '–' + (opts.enddate || '…'));
     if (opts.vertical_layout) pills.push('vertical');
-    if (opts.timeline_step === 'year') pills.push('timeline');
+    if (opts.timeline_step && opts.timeline_step !== 'none') pills.push('timeline by ' + opts.timeline_step + (opts.timeline_window ? ' (' + opts.timeline_window + '-month windows)' : ''));
     if (opts.vacancy_measures) pills.push(tokenCount(opts.vacancy_measures) + ' vacancy');
     // Return DOM nodes (not an HTML string) so options stored in summary.json — which
     // may include user-supplied date strings or future free-text fields — can't slip

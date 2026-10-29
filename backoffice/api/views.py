@@ -409,7 +409,7 @@ class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer
 
     def get_queryset(self):
-        qs = Event.objects.select_related("action").order_by("-date")
+        qs = Event.objects.select_related("action").prefetch_related("labels__group").order_by("-date")
         type_id = self.request.query_params.get("type", "").strip()
         if type_id:
             # Postgres raises InvalidTextRepresentation on a non-integer FK

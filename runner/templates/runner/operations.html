@@ -479,9 +479,20 @@
                      title="Export channel, community, and network tables as .xlsx files alongside the HTML versions."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
-                <label class="ops-flag"><input type="checkbox" name="timeline_step" {% if ad.SA_TIMELINE_STEP == "year" %}checked{% endif %}>Timeline by year
+                <label class="ops-flag" for="timeline_step">Timeline
+                  <select name="timeline_step" id="timeline_step" class="ms-1">
+                    <option value="none" {% if ad.SA_TIMELINE_STEP != "year" and ad.SA_TIMELINE_STEP != "quarter" and ad.SA_TIMELINE_STEP != "month" %}selected{% endif %}>None</option>
+                    <option value="year" {% if ad.SA_TIMELINE_STEP == "year" %}selected{% endif %}>By year</option>
+                    <option value="quarter" {% if ad.SA_TIMELINE_STEP == "quarter" %}selected{% endif %}>By quarter</option>
+                    <option value="month" {% if ad.SA_TIMELINE_STEP == "month" %}selected{% endif %}>By month</option>
+                  </select>
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Repeat the export for each calendar year found in the data. Generates per-year data directories (data_YYYY/) and optional per-year HTML tables. The year switcher in graph.html lets you switch between years with animated transitions. Substantially increases total run time."></i>
+                     title="Repeat the export for each year, quarter or month found in the data: one data_&lt;period&gt;/ directory per period and a period switcher on every map and table. Every period runs the whole analysis, so finer steps multiply the run time."></i>
+                </label>
+                <label class="ops-flag" for="timeline_window">Window (months)
+                  <input type="number" name="timeline_window" id="timeline_window" class="ms-1" min="0" max="120" placeholder="0" value="{% if ad.SA_TIMELINE_WINDOW %}{{ ad.SA_TIMELINE_WINDOW }}{% endif %}" data-width="sm">
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Optional sliding window: each period covers the trailing N months ending with its step (e.g. by quarter with 12 = a 12-month snapshot every quarter). A multiple of the step, larger than it; 0 or empty = consecutive, non-overlapping periods. Overlapping snapshots rule out Leiden temporal, the ban replay and the dyadic waves."></i>
                 </label>
                 <div class="ops-flags-break ops-flags-rule"></div>
                 <label class="ops-flag"><input type="checkbox" name="gexf" {% if ad.SA_OUTPUT_GEXF %}checked{% endif %}>GEXF file
@@ -519,11 +530,17 @@
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="dyadic_export" {% if ad.SA_DYADIC_EXPORT %}checked{% endif %}>Dyadic export
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Write dyads/: actors and their labels, every tie, every timestamped citation event, the regression's dyad table and, with the year timeline, one network per year — ready for ERGM, relational event models and RSiena. See docs/dyadic-models.md."></i>
+                     title="Write dyads/: actors and their labels, every tie, every timestamped citation event, the regression's dyad table and, with a timeline of disjoint periods, one network per period — ready for ERGM, relational event models and RSiena. See docs/dyadic-models.md."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate the consensus matrix page (consensus_matrix.html): how consistently each pair of channels ends up in the same group across all the automatic grouping methods."></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="event_impact" {% if ad.SA_EVENT_IMPACT %}checked{% endif %}>Event impact
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="For each event recorded in Manage → Events: did the network's weekly activity change at that date — its level or its trend — beyond what the weeks before predict (interrupted time series, an affected-vs-rest comparison when the event is scoped to labels, autocorrelation-robust and placebo p-values). Writes events.html with HTML tables, event_impact.xlsx / .csv. See docs/event-impact.md."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: Event window (Linked parameters)"></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="interest_structural" {% if ad.SA_INTEREST_STRUCTURAL %}checked{% endif %}>Interesting messages
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -546,6 +563,13 @@
                        title="Number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values (each dyad keeps its counts, which side is on top is random). More = finer p-values, slower; cost grows with the square of the ranked channels. 0 skips the tests. Default: 200."></i>
                   </label>
                   <input type="number" name="dominance_permutations" id="dominance_permutations" placeholder="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" value="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" min="0" max="10000" data-width="sm">
+                </div>
+                <div class="ops-param">
+                  <label for="event_window_weeks">Event window (weeks)
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Weeks on each side of an event's week the interrupted time series is fitted on; cut at the edges of the data. Default: 26."></i>
+                  </label>
+                  <input type="number" name="event_window_weeks" id="event_window_weeks" placeholder="{{ ad.SA_EVENT_WINDOW_WEEKS }}" value="{{ ad.SA_EVENT_WINDOW_WEEKS }}" min="8" max="260" data-width="sm">
                 </div>
                 <div class="ops-param">
                   <label for="mrqap_permutations">MRQAP permutations
@@ -1155,7 +1179,7 @@
                 <label class="ops-flag" for="robustness_replay">
                   <input type="checkbox" name="robustness_replay" id="robustness_replay" {% if ad.SA_ROBUSTNESS_REPLAY %}checked{% endif %}>Ban-replay validation
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Validates the simulation against reality: for each year with recorded channel closures (Manage → Vacancies), removes them from the prior-year network and compares the predicted damage against the observed next-year network. Needs the yearly timeline turned on."></i>
+                     title="Validates the simulation against reality: for each timeline period with recorded channel closures (Manage → Vacancies), removes them from the previous period's network and compares the predicted damage against the observed next-period network. Needs a timeline of disjoint periods (no sliding window)."></i>
                 </label>
               </div>
             </div>
@@ -2118,7 +2142,10 @@ function showToast(msg, type) {
         setVal('mrqap_permutations', opts.mrqap_permutations != null ? opts.mrqap_permutations : '');
         setCheck('dyadic_export',    opts.dyadic_export);
         setCheck('draw_dead_leaves', opts.draw_dead_leaves);
-        setCheck('timeline_step',    opts.timeline_step === 'year');
+        setVal('timeline_step', ['year', 'quarter', 'month'].indexOf(opts.timeline_step) !== -1 ? opts.timeline_step : 'none');
+        setVal('timeline_window', opts.timeline_window ? opts.timeline_window : '');
+        setCheck('event_impact', opts.event_impact);
+        setVal('event_window_weeks', opts.event_window_weeks != null ? opts.event_window_weeks : '');
 
         // Text / number fields
         setVal('startdate',                      opts.startdate || '');

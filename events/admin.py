@@ -15,3 +15,4 @@ class EventAdmin(admin.ModelAdmin):
     list_filter = ["action"]
     search_fields = ["subject"]
     date_hierarchy = "date"
+    filter_horizontal = ["labels"]

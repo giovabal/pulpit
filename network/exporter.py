@@ -822,6 +822,24 @@ def write_summary_json(
         f.write(json.dumps(payload, indent=2))
 
 
+def write_event_impact_json(payload: dict, graph_dir: str) -> None:
+    """Write data/event_impact.json from the :func:`network.event_impact.compute_event_impact` payload."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "event_impact.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload)))
+
+
+def write_event_impact_csv(payload: dict, output_dir: str) -> None:
+    """Write event_impact.csv: one row per event × metric with its level and slope changes and p-values."""
+    from network.event_impact import EFFECT_COLUMNS, effect_rows
+
+    with open(os.path.join(output_dir, "event_impact.csv"), "w", newline="", encoding="utf-8") as f:
+        writer = _csv.writer(f)
+        writer.writerow(EFFECT_COLUMNS)
+        writer.writerows(effect_rows(payload))
+
+
 def write_mrqap_json(payload: dict, graph_dir: str) -> None:
     """Write data/mrqap.json from the :func:`network.mrqap.compute_mrqap` payload."""
     data_dir = os.path.join(graph_dir, "data")
@@ -1026,19 +1044,30 @@ def write_coordination_files(
         f.write(json.dumps(_communities_json_payload(communities_data, coord_graph_data["nodes"])))
 
 
-def write_coordination_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:
-    """Write ``data_coordination/timeline.json`` — the coordination map's year switcher.
+def write_coordination_timeline_json(
+    timeline_entries: list[dict],
+    graph_dir: str,
+    *,
+    step: str = "year",
+    window_months: int | None = None,
+    overlapping: bool = False,
+    events: list[dict] | None = None,
+) -> None:
+    """Write ``data_coordination/timeline.json`` — the coordination map's period switcher.
 
-    Lists only the years whose per-year coordination network survived the
-    thresholds (``has_coordination``), so the switcher never offers a year
-    whose data directory does not exist. Same shape as ``data/timeline.json``
-    (the viewers read ``year`` and ``has_graph``).
+    Lists only the periods whose coordination network survived the thresholds
+    (``has_coordination``), so the switcher never offers a period whose data
+    directory does not exist. Same shape as ``data/timeline.json`` (the viewers
+    read each period's ``key``, ``label`` and ``has_graph``).
     """
     data_dir = os.path.join(graph_dir, _COORDINATION_DATA_DIR)
     os.makedirs(data_dir, exist_ok=True)
-    years = [
+    periods = [
         {
-            "year": e["year"],
+            "key": e["key"],
+            "label": e["label"],
+            "start": e["start"],
+            "end": e["end"],
             "nodes": e.get("coordination_nodes", 0),
             "edges": e.get("coordination_ties", 0),
             "has_graph": True,
@@ -1046,8 +1075,15 @@ def write_coordination_timeline_json(timeline_entries: list[dict], graph_dir: st
         for e in timeline_entries
         if e.get("has_coordination")
     ]
+    payload = {
+        "step": step,
+        "window_months": window_months,
+        "overlapping": overlapping,
+        "periods": periods,
+        "events": events or [],
+    }
     with open(os.path.join(data_dir, "timeline.json"), "w") as f:
-        f.write(json.dumps({"years": years}))
+        f.write(json.dumps(payload))
 
 
 _COORD_DESC_2D = (

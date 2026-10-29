@@ -451,14 +451,35 @@ def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
     return copied
 
 
-def write_timeline_json(timeline_entries: list[dict], graph_dir: str) -> None:
+def write_timeline_json(
+    timeline_entries: list[dict],
+    graph_dir: str,
+    *,
+    step: str = "year",
+    window_months: int | None = None,
+    overlapping: bool = False,
+    events: list[dict] | None = None,
+) -> None:
+    """Write ``data/timeline.json``: ``{"step", "window_months", "overlapping", "periods", "events"}``.
+
+    ``periods`` lists the exported periods in timeline order, each with ``key`` (its ``data_<key>/``
+    directory), ``label``, ``start`` / ``end`` and the per-period flags the viewers read; ``events`` the
+    analyst's events inside the timeline, each with the ``period_key`` of the step containing it.
+    """
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     # Strip private implementation keys (e.g. _xlsx_graph_data, _xlsx_community_data)
     # that are passed through timeline_entries for XLSX assembly but must not appear in JSON output.
     clean = [{k: v for k, v in e.items() if not k.startswith("_")} for e in timeline_entries]
+    payload = {
+        "step": step,
+        "window_months": window_months,
+        "overlapping": overlapping,
+        "periods": clean,
+        "events": events or [],
+    }
     with open(os.path.join(data_dir, "timeline.json"), "w") as f:
-        f.write(json.dumps({"years": clean}))
+        f.write(json.dumps(payload))
 
 
 def write_network_compare_table_html(
@@ -829,14 +850,19 @@ def _fill_robustness_ban_replay(wb: Any, payload: dict, suffix: str) -> None:
     if not rows:
         return
     ws = wb.create_sheet(title=_robustness_sheet_name("Ban replay", suffix))
-    header = ["Wave year", "Pre-wave nodes", "Closed", "Fraction"]
+    header = ["Wave period", "Pre-wave nodes", "Closed", "Fraction"]
     for m in _ROBUSTNESS_METRICS:
         header += [f"predicted_{m}", f"random_{m}", f"observed_{m}"]
     ws.append(header)
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for row in rows:
-        cells: list = [row.get("year"), row.get("n_pre"), row.get("n_closed"), row.get("fraction")]
+        cells: list = [
+            row.get("label") or row.get("period"),
+            row.get("n_pre"),
+            row.get("n_closed"),
+            row.get("fraction"),
+        ]
         for m in _ROBUSTNESS_METRICS:
             cells += [row.get(f"predicted_{m}"), row.get(f"random_{m}"), row.get(f"observed_{m}")]
         ws.append(cells)
@@ -929,6 +955,42 @@ def write_robustness_table_xlsx(
     wb.save(output_filename)
 
 
+def write_event_impact_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
+    _write_page(
+        "network/events.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Event impact",
+        seo_title_part="Event impact",
+    )
+
+
+def write_event_impact_xlsx(payload: dict, output_filename: str, project_title: str = "") -> None:
+    """``Effects`` (one row per event × metric) and ``Weekly series`` (the network's weekly metrics) sheets."""
+    from network.event_impact import EFFECT_COLUMNS, effect_rows, series_rows
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    ws = wb.active
+    ws.title = "Effects"
+    ws.append(list(EFFECT_COLUMNS))
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in effect_rows(payload):
+        ws.append(row)
+    ws = wb.create_sheet(title="Weekly series")
+    header, rows = series_rows(payload)
+    ws.append(header)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append(row)
+    wb.save(output_filename)
+
+
 def write_dominance_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
     _write_page(
         "network/dominance.html",
@@ -1013,6 +1075,8 @@ def write_index_html(
     include_dominance_html: bool = False,
     include_dominance_xlsx: bool = False,
     include_dyads: bool = False,
+    include_event_impact_html: bool = False,
+    include_event_impact_xlsx: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -1049,6 +1113,8 @@ def write_index_html(
         "include_dominance_html": include_dominance_html,
         "include_dominance_xlsx": include_dominance_xlsx,
         "include_dyads": include_dyads,
+        "include_event_impact_html": include_event_impact_html,
+        "include_event_impact_xlsx": include_event_impact_xlsx,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

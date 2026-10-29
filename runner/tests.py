@@ -679,20 +679,32 @@ class WriteCliCommandViewTests(TestCase):
             data={"community_strategies": ["LEIDEN", "LEIDEN_TEMPORAL"]},
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("Timeline", resp.json()["error"])
+        self.assertIn("timeline", resp.json()["error"])
+
+    def test_structural_rejects_temporal_with_sliding_window(self):
+        resp = self.client.post(
+            reverse("operations-write-cli-command", args=["structural_analysis"]),
+            data={
+                "community_strategies": ["LEIDEN", "LEIDEN_TEMPORAL"],
+                "timeline_step": "quarter",
+                "timeline_window": "12",
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("disjoint periods", resp.json()["error"])
 
     def test_structural_accepts_temporal_with_timeline(self):
         resp = self.client.post(
             reverse("operations-write-cli-command", args=["structural_analysis"]),
             data={
                 "community_strategies": ["LEIDEN", "LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)"],
-                "timeline_step": "on",
+                "timeline_step": "quarter",
             },
         )
         self.assertEqual(resp.status_code, 200)
         cmd = resp.json()["command"]
         self.assertIn("LEIDEN_TEMPORAL(resolution=0.05,interslice=1.0)", cmd)
-        self.assertIn("--timeline-step year", cmd)
+        self.assertIn("--timeline-step quarter", cmd)
 
     def test_structural_accepts_sbm_assortative(self):
         resp = self.client.post(
@@ -1253,10 +1265,11 @@ class BuildArgsExportNetworkTests(TestCase):
         idx = args.index("--community-strategies")
         self.assertEqual(args[idx + 1], "LEIDEN_CPM(resolution=0.01),LEIDEN_CPM(resolution=0.05),LEIDEN_DIRECTED")
 
-    def test_timeline_step_year(self):
-        args = _build_args("structural_analysis", FakePost({"timeline_step": "1"}))
-        idx = args.index("--timeline-step")
-        self.assertEqual(args[idx + 1], "year")
+    def test_timeline_step_and_window(self):
+        args = _build_args("structural_analysis", FakePost({"timeline_step": "month", "timeline_window": "6"}))
+        self.assertEqual(args[args.index("--timeline-step") + 1], "month")
+        self.assertEqual(args[args.index("--timeline-window") + 1], "6")
+        self.assertNotIn("--timeline-window", _build_args("structural_analysis", FakePost({"timeline_step": "year"})))
 
     def test_empty_strings_not_added(self):
         # Value-kind blanks (export_name, fa2_iterations, startdate) are dropped;
@@ -1560,7 +1573,8 @@ class DefaultsViewTests(TestCase):
                     "html": "on",
                     "fa2_iterations": "3000",
                     "measures": ["PAGERANK", "DIFFUSIONLAG(window=60)"],
-                    "timeline_step": "on",
+                    "timeline_step": "quarter",
+                    "timeline_window": "12",
                     "robustness_strategies": ["pagerank", "random"],
                 },
             )
@@ -1570,7 +1584,8 @@ class DefaultsViewTests(TestCase):
             self.assertIn("fa2_iterations = 3000", content)
             # Measure tokens are saved verbatim, including per-instance parameters.
             self.assertIn('selected = ["PAGERANK", "DIFFUSIONLAG(window=60)"]', content)
-            self.assertIn('timeline_step = "year"', content)
+            self.assertIn('timeline_step = "quarter"', content)
+            self.assertIn("timeline_window = 12", content)
             self.assertIn('strategies = ["pagerank", "random"]', content)
             self.assertNotIn("enabled", content.split("[robustness]", 1)[-1].split("[", 1)[0])
 

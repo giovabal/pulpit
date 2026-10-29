@@ -9,12 +9,15 @@
 // dir the "All" button fetches the global payload from data/.
 
 import { build_year_nav } from './year_nav.js';
-import { escHtml, fetchJson, fetchJsonOrNull } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d{4,})\//);
-var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _base_dd = _ym ? "data/" : _dd;
+var _current_year = "all";
+// A compare page (data_2/) shows the full range only: it carries no timeline of its own.
+var _base_dd = _dd;
+var _no_timeline = isCompareDataDir(_dd);
+var _tl_events = [];
+var _tl_overlapping = false;
 var _cache = {};
 var _ty = [];
 var _loading = false;
@@ -262,7 +265,7 @@ function _render(payload) {
 
 function _load(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return fetchJson(dd + "dominance.json").then(function(payload) {
         _cache[year] = payload;
         return payload;
@@ -275,7 +278,7 @@ function _switch_year(year) {
     _load(year).then(function(payload) {
         _current_year = year;
         _render(payload);
-        if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+        if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     }).catch(function() {
         document.getElementById("dm-node-count").textContent = "Failed to load dominance data for " + year + ".";
     }).finally(function() {
@@ -300,8 +303,11 @@ Promise.all([
 ]).then(function(results) {
     _render(results[0]);
     var timeline = results[1];
-    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_dominance; }) : [];
-    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    var _tl = readTimeline(_no_timeline ? null : timeline);
+    _tl_events = _tl.events;
+    _tl_overlapping = _tl.overlapping;
+    _ty = _tl.periods.filter(function(y) { return y.has_dominance; });
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
 }).catch(function(err) {
     console.error("dominance: failed to load or render", err);
     var msg = "Failed to load dominance.json.";

@@ -1,12 +1,17 @@
 // Mini histogram SVG shared across table pages.
 // all_val_str: string value for the "All" (full-range) bar, or null.
-// yr_vals:     [{year: int, value: string|null}] — per-year values.
-// cur:         currently highlighted year (integer or "all").
-// all_years:   ordered array of year integers; reserves a slot per year so all
-//              SVGs have identical width even when some years have no data.
+// yr_vals:     [{year: period key, value: string|null}] — per-period values.
+// cur:         currently highlighted period key (or "all").
+// all_years:   ordered array of period keys; reserves a slot per period so all
+//              SVGs have identical width even when some periods have no data.
+// Bars narrow as periods multiply (a quarterly or monthly timeline) so a sparkline stays about
+// MAX_W pixels wide.
+var MAX_W = 160;
+
 export function mini_hist(all_val_str, yr_vals, cur, all_years) {
-    var BAR_W = 7,
-        GAP = 2,
+    var slots = (all_years || []).length + 1;
+    var GAP = slots > 40 ? 1 : 2;
+    var BAR_W = Math.max(1, Math.min(7, Math.floor((MAX_W + GAP) / slots) - GAP)),
         H = 20,
         ns = "http://www.w3.org/2000/svg";
     var yr_val_map = {};

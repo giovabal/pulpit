@@ -43,8 +43,8 @@ ALL_STRATEGIES: list[str] = [
     "CONSENSUS",
 ]
 
-# Strategies the ``ALL`` token does NOT expand to. LEIDEN_TEMPORAL hard-requires a year timeline
-# (``--timeline-step year``), so folding it into ALL would break every non-timeline ``ALL`` run;
+# Strategies the ``ALL`` token does NOT expand to. LEIDEN_TEMPORAL hard-requires a timeline of disjoint periods
+# (``--timeline-step`` without ``--timeline-window``), so folding it into ALL would break every non-timeline ``ALL`` run;
 # it must be requested explicitly.
 EXCLUDED_FROM_ALL: frozenset[str] = frozenset({"LEIDEN_TEMPORAL"})
 # Every static strategy is an algorithm; the only *metadata* partitions are the dynamic, DB-keyed
@@ -105,7 +105,7 @@ def custom_label_display(name: str) -> str:
 # canonical_strategy_key(), so every LEIDEN_CPM instance (whatever its resolution) is covered.
 # CONSENSUS is optimised on the (undirected) co-assignment graph, not the citation graph;
 # its modularity is reported against the undirected projection, the closest null. LEIDEN_TEMPORAL
-# and SBM_ASSORTATIVE are both fitted on the undirected W+Wᵀ projection (per-year slices for the
+# and SBM_ASSORTATIVE are both fitted on the undirected W+Wᵀ projection (per-period slices for the
 # former), so they report against the undirected null too.
 UNDIRECTED_BASIS_STRATEGIES: frozenset[str] = frozenset(
     {"leiden", "leiden_cpm", "leiden_temporal", "louvain", "kcore", "sbm_assortative", "consensus"}
@@ -135,8 +135,8 @@ def consensus_eligible(strategy_name: str) -> bool:
     manual ``LABELGROUP<id>`` partition, not the KCORE shell decomposition (a connectivity
     hierarchy, not a community detection), not CONSENSUS itself (a derived partition must not
     feed its own input — nor double-count in the matrix it summarises), and not LEIDEN_TEMPORAL
-    (its full-range column is a plurality summary across timeline slices and its per-year
-    partitions are deliberately coupled to neighbouring years — neither is an independent
+    (its full-range column is a plurality summary across timeline slices and its per-period
+    partitions are deliberately coupled to neighbouring periods — neither is an independent
     detection of the graph being aggregated). Mirrored by ``_consensusExcluded`` in
     webapp_engine/map/js/consensus_matrix.js.
     """
@@ -166,9 +166,9 @@ SBM_DEFAULT_WEIGHTS = ""
 SBM_DEFAULT_REFINE = ""
 CONSENSUS_DEFAULT_THRESHOLD = 0.5
 # Coupling ω of a LEIDEN_TEMPORAL token that omits ``interslice``: ω is relative — a multiple of the mean tie weight
-# of the year slices (temporal_interslice_weight) — so 1.0 makes an identity link as strong as an average tie,
-# whatever --edge-weight-strategy's units. Higher ω = smoother, more persistent communities across years, lower ω =
-# each year re-partitioned nearly independently.
+# of the period slices (temporal_interslice_weight) — so 1.0 makes an identity link as strong as an average tie,
+# whatever --edge-weight-strategy's units. Higher ω = smoother, more persistent communities across periods, lower ω =
+# each period re-partitioned nearly independently.
 TEMPORAL_DEFAULT_INTERSLICE = 1.0
 
 # Base key of the per-channel SBM assignment-confidence companion column written by
@@ -246,10 +246,10 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 "",
                 minimum=0.0,
                 label="Resolution γ",
-                help="CPM resolution of each year slice, as in LEIDEN_CPM. Empty (or auto) = each slice's own "
+                help="CPM resolution of each period slice, as in LEIDEN_CPM. Empty (or auto) = each slice's own "
                 "weighted edge density (a per-slice null, as in Mucha et al. 2010); an explicit γ is one "
                 "absolute density in the raw tie-weight units of --edge-weight-strategy, the same in every "
-                "year. Lower = fewer, larger communities; higher = more, smaller ones.",
+                "period. Lower = fewer, larger communities; higher = more, smaller ones.",
             ),
             StrategyParam(
                 "interslice",
@@ -257,9 +257,9 @@ PARAMETERISED_STRATEGIES: dict[str, StrategySpec] = {
                 TEMPORAL_DEFAULT_INTERSLICE,
                 minimum=0.0,
                 label="Coupling ω",
-                help="Weight of the identity link tying each channel to itself in adjacent years "
-                "(Mucha et al. 2010), as a multiple of the year slices' mean tie weight: 1 = as strong as an "
-                "average tie, whatever --edge-weight-strategy. 0 = years partitioned independently; higher = "
+                help="Weight of the identity link tying each channel to itself in adjacent periods "
+                "(Mucha et al. 2010), as a multiple of the period slices' mean tie weight: 1 = as strong as an "
+                "average tie, whatever --edge-weight-strategy. 0 = periods partitioned independently; higher = "
                 "smoother, more persistent communities across the timeline.",
             ),
         ),
@@ -359,7 +359,7 @@ def parse_strategies(
         known_tokens=VALID_STRATEGIES | set(labelgroup_tokens),
         # ALL expands to the metadata partitions first, then the
         # algorithms — minus the strategies that only work in specific run shapes (EXCLUDED_FROM_ALL:
-        # LEIDEN_TEMPORAL needs a year timeline, so it must be requested explicitly).
+        # LEIDEN_TEMPORAL needs a timeline, so it must be requested explicitly).
         all_tokens=labelgroup_tokens + [s for s in ALL_STRATEGIES if s not in EXCLUDED_FROM_ALL],
         instance_cls=StrategyInstance,
         defaults=defaults,
@@ -512,24 +512,24 @@ MERGE_ISOLATED_NODES = True
 #: KCORE coreness floor: isolated nodes (coreness 0) are folded into the 1-shell, the outermost community.
 KCORE_MIN_SHELL = 1
 #: Default CPM resolution γ of a LEIDEN_CPM / LEIDEN_TEMPORAL token that omits ``resolution`` (or gives
-#: ``auto``) — the rule :func:`cpm_density_resolution` applies, to the graph (or each year slice) CPM runs on.
+#: ``auto``) — the rule :func:`cpm_density_resolution` applies, to the graph (or each period slice) CPM runs on.
 CPM_DEFAULT_RESOLUTION_RULE = (
     "γ = Σ w_ij / (n(n−1)/2): the weighted edge density of the undirected W+Wᵀ projection, on the raw tie "
     "weights, self-loops excluded (0 when n < 2)"
 )
 #: CPM resolution of LEIDEN_TEMPORAL's interslice coupling layer, as in leidenalg.find_partition_temporal.
 TEMPORAL_INTERSLICE_RESOLUTION = 0
-#: Weight of every layer (each year slice and the interslice layer) in LEIDEN_TEMPORAL's joint quality —
+#: Weight of every layer (each period slice and the interslice layer) in LEIDEN_TEMPORAL's joint quality —
 #: leidenalg's own default (``layer_weights=None`` → 1 per layer).
 TEMPORAL_LAYER_WEIGHT = 1
-#: How LEIDEN_TEMPORAL's full-range column summarises the per-year partitions (detect_leiden_temporal).
+#: How LEIDEN_TEMPORAL's full-range column summarises the per-period partitions (detect_leiden_temporal).
 TEMPORAL_PLURALITY_RULE = (
-    "each channel's most frequent community across the year slices it appears in; ties go to its latest "
-    "year's community when that is among the tied, else to the smallest community id"
+    "each channel's most frequent community across the period slices it appears in; ties go to its latest "
+    "period's community when that is among the tied, else to the smallest community id"
 )
 #: How LEIDEN_TEMPORAL turns its relative coupling ω into the identity-link weight (temporal_interslice_weight).
 TEMPORAL_INTERSLICE_SCALE_RULE = (
-    "identity-link weight = ω × the mean tie weight of the year slices (the undirected W+Wᵀ projection on the raw "
+    "identity-link weight = ω × the mean tie weight of the period slices (the undirected W+Wᵀ projection on the raw "
     "tie weights, self-loops excluded, averaged over every slice's ties)"
 )
 #: How CONSENSUS turns the input partitions into one (detect_consensus).
@@ -682,7 +682,7 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Slice resolution γ when omitted",
         value=CPM_DEFAULT_RESOLUTION_RULE,
         scope="strategy:LEIDEN_TEMPORAL",
-        affects="A LEIDEN_TEMPORAL token without a resolution (or with resolution=auto) gives each year slice "
+        affects="A LEIDEN_TEMPORAL token without a resolution (or with resolution=auto) gives each period slice "
         "its own γ by this rule, computed on that slice.",
         source=f"{_SOURCE}: CPM_DEFAULT_RESOLUTION_RULE",
         note="A per-slice null model, as in Mucha et al. (2010) (temporal_slice_resolutions).",
@@ -691,9 +691,9 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Coupling ω when omitted",
         value=TEMPORAL_DEFAULT_INTERSLICE,
         scope="strategy:LEIDEN_TEMPORAL",
-        affects="Coupling of the identity link tying each channel to itself in adjacent years when a "
+        affects="Coupling of the identity link tying each channel to itself in adjacent periods when a "
         "LEIDEN_TEMPORAL token omits interslice, as a multiple of the slices' mean tie weight (1 = as strong as an "
-        "average tie); higher = smoother, more persistent communities across years.",
+        "average tie); higher = smoother, more persistent communities across periods.",
         source=f"{_SOURCE}: TEMPORAL_DEFAULT_INTERSLICE",
     ),
     FixedParameter(
@@ -701,7 +701,7 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         value=TEMPORAL_INTERSLICE_SCALE_RULE,
         scope="strategy:LEIDEN_TEMPORAL",
         affects="Turns the relative ω of every LEIDEN_TEMPORAL token into the absolute identity-link weight, so "
-        "the same ω couples the years equally strongly under every --edge-weight-strategy (the absolute weight "
+        "the same ω couples the periods equally strongly under every --edge-weight-strategy (the absolute weight "
         "used is recorded in summary.json community_resolutions).",
         source=f"{_SOURCE}: TEMPORAL_INTERSLICE_SCALE_RULE",
     ),
@@ -710,7 +710,7 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         value=TEMPORAL_INTERSLICE_RESOLUTION,
         scope="strategy:LEIDEN_TEMPORAL",
         affects="CPM resolution of the layer holding the identity links: 0, so the coupling only rewards "
-        "keeping a channel in the same community across years and adds no size penalty of its own.",
+        "keeping a channel in the same community across periods and adds no size penalty of its own.",
         source=f"{_SOURCE}: TEMPORAL_INTERSLICE_RESOLUTION",
         note="As in leidenalg.find_partition_temporal.",
     ),
@@ -718,8 +718,8 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Layer weight",
         value=TEMPORAL_LAYER_WEIGHT,
         scope="strategy:LEIDEN_TEMPORAL",
-        affects="Weight of each year slice, and of the interslice layer, in the joint multislice quality; equal "
-        "weights make every year count the same.",
+        affects="Weight of each period slice, and of the interslice layer, in the joint multislice quality; equal "
+        "weights make every period count the same.",
         source=f"{_SOURCE}: TEMPORAL_LAYER_WEIGHT",
         note="leidenalg's own default (layer_weights=None), passed explicitly.",
     ),
@@ -727,7 +727,7 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         name="Full-range plurality rule",
         value=TEMPORAL_PLURALITY_RULE,
         scope="strategy:LEIDEN_TEMPORAL",
-        affects="Sets the full-range LEIDEN_TEMPORAL column (map, tables, exports) — a summary of the per-year "
+        affects="Sets the full-range LEIDEN_TEMPORAL column (map, tables, exports) — a summary of the per-period "
         "partitions, not a detection of the full-range graph.",
         source=f"{_SOURCE}: TEMPORAL_PLURALITY_RULE",
     ),
@@ -1272,7 +1272,7 @@ def cpm_density_resolution(graph: nx.Graph, weight: str | None = None) -> float:
     γ_RB = 1 (Reichardt & Bornholdt 2006; Traag, Van Dooren & Nesterov 2011 — leidenalg's
     ``RBERVertexPartition``): a community is a group denser than the network as a whole. Because p
     scales with the weights, the partition is invariant to a uniform rescale of the tie weights,
-    unlike a fixed γ — and it adapts to each graph, year slice or backbone it is computed on.
+    unlike a fixed γ — and it adapts to each graph, period slice or backbone it is computed on.
     """
     n = graph.number_of_nodes()
     if n < 2:
@@ -1298,32 +1298,32 @@ def cpm_resolution(instance: "StrategyInstance", graph: nx.DiGraph) -> float:
     return explicit if explicit is not None else cpm_density_resolution(graph)
 
 
-def temporal_slice_resolutions(year_graphs: dict[int, nx.DiGraph], resolution: float | None) -> dict[int, float]:
-    """The γ each LEIDEN_TEMPORAL year slice runs with: the explicit ``resolution`` for every slice, or —
+def temporal_slice_resolutions(period_graphs: dict[Any, nx.DiGraph], resolution: float | None) -> dict[Any, float]:
+    """The γ each LEIDEN_TEMPORAL period slice runs with: the explicit ``resolution`` for every slice, or —
     when ``None`` (auto) — each slice's own weighted edge density (:func:`cpm_density_resolution`, on the
     raw-weight attribute chosen once across all slices, as :func:`detect_leiden_temporal` does). The
     multislice analogue of the single-graph default: Mucha et al. (2010) give every slice its own null
     model."""
     if resolution is not None:
-        return {year: float(resolution) for year in sorted(year_graphs)}
-    weight_key = tie_weight_key(*year_graphs.values())
-    return {year: cpm_density_resolution(year_graphs[year], weight_key) for year in sorted(year_graphs)}
+        return {year: float(resolution) for year in sorted(period_graphs)}
+    weight_key = tie_weight_key(*period_graphs.values())
+    return {year: cpm_density_resolution(period_graphs[year], weight_key) for year in sorted(period_graphs)}
 
 
-def temporal_interslice_weight(year_graphs: dict[int, nx.DiGraph], interslice: float) -> float:
+def temporal_interslice_weight(period_graphs: dict[Any, nx.DiGraph], interslice: float) -> float:
     """The absolute identity-link weight of a LEIDEN_TEMPORAL coupling ω: ``ω ×`` the mean tie weight of the slices.
 
-    The mean runs over every tie of every year slice's undirected W+Wᵀ projection — the graphs the multislice CPM
+    The mean runs over every tie of every period slice's undirected W+Wᵀ projection — the graphs the multislice CPM
     is optimised on — on the raw tie weights (:func:`tie_weight_key`, chosen once across the slices), self-loops
     excluded. ω is thereby relative: 1 makes an identity link as strong as an average tie under every
     ``--edge-weight-strategy`` (a citation share under PARTIAL_*, a count under TOTAL, 1 under NONE), where an
-    absolute ω would couple the years tightly under one strategy and negligibly under another. Falls back to the
+    absolute ω would couple the periods tightly under one strategy and negligibly under another. Falls back to the
     plain ω when the slices hold no tie.
     """
-    weight_key = tie_weight_key(*year_graphs.values())
+    weight_key = tie_weight_key(*period_graphs.values())
     weights = [
         float(w)
-        for graph in year_graphs.values()
+        for graph in period_graphs.values()
         for u, v, w in to_undirected_sum(graph, weight=weight_key).edges(data=weight_key, default=1.0)
         if u != v
     ]
@@ -1374,26 +1374,26 @@ def detect_leiden_cpm(
 
 
 def detect_leiden_temporal(
-    year_graphs: dict[int, nx.DiGraph],
+    period_graphs: dict[Any, nx.DiGraph],
     palette_name: str,
     resolution: float | None,
     interslice_weight: float,
     *,
     reverse: bool = False,
     diagnostics_out: "dict[str, Any] | None" = None,
-) -> tuple[dict[int, CommunityMap], CommunityMap, CommunityPalette]:
-    """Interslice-coupled temporal communities over the timeline years (Mucha et al. 2010).
+) -> tuple[dict[Any, CommunityMap], CommunityMap, CommunityPalette]:
+    """Interslice-coupled temporal communities over the timeline periods (Mucha et al. 2010).
 
-    ``year_graphs`` maps each non-empty timeline year to its citation graph (built with the same
-    scope/weight settings as that year's export). Each year becomes one **slice** — the undirected
+    ``period_graphs`` maps each non-empty timeline period (key) to its citation graph (built with the same
+    scope/weight settings as that period's export), slices taken in key order — the timeline order. Each period becomes one **slice** — the undirected
     W+Wᵀ projection with edge weights, exactly as ``LEIDEN_CPM`` sees a single graph (raw tie weights,
-    so γ and ω are on one scale across every year rather than each year's own ×10/max rescale) — and
+    so γ and ω are on one scale across every period rather than each period's own ×10/max rescale) — and
     every channel present in two consecutive slices is tied to *itself* across them by an identity link of
     relative weight ``interslice_weight`` (ω, a multiple of the slices' mean tie weight — see
     :func:`temporal_interslice_weight`). The CPM objective is then optimised over all slices at once,
-    so a community's identity is **shared across years**: persistence, splits, and merges become
+    so a community's identity is **shared across periods**: persistence, splits, and merges become
     properties of the partition itself rather than post-hoc ribbon-reading in the alluvial diagram.
-    The identity link ties a channel only to itself in adjacent years — no multi-hop flow claim — so
+    The identity link ties a channel only to itself in adjacent periods — no multi-hop flow claim — so
     the strategy stays inside the one-degree attribution model.
 
     ``resolution`` is the CPM γ of every slice; ``None`` (auto) gives each slice its **own** weighted
@@ -1405,35 +1405,35 @@ def detect_leiden_temporal(
     keeping the run with the highest joint quality. ``diagnostics_out`` receives how the runs agree plus the
     absolute identity-link weight used (``interslice_weight``).
 
-    Returns ``(per_year, plurality, palette)``:
+    Returns ``(per_period, plurality, palette)``:
 
-    * ``per_year`` — one :type:`CommunityMap` per year, all sharing a single global community-id
+    * ``per_period`` — one :type:`CommunityMap` per period, all sharing a single global community-id
       space (ids renumbered once, by total membership across every slice, so "community 3" means
       the same cohort in 2021 and 2022 — and keeps the same colour).
     * ``plurality`` — the full-range summary column: each channel's most frequent community
-      across the slices it appears in, ties broken by its latest year's assignment. This is a
+      across the slices it appears in, ties broken by its latest period's assignment. This is a
       *derived summary* for the full-range map/table, not an independent detection of the
       full-range graph (which is why the strategy is not consensus-eligible).
-    * ``palette`` — one palette over the global id space, shared by every year.
+    * ``palette`` — one palette over the global id space, shared by every period.
 
-    Isolated-in-a-year channels are deliberately *not* merged into a residual community (unlike
-    the single-graph detectors): the interslice coupling lets a channel isolated in one year
-    inherit its neighbouring years' community, which is exactly the point of the method.
+    Isolated-in-a-period channels are deliberately *not* merged into a residual community (unlike
+    the single-graph detectors): the interslice coupling lets a channel isolated in one period
+    inherit its neighbouring periods' community, which is exactly the point of the method.
     """
-    if len(year_graphs) < 2:
+    if len(period_graphs) < 2:
         raise ValueError(
-            "LEIDEN_TEMPORAL needs at least two non-empty timeline years to couple; "
-            f"got {len(year_graphs)}. Check --timeline-step year and the date window."
+            "LEIDEN_TEMPORAL needs at least two non-empty timeline periods to couple; "
+            f"got {len(period_graphs)}. Check --timeline-step (without --timeline-window) and the date window."
         )
-    years = sorted(year_graphs)
+    years = sorted(period_graphs)
     # Raw tie weights, not each year's own ×10/max rescale: one γ (and one ω) must couple slices
     # that sit on the same scale, or a year whose heaviest tie is light would be inflated.
-    weight_key = tie_weight_key(*year_graphs.values())
-    gammas = temporal_slice_resolutions(year_graphs, resolution)
-    coupling = temporal_interslice_weight(year_graphs, interslice_weight)
+    weight_key = tie_weight_key(*period_graphs.values())
+    gammas = temporal_slice_resolutions(period_graphs, resolution)
+    coupling = temporal_interslice_weight(period_graphs, interslice_weight)
     slices: list[ig.Graph] = []
     for year in years:
-        undirected = to_undirected_sum(year_graphs[year], weight=weight_key)
+        undirected = to_undirected_sum(period_graphs[year], weight=weight_key)
         node_ids = sorted(undirected.nodes())
         node_id_map = {node_id: index for index, node_id in enumerate(node_ids)}
         slice_graph = ig.Graph(n=len(node_ids), directed=False)
@@ -1490,25 +1490,25 @@ def detect_leiden_temporal(
         for slice_index, slice_graph in enumerate(slices)
     ]
 
-    per_year: dict[int, CommunityMap] = {}
+    per_period: dict[Any, CommunityMap] = {}
     for year, slice_graph, membership in zip(years, slices, memberships, strict=True):
-        per_year[year] = {slice_graph.vs[index]["id"]: int(cid) for index, cid in enumerate(membership)}
+        per_period[year] = {slice_graph.vs[index]["id"]: int(cid) for index, cid in enumerate(membership)}
 
     # One global renumbering by total membership across all slices (size desc, id asc — the
-    # normalize_community_map convention, applied once so ids and colours are stable across years).
-    counts = Counter(cid for community_map in per_year.values() for cid in community_map.values())
+    # normalize_community_map convention, applied once so ids and colours are stable across periods).
+    counts = Counter(cid for community_map in per_period.values() for cid in community_map.values())
     ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     remap = {cid: index for index, (cid, _) in enumerate(ordered, start=1)}
-    per_year = {
+    per_period = {
         year: {node_id: remap[cid] for node_id, cid in community_map.items()}
-        for year, community_map in per_year.items()
+        for year, community_map in per_period.items()
     }
 
-    # Full-range plurality: most frequent community per channel, ties → the latest year's assignment.
+    # Full-range plurality: most frequent community per channel, ties → the latest period's assignment.
     votes: dict[str, Counter] = {}
     latest: dict[str, int] = {}
     for year in years:
-        for node_id, cid in per_year[year].items():
+        for node_id, cid in per_period[year].items():
             votes.setdefault(node_id, Counter())[cid] += 1
             latest[node_id] = cid
     plurality: CommunityMap = {}
@@ -1518,7 +1518,7 @@ def detect_leiden_temporal(
         plurality[node_id] = latest[node_id] if latest[node_id] in tied else min(tied)
 
     palette = build_community_palette({str(cid): cid for cid in remap.values()}, palette_name, reverse=reverse)
-    return per_year, plurality, palette
+    return per_period, plurality, palette
 
 
 def detect_louvain(
@@ -2025,9 +2025,9 @@ def detect(
         )
     if strategy == "LEIDEN_TEMPORAL":
         # Needs every timeline year's slice at once — the export pipeline precomputes it via
-        # detect_leiden_temporal() and applies the per-year / plurality maps directly.
+        # detect_leiden_temporal() and applies the per-period / plurality maps directly.
         raise ValueError(
-            "LEIDEN_TEMPORAL is computed over the per-year timeline slices and is dispatched "
+            "LEIDEN_TEMPORAL is computed over the per-period timeline slices and is dispatched "
             "separately by the export pipeline (detect_leiden_temporal), not by detect()."
         )
     if strategy == "KCORE":

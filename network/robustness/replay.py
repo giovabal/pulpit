@@ -10,10 +10,11 @@ deplatforming lineage the scenario models; Chandrasekharan et al. 2017, Jhaver
 et al. 2021 and Horta Ribeiro et al. 2021 measure the realised gap between
 predicted and observed moderation effects).
 
-For each *wave year* Y (a calendar year with recorded closures), the replay:
+For each *wave period* P (a timeline period — year, quarter or month — with recorded
+closures; ``Y−1`` / ``Y+1`` below are the previous and next periods of the timeline), the replay:
 
-    1. takes the **pre-wave** graph ``G_{Y-1}`` (the network the year before);
-    2. removes the channels that closed during Y and were present in
+    1. takes the **pre-wave** graph ``G_{Y-1}`` (the network the period before);
+    2. removes the channels that closed during P and were present in
        ``G_{Y-1}`` — the *predicted* residual, four sizes normalised against
        ``G_{Y-1}`` exactly as :func:`~network.robustness.metrics.residual_sizes`;
     3. compares that against the **equal-q random baseline** (remove the same
@@ -35,13 +36,13 @@ Reading the three columns together:
     * **observed < predicted** — the wave triggered *cascading* abandonment
       beyond the banned block itself.
 
-Only *interior* wave years get a full row (``G_{Y-1}`` and ``G_{Y+1}`` must
-both exist); the observed column is ``None`` when ``G_{Y+1}`` is missing (Y is
-the last year), and the year is skipped entirely when ``G_{Y-1}`` is missing.
+Only *interior* wave periods get a full row (``G_{Y-1}`` and ``G_{Y+1}`` must
+both exist); the observed column is ``None`` when ``G_{Y+1}`` is missing (P is
+the last period), and the period is skipped entirely when ``G_{Y-1}`` is missing.
 
 ``strength`` compares edge weight *across* two graphs, so it is computed on
 the un-rescaled ``weight_raw`` every ``build_graph`` edge carries: the display
-``weight`` is rescaled to each year graph's own maximum (×10/max), and when the
+``weight`` is rescaled to each period graph's own maximum (×10/max), and when the
 closed hub carried the pre-wave graph's heaviest tie the post-wave weights
 would be inflated by the rescale alone — a fake "healing".  Hand-built graphs
 without ``weight_raw`` fall back to ``weight``.
@@ -74,46 +75,58 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = ()
 
 
 def ban_replay_rows(
-    year_graphs: dict[int, nx.DiGraph],
-    closures_by_year: dict[int, set],
+    period_graphs: "dict[Any, nx.DiGraph]",
+    closures_by_period: "dict[Any, set]",
     *,
+    order: "list[Any] | None" = None,
+    labels: "dict[Any, str] | None" = None,
     n_random_runs: int = 100,
     reach_sample: int | None = 500,
     rng: np.random.Generator | None = None,
 ) -> list[dict[str, Any]]:
-    """One replay row per interior wave year with closures present in ``G_{Y-1}``.
+    """One replay row per interior wave period with closures present in the previous period's graph.
 
-    *year_graphs* maps a calendar year to its (already backbone-filtered, if
-    desired) directed graph; node ids must match those in *closures_by_year*.
-    *closures_by_year* maps a year Y to the set of node ids that closed during
-    Y.  A wave year needs ``G_{Y-1}`` to produce a row; the observed column is
-    filled only when ``G_{Y+1}`` also exists.
+    *period_graphs* maps a timeline period key to its (already backbone-filtered, if desired) directed
+    graph; node ids must match those in *closures_by_period*, which maps a period P to the set of node
+    ids that closed during P. *order* is the timeline's full period sequence, empty periods included:
+    the pre-wave graph is the one of the period before P in it, the post-wave graph the one after. When
+    omitted, integer keys (calendar years) are read as consecutive integers, other keys in sorted order.
+    *labels* gives each period's display label. A wave period needs a pre-wave graph to produce a row;
+    the observed column is filled only when the post-wave graph also exists.
 
-    Each row carries ``year``, ``n_pre`` (pre-wave node count), ``n_closed``
-    (closed channels actually present in ``G_{Y-1}``), ``fraction`` (their
-    share), and three blocks keyed by lowercase metric name:
+    Each row carries ``period`` (the key), ``label``, ``n_pre`` (pre-wave node count), ``n_closed``
+    (closed channels actually present in the pre-wave graph), ``fraction`` (their share), and three
+    blocks keyed by lowercase metric name:
 
         ``predicted_<metric>``  residual after removing the closed block
         ``random_<metric>``     equal-q uniform-random baseline (mean)
         ``observed_<metric>``   survivor-induced post-wave structure, or ``None``
 
-    Rows are sorted by year ascending.  Years with no closure present in the
-    pre-wave graph are skipped.
+    Rows follow the timeline order. Periods with no closure present in the pre-wave graph are skipped.
     """
     if rng is None:
         rng = np.random.default_rng()
+    if order is None:
+        keys = set(period_graphs) | set(closures_by_period)
+        if keys and all(isinstance(k, int) for k in keys):
+            order = list(range(min(keys), max(keys) + 1))
+        else:
+            order = sorted(keys)
+    position = {key: i for i, key in enumerate(order)}
+    labels = labels or {}
 
     rows: list[dict[str, Any]] = []
-    for year in sorted(closures_by_year):
-        pre = year_graphs.get(year - 1)
+    for period in sorted((k for k in closures_by_period if k in position), key=position.__getitem__):
+        i = position[period]
+        pre = period_graphs.get(order[i - 1]) if i > 0 else None
         if pre is None or pre.number_of_nodes() == 0:
             continue
         pre_nodes = set(pre.nodes())
-        closed = {nid for nid in closures_by_year[year] if nid in pre_nodes}
+        closed = {nid for nid in closures_by_period[period] if nid in pre_nodes}
         if not closed:
             continue
 
-        post = year_graphs.get(year + 1)
+        post = period_graphs.get(order[i + 1]) if i + 1 < len(order) else None
         if post is not None and post.number_of_nodes() == 0:
             post = None
         # One weight scale for the pre-wave baseline and the post-wave survivors (see module docstring).
@@ -133,7 +146,13 @@ def ban_replay_rows(
                 post.subgraph(survivors), n0=n_pre, w0=w0, reach_sample=reach_sample, rng=rng, weight=weight
             )
 
-        row: dict[str, Any] = {"year": year, "n_pre": n_pre, "n_closed": q, "fraction": q / n_pre}
+        row: dict[str, Any] = {
+            "period": period,
+            "label": labels.get(period, str(period)),
+            "n_pre": n_pre,
+            "n_closed": q,
+            "fraction": q / n_pre,
+        }
         for m in _METRICS:
             row[f"predicted_{m}"] = predicted[m]
             row[f"random_{m}"] = random_sizes[m]

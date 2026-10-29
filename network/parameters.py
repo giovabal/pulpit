@@ -34,7 +34,8 @@ parameter only when its scope was active in the run. Scope keys:
 * ``dominance`` — the dominance analysis
 * ``vacancy`` — the vacancy (replacement-candidate) analysis
 * ``interest`` — the structural interest of messages
-* ``timeline`` — the per-year exports
+* ``timeline`` — the per-period exports
+* ``event_impact`` — the interrupted time series around recorded events (``--event-impact``)
 """
 
 import datetime
@@ -76,6 +77,7 @@ SCOPES: frozenset[str] = frozenset(
         "vacancy",
         "interest",
         "timeline",
+        "event_impact",
     }
 )
 SCOPE_PREFIXES: tuple[str, ...] = ("measure:", "strategy:", "layout:")
@@ -128,6 +130,8 @@ PARAMETER_MODULES: tuple[str, ...] = (
     "network.network_nulls",
     "network.mrqap",
     "network.dyads",
+    "network.periods",
+    "network.event_impact",
     "network.layout",
     "network.robustness",
     "network.dominance",
@@ -150,6 +154,7 @@ SECTION_ORDER: tuple[str, ...] = (
     "Vacancy analysis",
     "Structural interest",
     "Timeline",
+    "Event impact",
 )
 _SECTION_BY_SCOPE: dict[str, str] = {
     "graph": "Graph & edges",
@@ -171,6 +176,7 @@ _SECTION_BY_SCOPE: dict[str, str] = {
     "vacancy": "Vacancy analysis",
     "interest": "Structural interest",
     "timeline": "Timeline",
+    "event_impact": "Event impact",
 }
 _SECTION_BY_PREFIX: dict[str, str] = {"measure:": "Measures", "strategy:": "Communities", "layout:": "Layout"}
 
@@ -198,6 +204,7 @@ _SCOPE_LABELS: dict[str, str] = {
     "vacancy": "vacancy analysis",
     "interest": "structural interest",
     "timeline": "timeline",
+    "event_impact": "event impact",
     "strategy:LABELGROUP": "label-group partitions",
 }
 
@@ -307,7 +314,7 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
         if opts.community_backbone_alpha and algorithmic:
             scopes.add("community_backbone")
 
-    timeline = opts.timeline_step == "year"
+    timeline = opts.timeline_step not in ("", "none", None)
     if (
         opts.do_html
         or opts.do_xlsx
@@ -355,6 +362,8 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
         scopes.add("interest")
     if timeline:
         scopes.add("timeline")
+    if getattr(opts, "do_event_impact", False):
+        scopes.add("event_impact")
     return scopes
 
 
@@ -511,12 +520,18 @@ def _flags(*names: str) -> str:
 # ── Run options ───────────────────────────────────────────────────────────────
 
 
+def timeline_on(opts: Any) -> bool:
+    """Whether the resolved options ask for a timeline (any ``--timeline-step`` but ``none``)."""
+    return getattr(opts, "timeline_step", "none") not in ("", "none", None)
+
+
 @dataclass
 class RunFacts:
     """Values the command resolves while it runs, recorded next to the options that led to them.
 
-    ``community_resolutions`` is the full-range ``{partition key: γ}`` (a ``{"<year>": γ}`` dict for a
-    LEIDEN_TEMPORAL instance) and ``year_resolutions`` the same per timeline year; ``community_fits`` the
+    ``community_resolutions`` is the full-range ``{partition key: γ}`` (a ``{"<period key>": γ}`` dict for a
+    LEIDEN_TEMPORAL instance) and ``year_resolutions`` the same per timeline period (keyed by period key);
+    ``timeline_periods`` the exported periods as ``(key, label)``; ``community_fits`` the
     full-range ``{partition key: fit summary}`` of the stochastic strategies (best of N seeded fits, their
     agreement with the reported partition — ``community.detect``'s ``diagnostics_out``); ``measure_notes``
     maps a measure token to what became of it (``MODULEROLE``'s resolved basis, a skipped instance).
@@ -529,7 +544,7 @@ class RunFacts:
     edges: int | None = None
     community_resolutions: dict[str, Any] = field(default_factory=dict)
     community_fits: dict[str, Any] = field(default_factory=dict)
-    year_resolutions: dict[int, dict[str, Any]] = field(default_factory=dict)
+    year_resolutions: dict[Any, dict[str, Any]] = field(default_factory=dict)
     measure_notes: dict[str, str] = field(default_factory=dict)
     fa2_iterations: int | None = None
     coordination_fa2_iterations: int | None = None
@@ -537,7 +552,7 @@ class RunFacts:
     near_copies: int | None = None
     interest_community: str = ""
     interest_authority: str = ""
-    timeline_years: list[int] = field(default_factory=list)
+    timeline_periods: list[tuple[str, str]] = field(default_factory=list)
 
 
 _EDGE_WEIGHT_DESCRIPTIONS: dict[str, str] = {
@@ -694,9 +709,9 @@ def _community_rows(opts: Any, facts: RunFacts) -> list[Row]:
 
 
 def _year_gamma_table(opts: Any, facts: RunFacts) -> list[str]:
-    """Per-year γ of the auto-resolution CPM-family partitions (timeline years, LEIDEN_TEMPORAL slices).
+    """Per-period γ of the auto-resolution CPM-family partitions (timeline periods, LEIDEN_TEMPORAL slices).
 
-    An instance with an explicit ``resolution`` runs at that γ in every year — already in its row —
+    An instance with an explicit ``resolution`` runs at that γ in every period — already in its row —
     so only the instances whose γ is each graph's own density get a column.
     """
     cpm = [
@@ -723,7 +738,12 @@ def _year_gamma_table(opts: Any, facts: RunFacts) -> list[str]:
         [year, *(format_value(per_year[year][inst.key]) if inst.key in per_year[year] else "—" for inst in cpm)]
         for year in sorted(per_year)
     ]
-    return ["", "CPM resolution γ used for each year's graph:", "", *_table(["Year", *(i.label for i in cpm)], rows)]
+    return [
+        "",
+        "CPM resolution γ used for each period's graph:",
+        "",
+        *_table(["Period", *(i.label for i in cpm)], rows),
+    ]
 
 
 def _filter_label_names(ids: Iterable[int]) -> str:
@@ -1205,27 +1225,50 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
     else:
         _off("structural interest", "--interest-structural")
 
-    if opts.timeline_step == "year":
-        years = sorted(facts.timeline_years)
-        if years and years == list(range(years[0], years[-1] + 1)) and len(years) > 1:
-            span = f"{years[0]}–{years[-1]} ({len(years)} years)"
-        else:
-            span = ", ".join(map(str, years)) or "none"
+    if getattr(opts, "do_event_impact", False):
         topics.append(
             (
-                "Timeline",
+                "Event impact",
                 [
                     (
-                        "Timeline step",
-                        _code("year"),
-                        _code("--timeline-step"),
-                        "The analysis is repeated for every calendar year with the same options; each year has its "
-                        "own graph, measures, communities and layout.",
+                        "Window",
+                        f"±{opts.event_window_weeks} weeks",
+                        _code("--event-window-weeks"),
+                        "Weeks on each side of an event's week the interrupted time series is fitted on (cut at the "
+                        "edges of the data).",
                     ),
-                    ("Years exported", span, "—", "Years that produced a non-empty graph."),
                 ],
             )
         )
+    else:
+        _off("event impact", "--event-impact")
+
+    if timeline_on(opts):
+        exported = facts.timeline_periods
+        if len(exported) > 1:
+            span = f"{exported[0][1]} → {exported[-1][1]} ({len(exported)} periods)"
+        else:
+            span = ", ".join(label for _key, label in exported) or "none"
+        window = getattr(opts, "timeline_window", None)
+        rows = [
+            (
+                "Timeline step",
+                _code(opts.timeline_step),
+                _code("--timeline-step"),
+                "The analysis is repeated for every period with the same options; each period has its own graph, "
+                "measures, communities and layout.",
+            ),
+            (
+                "Sliding window",
+                f"{window} months" if window else "none (tumbling periods)",
+                _code("--timeline-window"),
+                "Each period covers the trailing window ending with its step; snapshots overlap."
+                if window
+                else "Consecutive periods are disjoint.",
+            ),
+            ("Periods exported", span, "—", "Periods that produced a non-empty graph."),
+        ]
+        topics.append(("Timeline", rows))
     else:
         _off("timeline", "--timeline-step")
     return topics, off

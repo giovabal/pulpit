@@ -207,7 +207,7 @@ Add or remove search keywords for channel discovery. Terms are processed in orde
 
 ### Events and event types — `/manage/events/`
 
-Manage the events and event type entries used for chart annotations (event types are managed within the Events page). See [Workflow § Events](workflow.md#mark-events-on-charts).
+Manage the events and event type entries used for chart annotations (event types are managed within the Events page). An event's **Scope** lists the labels it concerns (e.g. *Nation: Germany*); empty = the whole network. A scoped event is tested against the other channels by the [event impact](event-impact.md) analysis. Events can be edited in place (date, type, subject, scope). See [Workflow § Events](workflow.md#mark-events-on-charts--and-test-them).
 
 ### Users — `/manage/users/`
 
