@@ -1,7 +1,7 @@
 import { build_year_nav } from './year_nav.js';
 import { mini_hist } from './charts.js';
 import { canonical_strategy_key, strategy_label } from './labels.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
@@ -72,9 +72,12 @@ function roleCompanion(numericKey) {
 
 // ── Module-level state ─────────────────────────────────────────────────────────
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d{4,})\//); // 4+ digit = calendar year, not compare suffix
-var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _base_dd = _ym ? "data/" : _dd; // "all" always resolves to the full-range dir
+var _current_year = "all";
+// A compare page (data_2/) shows the full range only: it carries no timeline of its own.
+var _base_dd = _dd;
+var _no_timeline = isCompareDataDir(_dd);
+var _tl_events = [];
+var _tl_overlapping = false;
 var _ty = [];
 var _all_years = []; // ordered year numbers, derived from _ty
 var _cache = {};
@@ -95,7 +98,7 @@ function _load_year_channels() {
     if (!_all_years.length) { _yr_channels_promise = Promise.resolve(); return _yr_channels_promise; }
     _yr_channels_promise = Promise.all(_all_years.map(function(yr) {
         if (_yr_channels[yr]) return Promise.resolve();
-        return fetchJson("data_" + yr + "/channels.json")
+        return fetchJson(periodDataDir("data/", yr) + "channels.json")
             .then(function(d) {
                 var m = {};
                 (d.nodes || []).forEach(function(n) { m[n.id] = n; });
@@ -154,7 +157,7 @@ function _toggle_row(btn, tr, node) {
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return Promise.all([
         fetchJson(dd + "channels.json"),
         fetchJson(dd + "communities.json"),
@@ -459,7 +462,7 @@ function _switch_year(year) {
     if (year === _current_year || _loading) return;
     _current_year = year;
     _loading = true;
-    build_year_nav(_ty, _current_year, _switch_year);
+    build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     _fetch_year(year).then(function(d) { return _render(d); }).then(function() { _loading = false; }).catch(function() { _loading = false; });
 }
 
@@ -472,10 +475,13 @@ Promise.all([
 ]).then(function(results) {
     _cache[_current_year] = { channels: results[0], communities: results[1], meta: results[2] };
     var timeline = results[3];
-    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_channel_html; }) : [];
-    _all_years = _ty.map(function(y) { return y.year; });
+    var _tl = readTimeline(_no_timeline ? null : timeline);
+    _tl_events = _tl.events;
+    _tl_overlapping = _tl.overlapping;
+    _ty = _tl.periods.filter(function(y) { return y.has_channel_html; });
+    _all_years = _ty.map(function(y) { return y.key; });
     _render(_cache[_current_year]);
-    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
 }).catch(function(err) {
     var el = document.getElementById("channel-preamble");
     if (el) el.textContent = "Failed to load data.";

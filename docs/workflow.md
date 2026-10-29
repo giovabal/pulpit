@@ -221,15 +221,21 @@ When the export finishes, click **Data** in the navigation bar to browse your ex
 
 ### Timeline: see how the network changed over time
 
-Enable **Timeline by year** in the Structural Analysis options. Pulpit repeats the full analysis once per calendar year found in your data and adds a year navigator to the graph — click the arrows to step through time and watch the network evolve.
+Pick a **Timeline** step in the Structural Analysis options — *By year*, *By quarter* or *By month* (CLI `--timeline-step year|quarter|month`). Pulpit repeats the full analysis once per period found in your data, writes one `data_<period>/` directory per period (`data_2024/`, `data_2024Q1/`, `data_2024-03/`), and adds a period navigator to the maps and every table. Up to 12 periods show as buttons; more as *All* + ◀ ▶ + a list grouped by year. Periods containing a recorded event are marked •.
+
+On a sparse, fast-growing network a quarter or a month can hold too few ties to say much. **Window (months)** (`--timeline-window N`) turns the timeline into **sliding windows**: each period covers the trailing N months ending with its step — `--timeline-step quarter --timeline-window 12` gives a 12-month snapshot every quarter. N is a multiple of the step, larger than it; only windows that fit entirely inside the data are exported, so every snapshot spans the same N months. Consecutive windows overlap, so the analyses that need disjoint, consecutive periods are not available with a window: **Leiden temporal** (refused), the **ban replay** (skipped with a warning) and the dyadic export's **RSiena waves** (skipped, noted in `dyads/README.md`). The community-flow alluvial is still drawn, with a note that part of its continuity is built in by the overlap.
+
+Every period runs the whole analysis, so the run time grows with the number of periods — a monthly timeline is many exports in one. For speed, leave out the SIGNIFICANCE stat group, SBM restarts and maps on fine-grained runs.
 
 ### Compare two networks
 
 Run a second export — perhaps with a later date range or a different set of channels. Then go to the **Compare Analysis** card (Step 4) in the Operations panel, set the target export, and click Run. Pulpit generates a side-by-side comparison showing which channels gained or lost influence between the two snapshots.
 
-### Mark events on charts
+### Mark events on charts — and test them
 
-Go to **Manage → Event types** to define categories like *Election* or *Policy change*, then **Manage → Events** to add specific dates and descriptions. Pulpit draws vertical lines at those dates on all channel activity charts, making it easy to see whether the event affected a channel's behaviour.
+Go to **Manage → Event types** to define categories like *Election* or *Policy change*, then **Manage → Events** to add specific dates and descriptions. Pulpit draws vertical lines at those dates on all channel activity charts, making it easy to see whether the event affected a channel's behaviour. An event can be **scoped** to labels — e.g. *Nation: Germany* for a national ban — in its *Scope* field; empty means the whole network. Events can be edited in place.
+
+**Event impact** (Outputs → *Event impact*, CLI `--event-impact`) turns the lines into tests. For each event inside the data Pulpit fits an interrupted time series to the network's weekly activity around the event — messages, forwards, active and new channels, in-scope citations, the imported share, citation concentration and the cross-label (e.g. cross-border) share — and reports the **level change** at the event's week and the **slope change** after it, with autocorrelation-robust p-values and an in-time **placebo** p-value (the same model at every other date). A scoped event is tested as a *comparative* series: the channels holding the event's labels against the others. `--event-window-weeks` (default 26) sets the weeks on each side. Written to `data/event_impact.json`, `events.html` (with `--html`), `event_impact.xlsx` / `.csv`. See [Event impact](event-impact.md).
 
 ### Robustness: resistance to node removal
 
@@ -374,6 +380,13 @@ python manage.py structural_analysis --robustness --robustness-replay --timeline
 # Dominance analysis (dominant / dependent channels: dominance.html / .xlsx / .csv)
 python manage.py structural_analysis --dominance --html --xlsx                          # David's score ranking + roles, two-sided dependence per pair, hierarchy tests
 python manage.py structural_analysis --dominance --dominance-min-events 5 --dominance-permutations 1000   # stricter floor, finer p-values
+
+# Timeline by quarter, and 12-month sliding windows stepped by quarter
+python manage.py structural_analysis --graph-2d --html --timeline-step quarter
+python manage.py structural_analysis --graph-2d --html --timeline-step quarter --timeline-window 12
+
+# Event impact (interrupted time series around the events recorded in Manage → Events)
+python manage.py structural_analysis --html --xlsx --event-impact --event-window-weeks 26
 
 # Homophily, significance and dyadic models
 python manage.py structural_analysis --community-strategies LEIDEN_DIRECTED --html --xlsx --network-stat-groups ALL            # ALL includes HOMOPHILY

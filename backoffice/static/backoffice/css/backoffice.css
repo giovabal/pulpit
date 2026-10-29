@@ -117,6 +117,12 @@
   border-color: var(--accent);
 }
 
+/* Multi-select list (e.g. an event's label scope): a short scrolling list instead of a dropdown. */
+.bo-select--multi {
+  min-width: 12rem;
+  cursor: default;
+}
+
 .bo-select--sm {
   padding: .25rem .5rem;
   font-size: .8125rem;

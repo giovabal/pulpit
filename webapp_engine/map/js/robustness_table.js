@@ -15,7 +15,7 @@
 
 import { build_year_nav } from './year_nav.js';
 import { strategy_label } from './labels.js';
-import { escHtml, fetchJson, fetchJsonOrNull } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 
@@ -23,9 +23,12 @@ var _dd = window.DATA_DIR || "data/";
 // network_table.js: when the page was opened from a per-year data dir (e.g.
 // data_2019/), _current_year holds that year and _base_dd points back at the
 // global data/ root so the "All" button can fetch the global payload.
-var _ym = _dd.match(/data_(\d{4,})\//);
-var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _base_dd = _ym ? "data/" : _dd;
+var _current_year = "all";
+// A compare page (data_2/) shows the full range only: it carries no timeline of its own.
+var _base_dd = _dd;
+var _no_timeline = isCompareDataDir(_dd);
+var _tl_events = [];
+var _tl_overlapping = false;
 var _cache = {};
 var _ty = []; // timeline years filtered to those with robustness data
 var _loading = false;
@@ -493,14 +496,14 @@ function _renderBanReplay(payload) {
         "Observed below predicted (red) = the wave cascaded beyond the banned block; " +
         "observed above predicted (green) = survivors re-wired around the gap.</p>";
     html += "<div class=\"table-responsive mb-3\"><table class=\"table table-sm rb-summary-table\">";
-    html += "<thead><tr><th>Wave year</th><th class=\"text-end\">Pre-wave nodes</th>" +
+    html += "<thead><tr><th>Wave period</th><th class=\"text-end\">Pre-wave nodes</th>" +
         "<th class=\"text-end\">Closed</th><th class=\"text-end\">% of network</th>";
     metrics.forEach(function(m) {
         html += "<th class=\"text-end\">S<sub>" + _METRIC_LABEL[m].toLowerCase() + "</sub></th>";
     });
     html += "</tr></thead><tbody>";
     rows.forEach(function(row) {
-        html += "<tr><td>" + row.year + "</td>";
+        html += "<tr><td>" + escHtml(String(row.label || row.period)) + "</td>";
         html += "<td class=\"text-end\">" + row.n_pre + "</td>";
         html += "<td class=\"text-end\">" + row.n_closed + "</td>";
         html += "<td class=\"text-end\">" + (row.fraction * 100).toFixed(1) + "%</td>";
@@ -634,7 +637,7 @@ function _render(payload) {
 
 function _load(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return fetchJson(dd + "robustness.json")
         .then(function(payload) { _cache[year] = payload; return payload; });
 }
@@ -647,7 +650,7 @@ function _switch_year(year) {
     _load(year).then(function(payload) {
         _current_year = year;
         _render(payload);
-        if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+        if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     }).catch(function() {
         document.getElementById("rb-summary").textContent = "Failed to load robustness data for " + year + ".";
     }).finally(function() {
@@ -664,8 +667,11 @@ Promise.all([
     var payload = results[0];
     var timeline = results[1];
     _render(payload);
-    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_robustness; }) : [];
-    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    var _tl = readTimeline(_no_timeline ? null : timeline);
+    _tl_events = _tl.events;
+    _tl_overlapping = _tl.overlapping;
+    _ty = _tl.periods.filter(function(y) { return y.has_robustness; });
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
 }).catch(function(err) {
     // Surface the actual exception in the console — silently swallowing it here
     // hides whether the failure is fetch (network / file:// scheme / 404) or a

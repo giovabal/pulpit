@@ -5,7 +5,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings } from './utils.js';
+import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings, periodDataDir, readTimeline } from './utils.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
@@ -75,11 +75,15 @@ var labels_mode = 'on_size';
 var current_data_dir = window.DATA_DIR || 'data/';
 var base_data_dir = window.DATA_DIR || 'data/';
 
-// Per-year data directory for this page's base layer: data/ → data_YYYY/,
-// data_coordination/ → data_coordination_YYYY/.
+// Per-period data directory for this page's base layer: data/ → data_<key>/,
+// data_coordination/ → data_coordination_<key>/ (a period key: 2024, 2024Q1, 2024-03).
 function year_data_dir(year) {
-    return year === 'all' ? base_data_dir : base_data_dir.replace(/\/+$/, '') + '_' + year + '/';
+    return year === 'all' ? base_data_dir : periodDataDir(base_data_dir, year);
 }
+// Up to this many periods are all preloaded at startup; beyond it (a quarterly or monthly timeline) only
+// the full range is, and each period loads on demand with its neighbours prefetched.
+var PRELOAD_LIMIT = 12;
+var _period_labels = {}; // period key → display label
 var active_year = null;
 var year_sequence = [];
 var _year_switcher_inited = false;
@@ -1554,7 +1558,7 @@ function update_year_buttons_active(year_str) {
     var all_btn = container.querySelector('.year-btn--all');
     if (all_btn) all_btn.classList.toggle('active', active_year === 'all');
     var lbl = el('year-drop-label');
-    if (lbl) lbl.textContent = (active_year === 'all') ? '—' : active_year;
+    if (lbl) lbl.textContent = (active_year === 'all') ? '—' : (_period_labels[active_year] || active_year);
     container.querySelectorAll('.year-drop-item').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.year === active_year);
     });
@@ -1568,6 +1572,11 @@ function update_year_buttons_active(year_str) {
 function _go_year_3d(year) {
     if (year === active_year) return;
     update_year_buttons_active(year);
+    // Lazy timeline (more periods than PRELOAD_LIMIT): warm the neighbouring periods for prev / next.
+    var idx = year_sequence.indexOf(String(year));
+    [idx - 1, idx + 1].forEach(function(i) {
+        if (i > 0 && i < year_sequence.length) preload_year_3d(year_data_dir(year_sequence[i]));
+    });
     reload_graph_3d(year_data_dir(year));
 }
 
@@ -1579,22 +1588,19 @@ function _year_drop_close() {
 }
 
 function init_year_switcher(timeline) {
-    var years_with_graph = (timeline.years || []).filter(function(y) { return y.has_graph; });
+    var years_with_graph = readTimeline(timeline).periods.filter(function(y) { return y.has_graph; });
     if (!years_with_graph.length) return;
     var container = el('year-switcher');
     if (!container) return;
 
-    year_sequence = ['all'].concat(years_with_graph.map(function(y) { return String(y.year); }));
+    year_sequence = ['all'].concat(years_with_graph.map(function(y) { return y.key; }));
+    years_with_graph.forEach(function(y) { _period_labels[y.key] = y.label; });
 
     if (!_year_switcher_inited) {
         _year_switcher_inited = true;
 
-        var drop_items = years_with_graph.map(function(entry) {
-            return '<button class="year-btn year-drop-item" data-year="' + entry.year + '">' + entry.year + '</button>';
-        }).join('');
-
         container.innerHTML = [
-            '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous year" disabled>',
+            '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous period" disabled>',
             '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
             '<button class="year-btn year-btn--all" data-year="all">All</button>',
             '<span class="year-sep" aria-hidden="true"></span>',
@@ -1602,11 +1608,21 @@ function init_year_switcher(timeline) {
             '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
             '<span id="year-drop-label">—</span>',
             '<i class="bi bi-chevron-up year-chevron" aria-hidden="true"></i></button>',
-            '<div class="year-drop-menu" id="year-drop-menu" role="listbox">' + drop_items + '</div>',
+            '<div class="year-drop-menu" id="year-drop-menu" role="listbox"></div>',
             '</div>',
-            '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next year">',
+            '<button class="year-btn year-btn--nav" id="year-next" aria-label="Next period">',
             '<i class="bi bi-chevron-right" aria-hidden="true"></i></button>',
         ].join('');
+
+        // Built with the DOM API: a period label is text, never markup.
+        var drop_menu = el('year-drop-menu');
+        years_with_graph.forEach(function(entry) {
+            var item = document.createElement('button');
+            item.className = 'year-btn year-drop-item';
+            item.dataset.year = entry.key;
+            item.textContent = entry.label;
+            drop_menu.appendChild(item);
+        });
 
         container.style.display = 'flex';
 
@@ -1643,12 +1659,7 @@ function init_year_switcher(timeline) {
         document.addEventListener('click', function() { _year_drop_close(); });
     }
 
-    var init_year = 'all';
-    if (window.DATA_DIR) {
-        var m = window.DATA_DIR.match(/data_(\d+)\//);
-        if (m) init_year = m[1];
-    }
-    update_year_buttons_active(init_year);
+    update_year_buttons_active('all');
 }
 
 // =============================================================================
@@ -1689,16 +1700,18 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(function(timeline) {
             if (!timeline) return;
             init_year_switcher(timeline);
-            var years = (timeline.years || []).filter(function(y) { return y.has_graph; });
-            var dirs = [base_data_dir].concat(years.map(function(y) { return year_data_dir(y.year); }));
+            var years = readTimeline(timeline).periods.filter(function(y) { return y.has_graph; });
+            var dirs = [base_data_dir];
+            if (years.length <= PRELOAD_LIMIT) dirs = dirs.concat(years.map(function(y) { return year_data_dir(y.key); }));
+            var labels = {};
+            labels[base_data_dir] = 'All';
+            years.forEach(function(y) { labels[year_data_dir(y.key)] = y.label; });
             var total = dirs.length,
                 done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year_3d(dir).then(function() {
                     done++;
-                    var m = dir.match(/_(\d+)\/$/);
-                    el('loading_message').innerHTML =
-                        (m ? m[1] : 'All') + ' (' + done + ' / ' + total + ')';
+                    el('loading_message').textContent = (labels[dir] || 'All') + ' (' + done + ' / ' + total + ')';
                 });
             }));
         });

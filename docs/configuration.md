@@ -197,7 +197,9 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.dyadic_export` | Write `dyads/`: actors, ties, timestamped citation events and yearly waves for ERGM, relational event models and RSiena ([docs](dyadic-models.md)) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
-| `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
+| `outputs.timeline_step` | Timeline granularity: `"none"`, `"year"`, `"quarter"` or `"month"` | `"none"` |
+| `outputs.timeline_window` | Sliding-window length in months (a multiple of the step, larger than it); `0` = consecutive, non-overlapping periods | `0` |
+| `outputs.event_impact` | Test each recorded event with an interrupted time series of the network's weekly activity ([docs](event-impact.md)) | `false` |
 
 ## `[layouts]`
 
@@ -217,6 +219,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
 | `computation.dominance_min_events` | Dominance: minimum citation events for a directed link to be statistically tested, for a satellite tie to count and for a channel's own dependence to be assessed (links below the floor are listed but never validated). | `3` |
 | `computation.dominance_permutations` | Dominance: number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values; `0` skips the tests. Cost grows with the square of the ranked channels. | `200` |
+| `computation.event_window_weeks` | Event impact: weeks on each side of an event's week the model is fitted on. | `26` |
 | `computation.mrqap_permutations` | MRQAP: channel relabellings per predictor behind each dyadic-regression p-value (the smallest p is 1/(N+1)); `0` = coefficients only. | `1000` |
 
 ## `[interest]`

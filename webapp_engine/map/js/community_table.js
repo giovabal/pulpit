@@ -1,5 +1,5 @@
 import { build_year_nav } from './year_nav.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
 import { build_community_alluvial, build_strategy_intersection_sankey } from './community_alluvial.js';
 import { render_partition_comparison } from './partition_comparison.js';
@@ -90,9 +90,12 @@ function _hungarianColPerm(matrix, nCols) {
 
 // ── Module-level state ─────────────────────────────────────────────────────────
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d{4,})\//);
-var _current_year = _ym ? parseInt(_ym[1]) : "all";
-var _base_dd = _ym ? "data/" : _dd;
+var _current_year = "all";
+// A compare page (data_2/) shows the full range only: it carries no timeline of its own.
+var _base_dd = _dd;
+var _no_timeline = isCompareDataDir(_dd);
+var _tl_events = [];
+var _tl_overlapping = false;
 var _ty = [];
 var _cache = {};
 var _loading = false;
@@ -118,7 +121,7 @@ var _nodeById = {};
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return Promise.all([
         fetchJson(dd + "communities.json"),
         fetchJsonOrNull(dd + "meta.json"),
@@ -134,10 +137,10 @@ function _fetch_year(year) {
 function _load_year_comms() {
     if (_yearComms || _yearCommsLoading || _ty.length < 2) return;
     _yearCommsLoading = true;
-    var years = _ty.map(function(y) { return y.year; }).sort(function(a, b) { return a - b; });
-    Promise.all(years.map(function(yr) {
-        return fetchJson("data_" + yr + "/communities.json")
-            .then(function(d) { return { year: yr, data: d }; })
+    // Timeline order (the server writes the periods chronologically); `year` carries the column label.
+    Promise.all(_ty.map(function(p) {
+        return fetchJson(periodDataDir("data/", p.key) + "communities.json")
+            .then(function(d) { return { year: p.label, key: p.key, data: d }; })
             .catch(function() { return null; });
     })).then(function(list) {
         _yearComms = list.filter(Boolean);
@@ -158,7 +161,7 @@ function _refit_alluvials() {
         // Carry an open channel-list panel across the rebuild by re-selecting the same ribbon, so a
         // resize no longer silently closes it (honouring this function's "expanded panels untouched").
         var openKey = old.alluvialSelectedKey ? old.alluvialSelectedKey() : null;
-        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById, openKey);
+        var fresh = build_community_alluvial(sk, _yearComms, container.clientWidth, _nodeById, openKey, _tl_overlapping);
         if (fresh) {
             old.replaceWith(fresh);
             _alluvialEls[sk] = fresh;
@@ -180,7 +183,7 @@ window.addEventListener("resize", function() {
 // swaps which one is rendered.
 function _fetch_network_metrics(year) {
     if (year in _nmCache) return Promise.resolve(_nmCache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return fetchJsonOrNull(dd + "network_metrics.json").then(function(d) { _nmCache[year] = d; return d; });
 }
 
@@ -218,16 +221,16 @@ function _build_partition_comparison_section() {
             selYear.style.width = "auto";
             selYear.id = "partition-comparison-year";
             lbl.htmlFor = selYear.id;
-            lbl.textContent = "Year";
-            [{ value: "all", label: "All years" }].concat(
-                _ty.map(function(y) { return { value: String(y.year), label: String(y.year) }; })
+            lbl.textContent = "Period";
+            [{ value: "all", label: "All periods" }].concat(
+                _ty.map(function(y) { return { value: y.key, label: y.label }; })
             ).forEach(function(o) { selYear.appendChild(new Option(o.label, o.value)); });
             wrap.appendChild(lbl);
             wrap.appendChild(selYear);
             controls.appendChild(wrap);
             section.appendChild(controls);
             selYear.addEventListener("change", function() {
-                var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
+                var year = selYear.value;
                 _fetch_network_metrics(year).then(function(d) {
                     if (String(selYear.value) !== String(year)) return; // superseded by a newer selection
                     render_partition_comparison(body, d && d.partition_comparison);
@@ -255,7 +258,7 @@ function _build_strategy_sankey_section(stratKeys) {
     section.appendChild(h3);
     var intro = document.createElement("p");
     intro.className = "text-muted small mb-3";
-    intro.textContent = "Pick two strategies and a year to see how their communities overlap: each ribbon's " +
+    intro.textContent = "Pick two strategies and a period to see how their communities overlap: each ribbon's " +
         "thickness is the number of channels shared by a community on the left and a community on the right. " +
         "Click a ribbon to list those channels beneath the diagram.";
     section.appendChild(intro);
@@ -282,12 +285,12 @@ function _build_strategy_sankey_section(stratKeys) {
     }
 
     var stratOptions = stratKeys.map(function(k) { return { value: k, label: _strat_label(k) }; });
-    var yearOptions = [{ value: "all", label: "All years" }].concat(
-        _ty.map(function(y) { return { value: String(y.year), label: String(y.year) }; })
+    var yearOptions = [{ value: "all", label: "All periods" }].concat(
+        _ty.map(function(y) { return { value: y.key, label: y.label }; })
     );
     var selA = makeSelect("a", "Strategy A", stratOptions, stratKeys[0]);
     var selB = makeSelect("b", "Strategy B", stratOptions, stratKeys[1]);
-    var selYear = makeSelect("year", "Year", yearOptions, "all");
+    var selYear = makeSelect("year", "Period", yearOptions, "all");
     section.appendChild(controls);
 
     var diagram = document.createElement("div");
@@ -306,7 +309,7 @@ function _build_strategy_sankey_section(stratKeys) {
     function redraw() {
         var a = selA.value,
             b = selB.value;
-        var year = (selYear.value === "all") ? "all" : parseInt(selYear.value);
+        var year = selYear.value;
         var myReq = ++_sankeyReq;
         _fetch_year(year).then(function(d) {
             if (myReq !== _sankeyReq) return; // a newer redraw (year/strategy change or resize) superseded this
@@ -317,7 +320,7 @@ function _build_strategy_sankey_section(stratKeys) {
             } else setMessage("One of the selected strategies assigned no channels for this selection.");
         }).catch(function() {
             if (myReq !== _sankeyReq) return;
-            setMessage("Failed to load data for the selected year.");
+            setMessage("Failed to load data for the selected period.");
         });
     }
     selA.addEventListener("change", redraw);
@@ -495,7 +498,7 @@ function _render(d) {
         // Community-flow alluvial across the timeline years (full-range view only — it summarises every
         // year at once). Needs all years' data, loaded lazily by _load_year_comms after the first paint.
         if (_current_year === "all" && _yearComms) {
-            var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth, _nodeById);
+            var alluvial = build_community_alluvial(strategyKey, _yearComms, container.clientWidth, _nodeById, undefined, _tl_overlapping);
             if (alluvial) {
                 container.appendChild(alluvial);
                 _alluvialEls[strategyKey] = alluvial;
@@ -667,7 +670,7 @@ function _switch_year(year) {
     var prev = _current_year;
     _current_year = year;
     _loading = true;
-    build_year_nav(_ty, _current_year, _switch_year);
+    build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     _fetch_year(year).then(function(d) {
         _render(d);
         _loading = false;
@@ -676,7 +679,7 @@ function _switch_year(year) {
         // displayed table and a re-click on the failed year (now != _current_year) can retry it.
         _current_year = prev;
         _loading = false;
-        build_year_nav(_ty, _current_year, _switch_year);
+        build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     });
 }
 
@@ -689,12 +692,15 @@ Promise.all([
 ]).then(function(results) {
     _cache[_current_year] = { data: results[0], meta: results[1] };
     var timeline = results[2];
-    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_community_html; }) : [];
+    var _tl = readTimeline(_no_timeline ? null : timeline);
+    _tl_events = _tl.events;
+    _tl_overlapping = _tl.overlapping;
+    _ty = _tl.periods.filter(function(y) { return y.has_community_html; });
     var nodes = results[3] && results[3].nodes;
     if (nodes) nodes.forEach(function(n) { _nodeById[String(n.id)] = n; });
 
     _render(_cache[_current_year]);
-    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year);
+    if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     _load_year_comms();
     _build_partition_comparison_section();
     _build_strategy_sankey_section(Object.keys(results[0].strategies || {}));

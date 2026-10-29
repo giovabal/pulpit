@@ -137,6 +137,9 @@ class OperationsView(View):
             "SA_CONSENSUS_MATRIX": settings.SA_CONSENSUS_MATRIX,
             "SA_INTEREST_STRUCTURAL": settings.SA_INTEREST_STRUCTURAL,
             "SA_TIMELINE_STEP": settings.SA_TIMELINE_STEP,
+            "SA_TIMELINE_WINDOW": settings.SA_TIMELINE_WINDOW,
+            "SA_EVENT_IMPACT": settings.SA_EVENT_IMPACT,
+            "SA_EVENT_WINDOW_WEEKS": settings.SA_EVENT_WINDOW_WEEKS,
             "SA_INCLUDE_MENTIONS": settings.SA_INCLUDE_MENTIONS,
             "SA_INCLUDE_SELF_REFERENCES": settings.SA_INCLUDE_SELF_REFERENCES,
             "SA_INCLUDE_LOST": settings.SA_INCLUDE_LOST,
@@ -726,7 +729,10 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "environment_depth", "--environment-depth"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),
         ("bool_explicit", "include_private", "--include-private", "--no-include-private"),
-        ("const", "timeline_step", "--timeline-step", "year"),
+        ("value", "timeline_step", "--timeline-step"),
+        ("value", "timeline_window", "--timeline-window"),
+        ("bool_explicit", "event_impact", "--event-impact", "--no-event-impact"),
+        ("value", "event_window_weeks", "--event-window-weeks"),
         ("csv", "vacancy_measures", "--vacancy-measures"),
         ("value", "vacancy_months_before", "--vacancy-months-before"),
         ("value", "vacancy_months_after", "--vacancy-months-after"),
@@ -775,6 +781,7 @@ def _build_args(task: str, post: Any) -> list[str]:
 #   "value"                    post.get(key, "").strip()
 #   "int" / "float"            cast; empty → fall back to defaults.py value
 #   "bool_to_enum:<off>,<on>"  checkbox → on-string or off-string
+#   "enum:<a>,<b>,…"           select value, kept only when it is one of the choices (else the default)
 #   "channel_types_triplet"    three checkboxes (CHANNEL/GROUP/USER) → list
 
 TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
@@ -835,7 +842,10 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("dead_leaves_color", "graph.dead_leaves_color", "value"),
         ("community_palette", "graph.community_palette", "palette_name"),
         ("community_palette_reversed", "graph.community_palette_reversed", "bool"),
-        ("timeline_step", "outputs.timeline_step", "bool_to_enum:none,year"),
+        ("timeline_step", "outputs.timeline_step", "enum:none,year,quarter,month"),
+        ("timeline_window", "outputs.timeline_window", "int"),
+        ("event_impact", "outputs.event_impact", "bool"),
+        ("event_window_weeks", "computation.event_window_weeks", "int"),
         ("edge_weight_strategy", "edges.weight_strategy", "value"),
         ("include_mentions", "edges.include_mentions", "bool"),
         ("include_self_references", "edges.include_self_references", "bool"),
@@ -975,9 +985,16 @@ def _validate_post_constraints(task: str, post: Any, *, launching: bool = False)
                 f"(excluding K-core and Leiden temporal; currently: {len(eligible)})"
             )
 
-        # Leiden temporal couples the per-year timeline slices — meaningless without the timeline.
-        if any(inst.name == "LEIDEN_TEMPORAL" for inst in parsed_strategies) and not post.get("timeline_step"):
-            raise ValueError("Leiden temporal requires the Timeline option (per-year exports) to be enabled")
+        # Leiden temporal couples consecutive timeline slices — meaningless without a timeline of disjoint periods.
+        step = (post.get("timeline_step") or "none").strip()
+        window = (post.get("timeline_window") or "").strip()
+        sliding = window not in ("", "0")
+        if sliding and step == "none":
+            raise ValueError("A sliding window needs a timeline step (year, quarter or month)")
+        if any(inst.name == "LEIDEN_TEMPORAL" for inst in parsed_strategies) and (step == "none" or sliding):
+            raise ValueError(
+                "Leiden temporal requires a timeline of disjoint periods (a timeline step without a sliding window)"
+            )
 
         raw_threshold = (post.get("near_copy_threshold") or "").strip()
         if raw_threshold:
@@ -1136,6 +1153,10 @@ def _form_to_toml_payload(task: str, post: Any) -> dict:
         elif kind.startswith("bool_to_enum:"):
             off, on = kind.split(":", 1)[1].split(",", 1)
             value = on if post.get(post_key) else off
+        elif kind.startswith("enum:"):
+            choices = kind.split(":", 1)[1].split(",")
+            raw = (post.get(post_key) or "").strip()
+            value = raw if raw in choices else _read_default(defaults, toml_path)
         else:
             raise ValueError(f"Unknown default-spec kind: {kind!r}")
         _set_nested(payload, toml_path, value)

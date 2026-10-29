@@ -96,7 +96,11 @@ STRUCTURAL_DEFAULTS: dict = {
         "dyadic_export": False,
         "consensus_matrix": False,
         "draw_dead_leaves": False,
+        # "none" | "year" | "quarter" | "month"; timeline_window = sliding-window length in months (0 = tumbling).
         "timeline_step": "none",
+        "timeline_window": 0,
+        # Interrupted time series around the recorded events (events.html, data/event_impact.json).
+        "event_impact": False,
     },
     "edges": {
         "weight_strategy": "",
@@ -130,6 +134,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "dominance_permutations": 200,
         # MRQAP: channel relabellings per predictor behind each dyadic-regression p-value.
         "mrqap_permutations": 1000,
+        # Event impact: weeks on each side of an event's week.
+        "event_window_weeks": 26,
     },
     "layouts": {
         "layouts_2d": [],

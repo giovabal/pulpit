@@ -36,6 +36,7 @@
       <input class="bo-input" type="date" name="date" required aria-label="Event date">
       <input class="bo-input bo-input--wide" name="subject" placeholder="Subject" required aria-label="Event subject">
       <select class="bo-select" name="action_id" id="ev-type-select" required aria-label="Event type"></select>
+      <select class="bo-select bo-select--multi" name="label_ids" id="ev-scope-select" multiple size="4" aria-label="Labels the event concerns (none = the whole network)" title="The labels the event concerns, e.g. Nation: Germany for a national ban. None selected = the whole network. Ctrl/Cmd-click to select several."></select>
       <button type="submit" class="bo-btn">Save</button>
       <button type="button" class="bo-btn bo-btn--ghost" id="ev-add-cancel">Cancel</button>
     </form>
@@ -52,10 +53,10 @@
     <table class="bo-table" id="ev-table">
       <caption class="sr-only">Events</caption>
       <thead>
-        <tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Subject</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+        <tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Subject</th><th scope="col" title="The labels the event concerns; empty = the whole network">Scope</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
       </thead>
       <tbody id="ev-tbody">
-        <tr><td colspan="4" class="bo-empty">Loading…</td></tr>
+        <tr><td colspan="5" class="bo-empty">Loading…</td></tr>
       </tbody>
     </table>
     <div class="bo-pagination bo-pagination--bottom" id="ev-pagination-bottom"></div>

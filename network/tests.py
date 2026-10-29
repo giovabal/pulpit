@@ -2747,22 +2747,22 @@ class TemporalPrecomputeTests(TestCase):
         (key,) = [inst.key for inst in temporal_instances]
         self.assertEqual(key, "leiden_temporal_interslice_1_0")  # bare token: γ auto, not in the key
         per_year, plurality, palette, slice_resolutions, fit = results[key]
-        self.assertEqual(set(per_year), {2023, 2024})
+        self.assertEqual(set(per_year), {"2023", "2024"})  # period keys
         # The multislice fit summary: best of LEIDEN_RUNS runs, plus the absolute identity-link weight.
         self.assertEqual(fit["runs"], LEIDEN_RUNS)
         self.assertGreater(fit["interslice_weight"], 0.0)
         # Auto γ: each slice's own density — positive, one per slice.
-        self.assertEqual(set(slice_resolutions), {2023, 2024})
+        self.assertEqual(set(slice_resolutions), {"2023", "2024"})
         self.assertTrue(all(gamma > 0 for gamma in slice_resolutions.values()))
         pk1, pk2, pk3, pk4 = (str(c.pk) for c in self.channels)
         for pk in (pk1, pk2, pk3, pk4):
             # Same structure both years + identity coupling → stable ids, and the plurality
             # summary agrees with them.
-            self.assertEqual(per_year[2023][pk], per_year[2024][pk])
-            self.assertEqual(plurality[pk], per_year[2023][pk])
-        self.assertEqual(per_year[2023][pk1], per_year[2023][pk2])
-        self.assertEqual(per_year[2023][pk3], per_year[2023][pk4])
-        self.assertNotEqual(per_year[2023][pk1], per_year[2023][pk3])
+            self.assertEqual(per_year["2023"][pk], per_year["2024"][pk])
+            self.assertEqual(plurality[pk], per_year["2023"][pk])
+        self.assertEqual(per_year["2023"][pk1], per_year["2023"][pk2])
+        self.assertEqual(per_year["2023"][pk3], per_year["2023"][pk4])
+        self.assertNotEqual(per_year["2023"][pk1], per_year["2023"][pk3])
         for cid in plurality.values():
             self.assertIn(cid, palette)
 
@@ -2781,7 +2781,7 @@ class TemporalPrecomputeTests(TestCase):
         opts = cmd._resolve_options(options)
         results = cmd._compute_temporal_partitions(opts, list(opts.communities_strategy))
         (entry,) = results.values()
-        self.assertEqual(entry[3], {2023: 0.3, 2024: 0.3})
+        self.assertEqual(entry[3], {"2023": 0.3, "2024": 0.3})
         self.assertIn("γ=0.3", out.getvalue())
 
     def test_precompute_fails_with_single_year(self) -> None:
@@ -2861,10 +2861,10 @@ class CpmResolutionCommandTests(TestCase):
         year_map = dict.fromkeys(graph.nodes(), 1)
         temporal_results = {
             temporal_key: (
-                {2023: year_map, 2024: year_map},
+                {"2023": year_map, "2024": year_map},
                 year_map,
                 {1: (255, 0, 0)},
-                {2023: 0.11, 2024: 0.22},
+                {"2023": 0.11, "2024": 0.22},
                 {"runs": 3, "stability": 0.9, "interslice_weight": 0.05},
             )
         }
@@ -2895,7 +2895,7 @@ class CpmResolutionCommandTests(TestCase):
             strategies,
             options,
             temporal_results=temporal_results,
-            year=2024,
+            period_key="2024",
             resolutions_out=one_year,
         )
         self.assertEqual(one_year[temporal_key], 0.22)
@@ -3915,11 +3915,11 @@ class ParametersDocumentTests(TestCase):
             edges=2,
             community_resolutions={"leiden_cpm": 0.0123, "leiden_cpm_resolution_0_05": 0.05},
             year_resolutions={
-                2023: {"leiden_cpm": 0.02, "leiden_cpm_resolution_0_05": 0.05},
-                2024: {"leiden_cpm": 0.031},
+                "2023": {"leiden_cpm": 0.02, "leiden_cpm_resolution_0_05": 0.05},
+                "2024": {"leiden_cpm": 0.031},
             },
             measure_notes={"MODULEROLE": "Community basis = Leiden directed (`leiden_directed`, auto-resolved)"},
-            timeline_years=[2023, 2024],
+            timeline_periods=[("2023", "2023"), ("2024", "2024")],
         )
         fixed = collect_fixed_parameters(
             {"graph"}, [self._param("Cap | max", "graph", "a|b", "graph_builder.py: EDGE_WEIGHT_SCALE")]
@@ -3943,8 +3943,8 @@ class ParametersDocumentTests(TestCase):
         self.assertIn("| `LEIDEN_CPM` | Resolution γ = 0.0123 (the network's weighted edge density) |", text)
         self.assertIn("| `LEIDEN_CPM(resolution=0.05)` | Resolution γ = 0.05 |", text)
         # … and per timeline year, only for the auto-γ instance (the explicit one is constant).
-        self.assertIn("| Year | Leiden CPM |\n|---|---|\n| 2023 | 0.02 |\n| 2024 | 0.031 |", text)
-        self.assertIn("| Years exported | 2023–2024 (2 years) |", text)
+        self.assertIn("| Period | Leiden CPM |\n|---|---|\n| 2023 | 0.02 |\n| 2024 | 0.031 |", text)
+        self.assertIn("| Periods exported | 2023 → 2024 (2 periods) |", text)
         self.assertIn("**Not computed in this run:**", text)
         self.assertIn("robustness (`--robustness`)", text)
         self.assertNotIn("### Robustness", text)
@@ -4799,19 +4799,23 @@ class WriteCoordinationOutputsTests(TestCase):
             self.assertTrue(os.path.exists(os.path.join(data_dir, "channel_position.json")))
             self.assertFalse(os.path.exists(os.path.join(data_dir, "channel_position_3d.json")))
 
-    def test_timeline_json_lists_only_years_with_coordination(self) -> None:
+    def test_timeline_json_lists_only_periods_with_coordination(self) -> None:
+        def entry(key: str, **extra) -> dict:
+            return {"key": key, "label": key, "start": f"{key}-01-01", "end": f"{key}-12-31", **extra}
+
         entries = [
-            {"year": 2022, "has_coordination": True, "coordination_nodes": 4, "coordination_ties": 3},
-            {"year": 2023, "has_coordination": False},
-            {"year": 2024, "has_coordination": True, "coordination_nodes": 2, "coordination_ties": 1},
+            entry("2022", has_coordination=True, coordination_nodes=4, coordination_ties=3),
+            entry("2023", has_coordination=False),
+            entry("2024", has_coordination=True, coordination_nodes=2, coordination_ties=1),
         ]
         with tempfile.TemporaryDirectory() as tmp:
-            write_coordination_timeline_json(entries, tmp)
+            write_coordination_timeline_json(entries, tmp, step="year")
             with open(os.path.join(tmp, "data_coordination", "timeline.json")) as f:
                 timeline = json.load(f)
-        self.assertEqual([y["year"] for y in timeline["years"]], [2022, 2024])
-        self.assertTrue(all(y["has_graph"] for y in timeline["years"]))
-        self.assertEqual(timeline["years"][0]["edges"], 3)
+        self.assertEqual(timeline["step"], "year")
+        self.assertEqual([p["key"] for p in timeline["periods"]], ["2022", "2024"])
+        self.assertTrue(all(p["has_graph"] for p in timeline["periods"]))
+        self.assertEqual(timeline["periods"][0]["edges"], 3)
 
     def test_pages_written_from_real_templates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -6670,7 +6674,7 @@ class BanReplayTests(TestCase):
         rows = ban_replay_rows(self._graphs(), {2020: {"h"}}, n_random_runs=10, rng=np.random.default_rng(1))
         self.assertEqual(len(rows), 1)
         row = rows[0]
-        self.assertEqual((row["year"], row["n_closed"]), (2020, 1))
+        self.assertEqual((row["period"], row["n_closed"]), (2020, 1))  # int keys: calendar years, consecutive
         for m in ("wcc", "scc", "reach", "strength"):
             self.assertIn(f"predicted_{m}", row)
             self.assertIsNotNone(row[f"observed_{m}"])

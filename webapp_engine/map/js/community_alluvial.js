@@ -21,6 +21,8 @@ var NS = "http://www.w3.org/2000/svg";
 // ── Layout constants ────────────────────────────────────────────────────────────
 var BOX_W = 16; // community-box width (px)
 var MIN_COL_SPACING = 90; // minimum distance between columns; below the page-fit width it scrolls (px)
+// Approximate width (px) of one character of a 12px column label, for thinning the labels.
+var COL_LABEL_CHAR_W = 7;
 var PLOT_H = 560; // vertical plotting area for the tallest column (px) — total height = 600
 var GAP_V = 3; // vertical gap between stacked boxes in a column (px)
 var LABEL_MIN_H = 14; // a box gets a text label only when at least this tall (else: tooltip only)
@@ -346,6 +348,8 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
     // Boxes, with a horizontal label beside each tall-enough box. Labels are drawn with a white halo
     // (paint-order stroke) so they stay legible over the ribbons: the first column's labels sit in the
     // left margin, the last column's in the right margin, and any middle column's just right of its box.
+    var longestLabel = 0;
+    stages.forEach(function(st) { longestLabel = Math.max(longestLabel, String(st.colLabel).length); });
     stages.forEach(function(st, si) {
         var isFirst = (si === 0),
             isLast = (si === stages.length - 1);
@@ -384,6 +388,10 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
                 svg.appendChild(txt);
             }
         });
+        // Many narrow columns (a quarterly or monthly timeline): label every `labelStep`-th column so the
+        // labels never overlap; each column's full label stays in its boxes' tooltips.
+        var labelStep = Math.max(1, Math.ceil((longestLabel * COL_LABEL_CHAR_W + 8) / colSpacing));
+        if (si % labelStep !== 0 && si !== stages.length - 1) return;
         var cl = _svgEl("text", {
             x: st.x + BOX_W / 2,
             y: PAD_TOP + PLOT_H + 18,
@@ -608,7 +616,9 @@ function _buildFigure(stages, availWidth, ariaLabel, nodeById, initialKey) {
 // One strategy's year-over-year community flow. Returns a titled DOM section, or null when fewer
 // than two timeline years carry the strategy (nothing to connect). `availWidth` is the page width;
 // `nodeById` (channels.json nodes keyed by id) enriches the click-to-list channel cards.
-export function build_community_alluvial(strategyKey, yearComms, availWidth, nodeById, selectedKey) {
+// `overlapping` (sliding-window timeline): consecutive snapshots share most of their messages, so continuity
+// between columns is partly built in — the section says so.
+export function build_community_alluvial(strategyKey, yearComms, availWidth, nodeById, selectedKey, overlapping) {
     var stages = _yearStages(strategyKey, yearComms);
     if (stages.length < 2) return null;
 
@@ -616,14 +626,21 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth, nod
     section.className = "community-alluvial mt-2 mb-4";
     var title = document.createElement("p");
     title.className = "small fw-semibold mb-1";
-    title.textContent = "Community flow across years";
-    title.title = "Each column is a year's communities under this strategy; ribbons follow channels from " +
-        "one year's community into the next. Communities are re-detected (and re-labelled) every year, so " +
+    title.textContent = "Community flow across the timeline";
+    title.title = "Each column is a period's communities under this strategy; ribbons follow channels from " +
+        "one period's community into the next. Communities are re-detected (and re-labelled) every period, so " +
         "read continuity from the ribbons: one thick ribbon = a cohort held together, many thin ribbons = it " +
         "split. Click a ribbon to list the channels travelling along that flow.";
     section.appendChild(title);
+    if (overlapping) {
+        var note = document.createElement("p");
+        note.className = "small text-muted mb-1";
+        note.textContent = "The periods are overlapping sliding windows: consecutive columns share most of their " +
+            "messages, so part of the continuity between them is built in.";
+        section.appendChild(note);
+    }
     var fig = _buildFigure(stages, availWidth,
-        "Community flow across " + stages.length + " years for this strategy", nodeById, selectedKey);
+        "Community flow across " + stages.length + " periods for this strategy", nodeById, selectedKey);
     section.appendChild(fig);
     // Surface the open ribbon's identity on the section so a resize rebuild can re-open the same panel.
     section.alluvialSelectedKey = fig.alluvialSelectedKey;

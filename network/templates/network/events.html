@@ -1,0 +1,30 @@
+{% extends "network/_table_base.html" %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <h2 class="mb-0">Event impact</h2>
+  <div class="d-flex gap-2">
+    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
+    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+    <a href="{{ repository_url }}/blob/main/docs/event-impact.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+  </div>
+</div>
+<p class="text-muted small mb-3">
+  <strong>Did the network change when the event happened?</strong> For each event recorded in Manage → Events, the weekly
+  series around its date are fitted with a <em>segmented regression</em>: the <em>level change</em> is the jump at the
+  event's week, the <em>slope change</em> the bend in the trend after it. An event scoped to labels is tested as a
+  <em>comparative</em> series — the channels holding those labels against all the others — so a movement-wide shift does not
+  count as the event's effect. <em>p (HAC)</em> uses autocorrelation-robust standard errors; <em>p (placebo)</em> is the
+  share of other dates at which the same model finds an effect at least as large, and <em>q</em> corrects it for the number
+  of events and metrics tested. Counts are modelled on log(1 + count): a level change of 0.1 is about +10%.
+</p>
+<div id="ei-preamble" class="mb-3"></div>
+<div id="ei-overview" class="mb-4"></div>
+<div id="ei-events"></div>
+<script type="module" src="js/event_impact.js"></script>
+{% endblock %}

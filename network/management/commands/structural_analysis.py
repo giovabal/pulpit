@@ -20,6 +20,7 @@ from network import (
     coordination,
     dominance,
     dyads,
+    event_impact,
     exporter,
     graph_builder,
     interest_structural,
@@ -27,6 +28,7 @@ from network import (
     measures,
     mrqap,
     parameters,
+    periods,
     robustness,
     tables,
     vacancy_analysis,
@@ -247,35 +249,33 @@ def _date_window_filter(start_date: datetime.date | None, end_date: datetime.dat
     return out
 
 
-def _timeline_year_range(start_date: datetime.date | None, end_date: datetime.date | None) -> "tuple[int, int] | None":
-    """First/last calendar year of the timeline export, or ``None`` when no messages exist.
+def _timeline_periods(
+    step: str,
+    window_months: int | None,
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+) -> "list[periods.Period]":
+    """The timeline's periods (:func:`network.periods.build_periods`), ``[]`` when no messages exist.
 
-    localdate(): the per-year exports filter messages by TIME_ZONE calendar days
+    localdate(): the per-period exports filter messages by TIME_ZONE calendar days
     (``date__date__gte/lte``), so the bounds must use the same convention — a newest message in
-    the next *local* year past the UTC max would otherwise appear in no year export at all.
-    Shared by the timeline loop and the LEIDEN_TEMPORAL precompute so both walk identical years.
+    the next *local* period past the UTC max would otherwise appear in no period export at all.
+    Each period is clamped to --startdate/--enddate. Shared by the timeline loop, the LEIDEN_TEMPORAL
+    precompute and the ban replay so all three walk identical periods.
     """
-    year_agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
-    min_date, max_date = year_agg["min_date"], year_agg["max_date"]
+    agg = Message.objects.aggregate(min_date=Min("date"), max_date=Max("date"))
+    min_date, max_date = agg["min_date"], agg["max_date"]
     if min_date is None:
-        return None
-    min_local, max_local = timezone.localdate(min_date), timezone.localdate(max_date)
-    first_year = max(min_local.year, start_date.year) if start_date else min_local.year
-    last_year = min(max_local.year, end_date.year) if end_date else max_local.year
-    return first_year, last_year
-
-
-def _clamp_year_window(
-    year: int, window_start: datetime.date | None, window_end: datetime.date | None
-) -> tuple[datetime.date, datetime.date]:
-    """Clamp a calendar year to the user's --startdate/--enddate window (shared with the year loop)."""
-    start_date = datetime.date(year, 1, 1)
-    end_date = datetime.date(year, 12, 31)
-    if window_start and window_start > start_date:
-        start_date = window_start
-    if window_end and window_end < end_date:
-        end_date = window_end
-    return start_date, end_date
+        return []
+    first = timezone.localdate(min_date)
+    last = timezone.localdate(max_date)
+    if start_date and start_date > first:
+        first = start_date
+    if end_date and end_date < last:
+        last = end_date
+    if first > last:
+        return []
+    return periods.build_periods(step, window_months, first, last, clamp_start=start_date, clamp_end=end_date)
 
 
 def _annotate_ban_wave_labels(rob_payload: "dict | None", communities_data: dict) -> None:
@@ -400,7 +400,7 @@ class ResolvedOptions:
     leiden_cpm_resolution: float | None
     community_distribution_threshold: int
 
-    # Timeline
+    # Timeline: "none" | "year" | "quarter" | "month", and the sliding-window length in months (None = tumbling)
     timeline_step: str
 
     # Vacancy analysis
@@ -442,8 +442,22 @@ class ResolvedOptions:
     mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT
     do_dyadic_export: bool = False
 
+    # Event impact (interrupted time series around the recorded events)
+    do_event_impact: bool = False
+    event_window_weeks: int = event_impact.EVENT_WINDOW_WEEKS_DEFAULT
+
+    timeline_window: int | None = None
+
     # Export naming
     export_name: str = ""
+
+    @property
+    def do_timeline(self) -> bool:
+        return self.timeline_step in periods.STEPS
+
+    @property
+    def timeline_overlapping(self) -> bool:
+        return self.do_timeline and periods.overlapping(self.timeline_step, self.timeline_window)
 
     @property
     def do_vacancy(self) -> bool:
@@ -454,7 +468,7 @@ class ResolvedOptions:
         return self.do_coordination_2d or self.do_coordination_3d
 
     def to_options_dict(self) -> dict[str, Any]:
-        """Compatibility shim: ``_run_year_export`` still takes a plain dict."""
+        """Compatibility shim: ``_run_period_export`` still takes a plain dict."""
         return {
             "graph": self.do_graph,
             "graph_3d": self.do_3dgraph,
@@ -483,6 +497,7 @@ class ResolvedOptions:
             "include_private": self.include_private,
             "environment_depth": self.environment_depth,
             "timeline_step": self.timeline_step,
+            "timeline_window": self.timeline_window,
             "diffusion_window": self.diffusion_window,
             "leiden_cpm_resolution": self.leiden_cpm_resolution,
             "community_backbone_alpha": self.community_backbone_alpha,
@@ -508,6 +523,8 @@ class ResolvedOptions:
             "mrqap": self.do_mrqap,
             "mrqap_permutations": self.mrqap_permutations,
             "dyadic_export": self.do_dyadic_export,
+            "event_impact": self.do_event_impact,
+            "event_window_weeks": self.event_window_weeks,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -679,9 +696,10 @@ class Command(BaseCommand):
                 "LEIDEN_CPM takes a keyword resolution and may repeat: bare LEIDEN_CPM uses the network's "
                 "weighted edge density as γ (groups denser than the network as a whole); "
                 "LEIDEN_CPM(resolution=0.01) sets an explicit γ in --edge-weight-strategy units. "
-                "LEIDEN_TEMPORAL(resolution=…, interslice=…) couples the per-year timeline slices into one "
-                "temporal partition with stable community ids across years (Mucha et al. 2010; γ omitted = "
-                "each year's own density); requires --timeline-step year and is NOT included in ALL. "
+                "LEIDEN_TEMPORAL(resolution=…, interslice=…) couples the timeline's period slices into one "
+                "temporal partition with stable community ids across periods (Mucha et al. 2010; γ omitted = "
+                "each period's own density); requires --timeline-step (year, quarter or month) without "
+                "--timeline-window and is NOT included in ALL. "
                 "SBM (directed degree-corrected stochastic block model) takes mode=FLAT|NESTED, "
                 "weights=POISSON|EXPONENTIAL, refine=MCMC; SBM_ASSORTATIVE (Bayesian planted partition, "
                 "statistically supported cohesive communities) takes refine=MCMC; both require graph-tool "
@@ -986,7 +1004,8 @@ class Command(BaseCommand):
             help=(
                 "Write dyads/ — the citation network as data for network-modelling tools: actors.csv, edgelist.csv, "
                 "a timestamped events.csv for relational event models, dyads.csv (with --mrqap) and, with "
-                "--timeline-step year, one adjacency matrix per year for stochastic actor-oriented models. "
+                "--timeline-step, one adjacency matrix per period for stochastic actor-oriented models (not with "
+                "--timeline-window: overlapping windows are not panel waves). "
                 "See docs/dyadic-models.md."
             ),
         )
@@ -1082,12 +1101,24 @@ class Command(BaseCommand):
             "--timeline-step",
             dest="timeline_step",
             default=None,
-            choices=["none", "year"],
+            choices=["none", *periods.STEPS],
             help=(
-                "Repeat the export for each calendar year found in the data. "
-                "'none' disables this (default); 'year' generates per-year outputs "
-                "(graph_YYYY.html, channel_table_YYYY.html, data_YYYY/, etc.) alongside "
-                "the full-range export, and adds a Timeline section to the index."
+                "Repeat the export for each calendar year, quarter or month found in the data: one data_<period>/ "
+                "directory per period (data_2024/, data_2024Q1/, data_2024-03/) next to the full-range export, "
+                "and a period switcher on every map and table. 'none' disables this (default)."
+            ),
+        )
+        parser.add_argument(
+            "--timeline-window",
+            dest="timeline_window",
+            type=int,
+            default=None,
+            metavar="MONTHS",
+            help=(
+                "Turn the timeline into sliding windows: each period covers the trailing MONTHS months ending with "
+                "its step (e.g. --timeline-step quarter --timeline-window 12 = a 12-month snapshot every quarter). "
+                "A multiple of the step, larger than it. Overlapping snapshots rule out LEIDEN_TEMPORAL, the ban "
+                "replay and the dyadic export's waves, which need disjoint periods. Default: none (tumbling)."
             ),
         )
         # ── Vacancy analysis ──────────────────────────────────────────────────
@@ -1241,11 +1272,36 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Historical ban-replay validation: for each year with recorded channel closures "
-                "(Manage → Vacancies), remove them from the prior-year graph and compare the "
-                "predicted residual against the equal-q random baseline and the observed next-year "
-                "structure. Requires --timeline-step year. Writes a 'ban_replay' block into "
+                "Historical ban-replay validation: for each timeline period with recorded channel closures "
+                "(Manage → Vacancies), remove them from the previous period's graph and compare the "
+                "predicted residual against the equal-q random baseline and the observed next-period "
+                "structure. Requires --timeline-step without --timeline-window. Writes a 'ban_replay' block into "
                 "data/robustness.json."
+            ),
+        )
+        # ── Event impact (interrupted time series around recorded events) ─────
+        parser.add_argument(
+            "--event-impact",
+            dest="event_impact",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Test each recorded event (Manage → Events) for a change in the network's weekly activity: "
+                "segmented regression of level and slope at the event's week (a comparative design, affected "
+                "labels against the rest, when the event is scoped to labels), Newey–West standard errors and an "
+                "in-time placebo p-value. Writes data/event_impact.json; events.html with --html, "
+                "event_impact.xlsx with --xlsx, event_impact.csv with --csv. See docs/event-impact.md."
+            ),
+        )
+        parser.add_argument(
+            "--event-window-weeks",
+            dest="event_window_weeks",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Event impact: weeks on each side of the event's week the model is fitted on. "
+                f"Default: {event_impact.EVENT_WINDOW_WEEKS_DEFAULT}."
             ),
         )
         # ── Interest structural analysis (per-message C + D) ─────────────────
@@ -1501,7 +1557,7 @@ class Command(BaseCommand):
         communities_strategy: list[str],
         options: dict,
         temporal_results: "dict[str, tuple] | None" = None,
-        year: "int | None" = None,
+        period_key: "str | None" = None,
         resolutions_out: "dict[str, Any] | None" = None,
         fits_out: "dict[str, Any] | None" = None,
     ) -> tuple[dict[str, tuple], "nx.DiGraph | None"]:
@@ -1515,16 +1571,16 @@ class Command(BaseCommand):
         labels, not the graph, so the backbone never affects them.
 
         ``temporal_results`` carries the LEIDEN_TEMPORAL precompute
-        (``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions)}``, from
+        (``{instance.key: (per_period_maps, plurality_map, palette, slice_resolutions)}``, from
         ``_compute_temporal_partitions``); temporal instances are applied by lookup — the
-        plurality map on the full-range pass (``year=None``), the year's slice map on a
-        per-year pass — never via ``community.detect``.
+        plurality map on the full-range pass (``period_key=None``), the period's slice map on a
+        per-period pass — never via ``community.detect``.
 
         ``resolutions_out``, when given, receives the CPM resolution γ each CPM-family partition
         was computed with, keyed by partition key: a float for LEIDEN_CPM (its explicit γ, or the
         density of the graph it ran on — the backbone when one is set), and for LEIDEN_TEMPORAL
-        ``{"<year>": γ}`` over every slice on the full-range pass or the year's slice γ on a
-        per-year pass. The caller writes it to ``summary.json`` / the ``timeline.json`` entry.
+        ``{"<period key>": γ}`` over every slice on the full-range pass or the period's slice γ on a
+        per-period pass. The caller writes it to ``summary.json`` / the ``timeline.json`` entry.
 
         ``fits_out``, when given, receives each stochastic partition's fit summary, keyed by partition key
         (:func:`community.detect`'s ``diagnostics_out``: seeded fits run, best / worst objective, and the
@@ -1612,24 +1668,24 @@ class Command(BaseCommand):
                 # so a missing entry means the precompute was skipped upstream.
                 self.stdout.write(self.style.WARNING("skipped (no temporal precompute available)"))
                 continue
-            per_year_maps, plurality_map, community_palette, slice_resolutions, temporal_fit = entry
+            per_period_maps, plurality_map, community_palette, slice_resolutions, temporal_fit = entry
             if temporal_fit and fits_out is not None:
                 fits_out[instance.key] = temporal_fit
-            if year is None:
+            if period_key is None:
                 community_map = plurality_map
-                note = f" (plurality across {len(per_year_maps)} slices)"
+                note = f" (plurality across {len(per_period_maps)} slices)"
                 if resolutions_out is not None:
-                    resolutions_out[instance.key] = {str(y): g for y, g in sorted(slice_resolutions.items())}
+                    resolutions_out[instance.key] = {str(k): g for k, g in sorted(slice_resolutions.items())}
             else:
-                # A year that exports successfully was built with the same arguments as its
+                # A period that exports successfully was built with the same arguments as its
                 # temporal slice, so the map exists; guard anyway rather than KeyError.
-                community_map = per_year_maps.get(year, {})
-                if year in per_year_maps:
-                    note = f" (γ={slice_resolutions[year]:.4g})"
+                community_map = per_period_maps.get(period_key, {})
+                if period_key in per_period_maps:
+                    note = f" (γ={slice_resolutions[period_key]:.4g})"
                     if resolutions_out is not None:
-                        resolutions_out[instance.key] = slice_resolutions[year]
+                        resolutions_out[instance.key] = slice_resolutions[period_key]
                 else:
-                    note = " (year missing from temporal slices)"
+                    note = " (period missing from temporal slices)"
             community.apply_to_graph(graph, channel_dict, community_map, community_palette, instance)
             strategy_results[instance.key] = (community_map, community_palette)
             n_communities = len(set(community_map.values()))
@@ -1928,59 +1984,64 @@ class Command(BaseCommand):
 
         return measures_labels
 
+    def _build_period_graph(self, opts: ResolvedOptions, period: "periods.Period") -> "nx.DiGraph | None":
+        """The graph of one timeline period, built with exactly the arguments the period export uses
+        (``None`` when the period has no relationships), so temporal slices, replay graphs and period
+        exports always agree."""
+        try:
+            graph, _, _, _ = graph_builder.build_graph(
+                draw_dead_leaves=opts.draw_dead_leaves,
+                dead_leaves_color=opts.dead_leaves_color,
+                start_date=period.start,
+                end_date=period.end,
+                channel_types=opts.channel_types,
+                channel_sources=opts.channel_sources or None,
+                filter_labels=opts.filter_labels or None,
+                edge_weight_strategy=opts.edge_weight_strategy,
+                include_mentions=opts.include_mentions,
+                include_self_references=opts.include_self_references,
+                include_lost=opts.include_lost,
+                include_private=opts.include_private,
+                environment_depth=opts.environment_depth,
+                include_near_copies=opts.include_near_copies,
+                near_copy_threshold=opts.near_copy_threshold,
+                near_copy_min_tokens=opts.near_copy_min_tokens,
+                near_copy_shingle_size=opts.near_copy_shingle_size,
+            )
+        except ValueError:
+            return None  # a period without relationships — no slice, matching the period loop's skip
+        return graph if graph.nodes else None
+
     def _compute_temporal_partitions(
         self,
         opts: ResolvedOptions,
         temporal_instances: "list[community.StrategyInstance]",
     ) -> dict[str, tuple]:
-        """Precompute every LEIDEN_TEMPORAL instance over the per-year timeline slices.
+        """Precompute every LEIDEN_TEMPORAL instance over the timeline's period slices.
 
-        Builds one graph per timeline year with exactly the arguments ``_run_year_export`` will
-        use (so slices and year exports always agree), applies the ``--community-backbone-alpha``
-        filter when set (matching what per-year detection would see), and runs
-        :func:`community.detect_leiden_temporal` per instance. Returns
-        ``{instance.key: (per_year_maps, plurality_map, palette, slice_resolutions, fit)}`` for
-        ``_compute_communities`` to apply by lookup — ``slice_resolutions`` being ``{year: γ}``, the
+        Builds one graph per timeline period with exactly the arguments ``_run_period_export`` will
+        use (so slices and period exports always agree), applies the ``--community-backbone-alpha``
+        filter when set (matching what per-period detection would see), and runs
+        :func:`community.detect_leiden_temporal` per instance, slices in period order. Returns
+        ``{instance.key: (per_period_maps, plurality_map, palette, slice_resolutions, fit)}`` for
+        ``_compute_communities`` to apply by lookup — ``slice_resolutions`` being ``{period key: γ}``, the
         CPM resolution each slice ran with (the explicit γ, or that slice's own network density when
         the token omits it), and ``fit`` the multislice fit summary (best of the seeded runs, their
         agreement, and the absolute identity-link weight ``interslice_weight`` the relative ω resolved
-        to). Raises ``CommandError`` when fewer than two years yield a non-empty graph — the coupling
+        to). Raises ``CommandError`` when fewer than two periods yield a non-empty graph — the coupling
         needs at least two slices.
         """
-        year_range = _timeline_year_range(opts.start_date, opts.end_date)
-        years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
+        timeline = _timeline_periods(opts.timeline_step, opts.timeline_window, opts.start_date, opts.end_date)
         self.stdout.write("Temporal community slices")
-        year_graphs: dict[int, nx.DiGraph] = {}
-        for year in years:
-            start_date, end_date = _clamp_year_window(year, opts.start_date, opts.end_date)
-            try:
-                year_graph, _, _, _ = graph_builder.build_graph(
-                    draw_dead_leaves=opts.draw_dead_leaves,
-                    dead_leaves_color=opts.dead_leaves_color,
-                    start_date=start_date,
-                    end_date=end_date,
-                    channel_types=opts.channel_types,
-                    channel_sources=opts.channel_sources or None,
-                    filter_labels=opts.filter_labels or None,
-                    edge_weight_strategy=opts.edge_weight_strategy,
-                    include_mentions=opts.include_mentions,
-                    include_self_references=opts.include_self_references,
-                    include_lost=opts.include_lost,
-                    include_private=opts.include_private,
-                    environment_depth=opts.environment_depth,
-                    include_near_copies=opts.include_near_copies,
-                    near_copy_threshold=opts.near_copy_threshold,
-                    near_copy_min_tokens=opts.near_copy_min_tokens,
-                    near_copy_shingle_size=opts.near_copy_shingle_size,
-                )
-            except ValueError:
-                continue  # year without relationships — no slice, matching the year loop's skip
-            if not year_graph.nodes:
+        period_graphs: dict[str, nx.DiGraph] = {}
+        for period in timeline:
+            period_graph = self._build_period_graph(opts, period)
+            if period_graph is None:
                 continue
             if opts.community_backbone_alpha:
-                year_graph = disparity_filter(year_graph, opts.community_backbone_alpha)
-            year_graphs[year] = year_graph
-        self.stdout.write(f"- {len(year_graphs)} usable year slices ({', '.join(map(str, sorted(year_graphs)))})")
+                period_graph = disparity_filter(period_graph, opts.community_backbone_alpha)
+            period_graphs[period.key] = period_graph
+        self.stdout.write(f"- {len(period_graphs)} usable period slices ({', '.join(period_graphs)})")
         temporal_results: dict[str, tuple] = {}
         for instance in temporal_instances:
             self.stdout.write(f"- {instance.label} … ", ending="")
@@ -1989,8 +2050,8 @@ class Command(BaseCommand):
             resolution = community.instance_resolution(instance)
             fit: dict[str, Any] = {}
             try:
-                per_year, plurality, palette = community.detect_leiden_temporal(
-                    year_graphs,
+                per_period, plurality, palette = community.detect_leiden_temporal(
+                    period_graphs,
                     opts.community_palette,
                     resolution,
                     float(params.get("interslice", community.TEMPORAL_DEFAULT_INTERSLICE)),
@@ -2000,11 +2061,11 @@ class Command(BaseCommand):
             except ValueError as e:
                 raise CommandError(str(e)) from e
             # The γ each slice ran with — the same helper detect_leiden_temporal resolves them with.
-            slice_resolutions = community.temporal_slice_resolutions(year_graphs, resolution)
-            temporal_results[instance.key] = (per_year, plurality, palette, slice_resolutions, fit)
-            n_communities = len({cid for cmap in per_year.values() for cid in cmap.values()})
+            slice_resolutions = community.temporal_slice_resolutions(period_graphs, resolution)
+            temporal_results[instance.key] = (per_period, plurality, palette, slice_resolutions, fit)
+            n_communities = len({cid for cmap in per_period.values() for cid in cmap.values()})
             if resolution is None:
-                gammas = ", ".join(f"{y} {g:.4g}" for y, g in sorted(slice_resolutions.items()))
+                gammas = ", ".join(f"{k} {g:.4g}" for k, g in sorted(slice_resolutions.items()))
                 note = f"γ = each slice's network density: {gammas}"
             else:
                 note = f"γ={resolution:.4g}"
@@ -2012,72 +2073,54 @@ class Command(BaseCommand):
                 note += f"; identity-link weight {fit['interslice_weight']:.4g}"
             if fit.get("stability") is not None:
                 note += f"; best of {fit['runs']} fits, stability {fit['stability']:.2f}"
-            self.stdout.write(f"{n_communities} communities across {len(per_year)} slices ({note})")
+            self.stdout.write(f"{n_communities} communities across {len(per_period)} slices ({note})")
             self.stdout.flush()
         return temporal_results
 
     def _compute_ban_replay(self, opts: ResolvedOptions) -> list[dict]:
-        """Build the per-year timeline graphs and run the ban-replay validation.
+        """Build the timeline's period graphs and run the ban-replay validation.
 
-        Rebuilds one graph per timeline year (same build args as the year loop
+        Rebuilds one graph per timeline period (same build args as the period loop
         and the temporal precompute, backbone-filtered with ``robustness_alpha``
         so the replay attacks the same skeleton the main battery does) and pairs
-        the analyst's :class:`ChannelVacancy` closures — bucketed by
-        ``closure_date.year`` — against them. Returns
+        the analyst's :class:`ChannelVacancy` closures — bucketed into the period
+        containing ``closure_date`` — against them, the pre- and post-wave graphs
+        being the previous and next periods. Returns
         :func:`network.robustness.ban_replay_rows`' output (empty when no wave
-        year has a usable pre-graph).
+        period has a usable pre-graph).
         """
         from webapp.models import ChannelVacancy
 
-        year_range = _timeline_year_range(opts.start_date, opts.end_date)
-        years = list(range(year_range[0], year_range[1] + 1)) if year_range else []
-        year_graphs: dict[int, nx.DiGraph] = {}
-        for year in years:
-            start_date, end_date = _clamp_year_window(year, opts.start_date, opts.end_date)
-            try:
-                year_graph, _, _, _ = graph_builder.build_graph(
-                    draw_dead_leaves=opts.draw_dead_leaves,
-                    dead_leaves_color=opts.dead_leaves_color,
-                    start_date=start_date,
-                    end_date=end_date,
-                    channel_types=opts.channel_types,
-                    channel_sources=opts.channel_sources or None,
-                    filter_labels=opts.filter_labels or None,
-                    edge_weight_strategy=opts.edge_weight_strategy,
-                    include_mentions=opts.include_mentions,
-                    include_self_references=opts.include_self_references,
-                    include_lost=opts.include_lost,
-                    include_private=opts.include_private,
-                    environment_depth=opts.environment_depth,
-                    include_near_copies=opts.include_near_copies,
-                    near_copy_threshold=opts.near_copy_threshold,
-                    near_copy_min_tokens=opts.near_copy_min_tokens,
-                    near_copy_shingle_size=opts.near_copy_shingle_size,
-                )
-            except ValueError:
-                continue
-            if not year_graph.nodes:
+        timeline = _timeline_periods(opts.timeline_step, opts.timeline_window, opts.start_date, opts.end_date)
+        period_graphs: dict[str, nx.DiGraph] = {}
+        for period in timeline:
+            period_graph = self._build_period_graph(opts, period)
+            if period_graph is None:
                 continue
             if opts.robustness_alpha and 0 < opts.robustness_alpha < 1:
-                year_graph = disparity_filter(year_graph, opts.robustness_alpha)
-            year_graphs[year] = year_graph
+                period_graph = disparity_filter(period_graph, opts.robustness_alpha)
+            period_graphs[period.key] = period_graph
 
-        closures_by_year: dict[int, set] = {}
+        closures_by_period: dict[str, set] = {}
         for channel_id, closure_date in ChannelVacancy.objects.values_list("channel_id", "closure_date"):
-            closures_by_year.setdefault(closure_date.year, set()).add(str(channel_id))
+            period = periods.period_of(timeline, closure_date)
+            if period is not None:
+                closures_by_period.setdefault(period.key, set()).add(str(channel_id))
 
         rng = np.random.default_rng(opts.robustness_seed)
         return robustness.ban_replay_rows(
-            year_graphs,
-            closures_by_year,
+            period_graphs,
+            closures_by_period,
+            order=[p.key for p in timeline],
+            labels={p.key: p.label for p in timeline},
             n_random_runs=opts.robustness_runs,
             reach_sample=opts.robustness_sample,
             rng=rng,
         )
 
-    def _run_year_export(
+    def _run_period_export(
         self,
-        year: int,
+        period: "periods.Period",
         root_target: str,
         options: dict,
         measure_instances: "list[measures.MeasureInstance]",
@@ -2116,8 +2159,6 @@ class Command(BaseCommand):
         coordination_min_events: int = 3,
         coord_reference_positions: dict | None = None,
         coord_reference_positions_3d: dict | None = None,
-        window_start: datetime.date | None = None,
-        window_end: datetime.date | None = None,
         temporal_results: "dict[str, tuple] | None" = None,
         do_dominance: bool = False,
         dominance_min_events: int = 3,
@@ -2126,12 +2167,13 @@ class Command(BaseCommand):
         mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT,
         do_dyadic_export: bool = False,
     ) -> dict | None:
-        """Run the full export pipeline for a single calendar year and write per-year files."""
-        # Clamp the calendar year to the user's --startdate/--enddate window so a
-        # windowed run does not emit graphs for the out-of-window part of a year.
-        start_date, end_date = _clamp_year_window(year, window_start, window_end)
+        """Run the full export pipeline for one timeline period and write its ``data_<key>/`` files.
 
-        self.stdout.write(f"\n  {year} … ", ending="")
+        ``period`` is already clamped to --startdate/--enddate (:func:`_timeline_periods`), so a windowed
+        run never emits graphs for the out-of-window part of a period."""
+        start_date, end_date = period.start, period.end
+
+        self.stdout.write(f"\n  {period.label} … ", ending="")
         self.stdout.flush()
 
         try:
@@ -2165,10 +2207,10 @@ class Command(BaseCommand):
         n_nodes, n_edges = len(graph.nodes), len(graph.edges)
         self.stdout.write(f"{n_nodes} nodes, {n_edges} edges")
 
-        # γ each CPM-family partition of this year ran with — a bare LEIDEN_CPM resolves it from this
-        # year's graph — returned in the timeline.json entry next to the year's node/edge counts.
+        # γ each CPM-family partition of this period ran with — a bare LEIDEN_CPM resolves it from this
+        # period's graph — returned in the timeline.json entry next to the period's node/edge counts.
         year_resolutions: dict[str, Any] = {}
-        # Fit summary (best of N seeded fits, their agreement) of each stochastic partition of this year.
+        # Fit summary (best of N seeded fits, their agreement) of each stochastic partition of this period.
         year_fits: dict[str, Any] = {}
         strategy_results, detection_graph = self._compute_communities(
             graph,
@@ -2177,7 +2219,7 @@ class Command(BaseCommand):
             communities_strategy,
             options,
             temporal_results=temporal_results,
-            year=year,
+            period_key=period.key,
             resolutions_out=year_resolutions,
             fits_out=year_fits,
         )
@@ -2319,7 +2361,7 @@ class Command(BaseCommand):
 
             if options.get("near_copy_edges"):
                 exporter.write_near_copies_csv(graph, graph_data, os.path.join(tmp_dir, "data"))
-            year_data_dst = os.path.join(root_target, f"data_{year}")
+            year_data_dst = os.path.join(root_target, f"data_{period.key}")
             if os.path.exists(year_data_dst):
                 shutil.rmtree(year_data_dst)
             shutil.move(os.path.join(tmp_dir, "data"), year_data_dst)
@@ -2370,7 +2412,7 @@ class Command(BaseCommand):
                     coordination.coordination_measures_labels(),
                     root_target,
                     communities_data=communities_data,
-                    dir_name=f"data_coordination_{year}",
+                    dir_name=f"data_coordination_{period.key}",
                 )
                 has_coordination = True
                 coordination_nodes = len(coord_graph_data["nodes"])
@@ -2379,7 +2421,7 @@ class Command(BaseCommand):
         # Per-year XLSX files are not written individually; data is returned so the
         # caller can assemble a single multi-sheet workbook for each table type.
         return {
-            "year": year,
+            **period.as_dict(),
             "nodes": n_nodes,
             "edges": n_edges,
             "has_graph": True,
@@ -2401,7 +2443,7 @@ class Command(BaseCommand):
             "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
             "_xlsx_dominance_data": dominance_payload if (do_xlsx and dominance_payload is not None) else None,
             "_label_mixing": (community_table_data or {}).get("label_mixing"),
-            "_dyad_wave": dyads.wave_of(year, graph) if do_dyadic_export else None,
+            "_dyad_wave": dyads.wave_of(period.key, graph) if do_dyadic_export else None,
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
@@ -2546,13 +2588,26 @@ class Command(BaseCommand):
                 raise CommandError(f"--robustness-alpha-grid: values must be in [0, 1); got {a}")
             robustness_alpha_grid.append(a)
 
-        # Ban-replay needs the per-year timeline graphs; warn + skip if the
-        # timeline is off rather than silently producing an empty block.
+        # Timeline: a step (year / quarter / month) and an optional sliding window in months.
+        timeline_step = _o("timeline_step", "none") or "none"
+        timeline_window = _o("timeline_window", None) or None
+        if timeline_window is not None and timeline_step == "none":
+            raise CommandError("--timeline-window needs --timeline-step (year, quarter or month).")
+        if timeline_step != "none":
+            try:
+                periods.validate(timeline_step, timeline_window)
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
+        disjoint_timeline = timeline_step != "none" and not periods.overlapping(timeline_step, timeline_window)
+
+        # Ban-replay needs consecutive, disjoint timeline graphs; warn + skip without them
+        # rather than silently producing an empty block.
         do_robustness_replay = bool(_o("robustness_replay", False))
-        if do_robustness_replay and _o("timeline_step", "") != "year":
+        if do_robustness_replay and not disjoint_timeline:
             self.stdout.write(
                 self.style.WARNING(
-                    "--robustness-replay needs --timeline-step year; ban-replay validation will be skipped."
+                    "--robustness-replay needs a timeline of disjoint periods (--timeline-step without "
+                    "--timeline-window); ban-replay validation will be skipped."
                 )
             )
             do_robustness_replay = False
@@ -2588,13 +2643,13 @@ class Command(BaseCommand):
                 f"--community-backbone-alpha must be 0 (off) or in (0, 1); got {community_backbone_alpha!r}."
             )
 
-        # LEIDEN_TEMPORAL couples the per-year timeline slices — without a year timeline there is
-        # nothing to couple, so fail before any heavy work rather than in the export phase.
-        timeline_step = _o("timeline_step", "none")
-        if any(i.name == "LEIDEN_TEMPORAL" for i in communities_strategy) and timeline_step != "year":
+        # LEIDEN_TEMPORAL couples consecutive timeline slices — without a timeline of disjoint periods there
+        # is nothing to couple, so fail before any heavy work rather than in the export phase.
+        if any(i.name == "LEIDEN_TEMPORAL" for i in communities_strategy) and not disjoint_timeline:
             raise CommandError(
-                "LEIDEN_TEMPORAL requires --timeline-step year: it couples the per-year timeline "
-                "slices into one temporal partition. Enable the timeline, or drop the strategy."
+                "LEIDEN_TEMPORAL requires a timeline of disjoint periods (--timeline-step year, quarter or month, "
+                "without --timeline-window): it couples consecutive slices into one temporal partition. Enable the "
+                "timeline, or drop the strategy."
             )
 
         # Coordination analysis — plain numeric parameters of an opt-in feature.
@@ -2654,6 +2709,11 @@ class Command(BaseCommand):
             do_mrqap=_o("mrqap", False),
             mrqap_permutations=max(int(_o("mrqap_permutations", mrqap.MRQAP_PERMUTATIONS_DEFAULT) or 0), 0),
             do_dyadic_export=_o("dyadic_export", False),
+            do_event_impact=_o("event_impact", False),
+            event_window_weeks=max(
+                int(_o("event_window_weeks", event_impact.EVENT_WINDOW_WEEKS_DEFAULT) or 0),
+                event_impact.MIN_WEEKS_PER_SIDE,
+            ),
             seo=_o("seo", False),
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
@@ -2688,6 +2748,7 @@ class Command(BaseCommand):
             leiden_cpm_resolution=leiden_cpm_resolution,
             community_distribution_threshold=_o("community_distribution_threshold", 0),
             timeline_step=timeline_step,
+            timeline_window=timeline_window,
             selected_vacancy_measures=selected_vacancy_measures,
             vacancy_months_before=_o("vacancy_months_before", 12),
             vacancy_months_after=_o("vacancy_months_after", 24),
@@ -2720,7 +2781,7 @@ class Command(BaseCommand):
 
     def _handle(self, *args: Any, **options: Any) -> None:
         opts = self._resolve_options(options)
-        # Patch options dict so _run_year_export and _compute_communities (which still
+        # Patch options dict so _run_period_export and _compute_communities (which still
         # take a plain dict) see the resolved values.
         options.update(opts.to_options_dict())
 
@@ -2749,6 +2810,7 @@ class Command(BaseCommand):
                 opts.do_dominance,
                 opts.do_mrqap,
                 opts.do_dyadic_export,
+                opts.do_event_impact,
             )
         ):
             self.stdout.write(
@@ -2923,6 +2985,8 @@ class Command(BaseCommand):
             # interest_structural.html imports ./js/utils.js and css/tables.css from
             # the copied map assets, like the vacancy/robustness pages above.
             or opts.do_interest_structural
+            # events.html draws its charts with the same copied JS/CSS.
+            or (opts.do_event_impact and opts.do_html)
             # coordination.html / coordination3d.html reuse the map viewer JS/CSS.
             or opts.do_coordination
         )
@@ -3144,6 +3208,31 @@ class Command(BaseCommand):
             )
             self.stdout.write("- vacancy_analysis.html")
 
+        if opts.do_event_impact:
+            self.stdout.write("\nEvent impact … ", ending="")
+            self.stdout.flush()
+            ei_payload = event_impact.compute_event_impact(
+                graph,
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                environment_depth=opts.environment_depth,
+                include_mentions=opts.include_mentions,
+                window_weeks=opts.event_window_weeks,
+            )
+            n_events = len(ei_payload["events"])
+            self.stdout.write(f"{n_events} event(s) over {len(ei_payload['weeks'])} weeks")
+            exporter.write_event_impact_json(ei_payload, root_target)
+            if opts.do_html:
+                tables.write_event_impact_html(
+                    output_filename=os.path.join(root_target, "events.html"), seo=opts.seo, project_title=project_title
+                )
+            if opts.do_xlsx:
+                tables.write_event_impact_xlsx(
+                    ei_payload, os.path.join(root_target, "event_impact.xlsx"), project_title=project_title
+                )
+            if opts.do_csv:
+                exporter.write_event_impact_csv(ei_payload, root_target)
+
         if opts.do_interest_structural:
             self.stdout.write("\nInterest structural")
             int_community = _pick_interest_community_strategy(opts.communities_strategy)
@@ -3225,7 +3314,7 @@ class Command(BaseCommand):
                 self.stdout.flush()
                 replay_rows = self._compute_ban_replay(opts)
                 global_rob_payload["ban_replay"] = replay_rows or None
-                self.stdout.write(f"{len(replay_rows)} wave year(s)" if replay_rows else "no usable wave years")
+                self.stdout.write(f"{len(replay_rows)} wave period(s)" if replay_rows else "no usable wave periods")
             _annotate_ban_wave_labels(global_rob_payload, communities_data)
             os.makedirs(root_target, exist_ok=True)
             exporter.write_robustness_json(global_rob_payload, root_target)
@@ -3329,16 +3418,20 @@ class Command(BaseCommand):
                 )
 
         timeline_entries: list[dict] = []
-        if opts.timeline_step == "year":
-            year_range = _timeline_year_range(opts.start_date, opts.end_date)
-            if year_range is None:
+        timeline: list[periods.Period] = []
+        if opts.do_timeline:
+            timeline = _timeline_periods(opts.timeline_step, opts.timeline_window, opts.start_date, opts.end_date)
+            if not timeline:
                 self.stdout.write(self.style.WARNING("\nTimeline: no messages found, skipping."))
             else:
-                first_year, last_year = year_range
-                self.stdout.write(f"\nTimeline export ({first_year}–{last_year})")
-                for yr in range(first_year, last_year + 1):
-                    entry = self._run_year_export(
-                        yr,
+                window = f", {opts.timeline_window}-month windows" if opts.timeline_window else ""
+                self.stdout.write(
+                    f"\nTimeline export ({len(timeline)} periods by {opts.timeline_step}{window}: "
+                    f"{timeline[0].label} → {timeline[-1].label})"
+                )
+                for period in timeline:
+                    entry = self._run_period_export(
+                        period,
                         root_target,
                         options,
                         opts.measure_instances,
@@ -3380,8 +3473,6 @@ class Command(BaseCommand):
                         coordination_min_events=opts.coordination_min_events,
                         coord_reference_positions=coord_reference_positions,
                         coord_reference_positions_3d=coord_reference_positions_3d,
-                        window_start=opts.start_date,
-                        window_end=opts.end_date,
                         temporal_results=temporal_results,
                         do_dominance=opts.do_dominance,
                         dominance_min_events=opts.dominance_min_events,
@@ -3393,13 +3484,19 @@ class Command(BaseCommand):
                     if entry is not None:
                         timeline_entries.append(entry)
                 if timeline_entries:
-                    tables.write_timeline_json(timeline_entries, graph_dir=root_target)
+                    timeline_header = {
+                        "step": opts.timeline_step,
+                        "window_months": opts.timeline_window,
+                        "overlapping": opts.timeline_overlapping,
+                        "events": event_impact.timeline_events(timeline, opts.timeline_step),
+                    }
+                    tables.write_timeline_json(timeline_entries, graph_dir=root_target, **timeline_header)
                     if coordination_written and any(e.get("has_coordination") for e in timeline_entries):
-                        exporter.write_coordination_timeline_json(timeline_entries, root_target)
+                        exporter.write_coordination_timeline_json(timeline_entries, root_target, **timeline_header)
 
         if opts.do_csv and community_table_data is not None and community_table_data.get("label_mixing"):
             mixing_periods = [("All", community_table_data["label_mixing"])]
-            mixing_periods += [(str(e["year"]), e["_label_mixing"]) for e in timeline_entries if e.get("_label_mixing")]
+            mixing_periods += [(e["key"], e["_label_mixing"]) for e in timeline_entries if e.get("_label_mixing")]
             self.stdout.write("- label_flows.csv")
             exporter.write_label_flows_csv(mixing_periods, root_target)
 
@@ -3414,12 +3511,16 @@ class Command(BaseCommand):
                 environment_depth=opts.environment_depth,
                 include_mentions=opts.include_mentions,
                 design=mrqap_design if isinstance(mrqap_design, mrqap.Design) else None,
-                waves=[e["_dyad_wave"] for e in timeline_entries if e.get("_dyad_wave")] or None,
+                # Waves are consecutive, disjoint panels: overlapping sliding windows would count a tie twice.
+                waves=None
+                if opts.timeline_overlapping
+                else [e["_dyad_wave"] for e in timeline_entries if e.get("_dyad_wave")] or None,
+                waves_skipped=opts.timeline_overlapping,
             )
 
         if opts.do_xlsx:
             year_xlsx = [
-                (e["year"], e["_xlsx_graph_data"], e["_xlsx_community_data"])
+                (e["key"], e["_xlsx_graph_data"], e["_xlsx_community_data"])
                 for e in timeline_entries
                 if e.get("_xlsx_graph_data") is not None
             ]
@@ -3452,7 +3553,7 @@ class Command(BaseCommand):
             )
             if opts.do_robustness and global_rob_payload is not None:
                 robustness_years = [
-                    (e["year"], e["_xlsx_robustness_data"])
+                    (e["key"], e["_xlsx_robustness_data"])
                     for e in timeline_entries
                     if e.get("_xlsx_robustness_data") is not None
                 ] or None
@@ -3465,7 +3566,7 @@ class Command(BaseCommand):
                 )
             if opts.do_dominance and global_dominance_payload is not None:
                 dominance_years = [
-                    (e["year"], e["_xlsx_dominance_data"])
+                    (e["key"], e["_xlsx_dominance_data"])
                     for e in timeline_entries
                     if e.get("_xlsx_dominance_data") is not None
                 ] or None
@@ -3507,6 +3608,8 @@ class Command(BaseCommand):
             include_dominance_html=opts.do_dominance and opts.do_html,
             include_dominance_xlsx=opts.do_dominance and opts.do_xlsx,
             include_dyads=opts.do_dyadic_export,
+            include_event_impact_html=opts.do_event_impact and opts.do_html,
+            include_event_impact_xlsx=opts.do_event_impact and opts.do_xlsx,
         )
 
         near_copy_count: int | None = None
@@ -3517,9 +3620,9 @@ class Command(BaseCommand):
         # The reproducibility record: run options as resolved + the fixed parameters of the parts that
         # ran. Written inside the staging dir, before summary.json, so it is published atomically.
         run_facts.near_copies = near_copy_count
-        run_facts.timeline_years = [e["year"] for e in timeline_entries]
+        run_facts.timeline_periods = [(e["key"], e["label"]) for e in timeline_entries]
         run_facts.year_resolutions = {
-            e["year"]: e["community_resolutions"] for e in timeline_entries if e.get("community_resolutions")
+            e["key"]: e["community_resolutions"] for e in timeline_entries if e.get("community_resolutions")
         }
         self.stdout.write(f"- {parameters.PARAMETERS_FILENAME}")
         try:

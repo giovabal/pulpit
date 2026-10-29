@@ -201,12 +201,28 @@
   </div>
   {% endif %}
 
+  {% if include_event_impact_html or include_event_impact_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="card-title h5"><i class="bi bi-calendar-event text-secondary me-2" aria-hidden="true"></i>Event impact</h3>
+        <p class="card-text text-muted small">For each recorded event: did the network's weekly activity change at that date — its level or its trend — beyond what the weeks before predict, tested against the same change at other dates.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if include_event_impact_html %}<a href="events.html" class="btn btn-outline-primary btn-sm">Open analysis</a>{% endif %}
+          {% if include_event_impact_xlsx %}<a href="event_impact.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="{{ repository_url }}/blob/main/docs/event-impact.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if include_dyads %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
       <div class="card-body">
         <h3 class="card-title h5"><i class="bi bi-diagram-2 text-secondary me-2" aria-hidden="true"></i>Dyadic export</h3>
-        <p class="card-text text-muted small">The citation network as data for network-modelling tools: actors and their labels, every tie, every timestamped citation event and, with a year timeline, one network per year.</p>
+        <p class="card-text text-muted small">The citation network as data for network-modelling tools: actors and their labels, every tie, every timestamped citation event and, with a timeline of disjoint periods, one network per period.</p>
         <div class="d-flex gap-2 flex-wrap">
           <a href="dyads/README.md" class="btn btn-outline-primary btn-sm">File guide</a>
           <a href="{{ repository_url }}/blob/main/docs/dyadic-models.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>

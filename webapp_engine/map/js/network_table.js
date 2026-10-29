@@ -1,12 +1,15 @@
 import { strategy_label as _strat_label } from './labels.js';
 import { build_year_nav } from './year_nav.js';
 import { mini_hist as _mini_hist } from './charts.js';
-import { fetchJson, fetchJsonOrNull, arrMin, arrMax } from './utils.js';
+import { fetchJson, fetchJsonOrNull, arrMin, arrMax, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 import { render_label_mixing, render_mrqap } from './label_mixing.js';
 
 var _dd = window.DATA_DIR || "data/";
-var _ym = _dd.match(/data_(\d{4,})\//);
-var _base_dd = _ym ? "data/" : _dd;
+// A compare page (data_2/) shows the full range only: it carries no timeline of its own.
+var _base_dd = _dd;
+var _no_timeline = isCompareDataDir(_dd);
+var _tl_events = [];
+var _tl_overlapping = false;
 
 // ── Sparkline data — loaded once at startup, never changes ─────────────────────
 var _all_map = {},
@@ -18,7 +21,7 @@ var _ty = [],
     _has_tl = false;
 
 // ── Per-year state — updated on every year switch ──────────────────────────────
-var _current_year = _ym ? parseInt(_ym[1]) : "all";
+var _current_year = "all";
 var _nodes = [],
     _measures = [],
     _labelOf = {};
@@ -37,7 +40,7 @@ var _scatterChart = null,
 // ── Data fetching ──────────────────────────────────────────────────────────────
 function _fetch_year(year) {
     if (_cache[year]) return Promise.resolve(_cache[year]);
-    var dd = (year === "all") ? _base_dd : ("data_" + year + "/");
+    var dd = (year === "all") ? _base_dd : periodDataDir("data/", year);
     return Promise.all([
         fetchJson(dd + "network_metrics.json"),
         fetchJson(dd + "channels.json"),
@@ -543,7 +546,7 @@ function _switch_year(year) {
     if (year === _current_year || _loading) return;
     _current_year = year;
     _loading = true;
-    build_year_nav(_ty, _current_year, _switch_year);
+    build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     _fetch_year(year).then(function(d) {
         _nodes = d.channels.nodes;
         _measures = d.channels.measures || [];
@@ -578,9 +581,12 @@ Promise.all([
     _measures = channels.measures || [];
     _measures.forEach(function(m) { _labelOf[m[0]] = m[1]; });
 
-    _ty = timeline ? (timeline.years || []).filter(function(y) { return y.has_network_html; }) : [];
+    var _tl = readTimeline(_no_timeline ? null : timeline);
+    _tl_events = _tl.events;
+    _tl_overlapping = _tl.overlapping;
+    _ty = _tl.periods.filter(function(y) { return y.has_network_html; });
     _has_tl = _ty.length > 0;
-    _all_years = _ty.map(function(y) { return y.year; });
+    _all_years = _ty.map(function(y) { return y.key; });
 
     if (all_metrics && all_metrics.summary_rows)
         all_metrics.summary_rows.forEach(function(r) { _all_map[r.label] = r.value; });
@@ -589,8 +595,8 @@ Promise.all([
 
     return (_has_tl ?
         Promise.all(_ty.map(function(y) {
-            return fetchJson("data_" + y.year + "/network_metrics.json")
-                .then(function(d) { return { year: y.year, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
+            return fetchJson(periodDataDir("data/", y.key) + "network_metrics.json")
+                .then(function(d) { return { year: y.key, rows: d.summary_rows, mod_rows: d.modularity_rows || [] }; })
                 .catch(function() { return null; });
         })).then(function(list) { return list.filter(Boolean); }) :
         Promise.resolve([])
@@ -604,7 +610,7 @@ Promise.all([
             });
         });
 
-        if (_has_tl) build_year_nav(_ty, _current_year, _switch_year);
+        if (_has_tl) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
         _render_preamble(meta);
         _render_summary(data);
         _render_modularity(data);
