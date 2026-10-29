@@ -310,6 +310,41 @@ def _build_edge_list(
     return edge_list
 
 
+def forward_messages_qs(
+    channel_ids: list[int],
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+    environment_depth: int | None,
+) -> QuerySet[Message]:
+    """The messages ``build_graph`` counts as forwards between ``channel_ids``: alive, inside the date window
+    and inside their channel's in-target periods (``channel_cutoff_q``), forwarded from another channel of the
+    set. Shared with the dyadic export's event list (:mod:`network.dyads`) so both read the same messages."""
+    return Message.objects.alive().filter(
+        make_date_q(start_date, end_date),
+        channel_cutoff_q(environment_depth=environment_depth),
+        channel_id__in=channel_ids,
+        forwarded_from_id__in=channel_ids,
+    )
+
+
+def reference_rows_qs(
+    channel_ids: list[int],
+    start_date: datetime.date | None,
+    end_date: datetime.date | None,
+    environment_depth: int | None,
+) -> QuerySet:
+    """The ``Message.references`` rows ``build_graph`` counts as mentions between ``channel_ids`` (same gates as
+    :func:`forward_messages_qs`; a mention of the channel the message forwards is the forward itself, not a
+    second citation). Shared with :mod:`network.dyads`."""
+    return Message.references.through.objects.filter(
+        channel_cutoff_q("message__channel", "message__date", environment_depth=environment_depth),
+        make_date_q(start_date, end_date, field="message__date"),
+        message__is_lost=False,
+        channel_id__in=channel_ids,
+        message__channel_id__in=channel_ids,
+    ).exclude(message__forwarded_from=F("channel"))
+
+
 def build_graph(
     draw_dead_leaves: bool = False,
     start_date: datetime.date | None = None,
@@ -516,8 +551,7 @@ def build_graph(
 
     forwarded_counts = {
         (item["channel_id"], item["forwarded_from_id"]): item["total"]
-        for item in Message.objects.alive()
-        .filter(date_q, cutoff_q, channel_id__in=channel_ids, forwarded_from_id__in=channel_ids)
+        for item in forward_messages_qs(channel_ids, start_date, end_date, environment_depth)
         .values("channel_id", "forwarded_from_id")
         .annotate(total=Count("id"))
     }
@@ -525,14 +559,7 @@ def build_graph(
     reference_counts = (
         {
             (item["message__channel_id"], item["channel_id"]): item["total"]
-            for item in references_through.objects.filter(
-                channel_cutoff_q("message__channel", "message__date", environment_depth=environment_depth),
-                make_date_q(start_date, end_date, field="message__date"),
-                message__is_lost=False,
-                channel_id__in=channel_ids,
-                message__channel_id__in=channel_ids,
-            )
-            .exclude(message__forwarded_from=F("channel"))
+            for item in reference_rows_qs(channel_ids, start_date, end_date, environment_depth)
             .values("message__channel_id", "channel_id")
             .annotate(total=Count("id"))
         }

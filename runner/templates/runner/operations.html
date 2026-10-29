@@ -511,6 +511,16 @@
                   <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Tunable: Dominance min. citations, Dominance permutations (Linked parameters)"></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="mrqap" {% if ad.SA_MRQAP %}checked{% endif %}>Dyadic regression
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="MRQAP regression of every ordered channel pair (a section of the network table, an MRQAP sheet in Excel, data/mrqap.json): does one channel cite another, and how often, given whether they share a label in each label group, whether the other cites back, and how active and how followed each side is. p-values by permutation (double semi-partialling). See docs/dyadic-models.md."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: MRQAP permutations (Linked parameters)"></i>
+                </label>
+                <label class="ops-flag"><input type="checkbox" name="dyadic_export" {% if ad.SA_DYADIC_EXPORT %}checked{% endif %}>Dyadic export
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Write dyads/: actors and their labels, every tie, every timestamped citation event, the regression's dyad table and, with the year timeline, one network per year — ready for ERGM, relational event models and RSiena. See docs/dyadic-models.md."></i>
+                </label>
                 <label class="ops-flag"><input type="checkbox" name="consensus_matrix" {% if ad.SA_CONSENSUS_MATRIX %}checked{% endif %}>Consensus matrix
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Generate the consensus matrix page (consensus_matrix.html): how consistently each pair of channels ends up in the same group across all the automatic grouping methods."></i>
@@ -536,6 +546,13 @@
                        title="Number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values (each dyad keeps its counts, which side is on top is random). More = finer p-values, slower; cost grows with the square of the ranked channels. 0 skips the tests. Default: 200."></i>
                   </label>
                   <input type="number" name="dominance_permutations" id="dominance_permutations" placeholder="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" value="{{ ad.SA_DOMINANCE_PERMUTATIONS }}" min="0" max="10000" data-width="sm">
+                </div>
+                <div class="ops-param">
+                  <label for="mrqap_permutations">MRQAP permutations
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Random relabellings of the channels per predictor behind each dyadic-regression p-value; the smallest p is 1/(N+1). 0 = coefficients only. Default: 1000."></i>
+                  </label>
+                  <input type="number" name="mrqap_permutations" id="mrqap_permutations" placeholder="{{ ad.SA_MRQAP_PERMUTATIONS }}" value="{{ ad.SA_MRQAP_PERMUTATIONS }}" min="0" max="100000" data-width="sm">
                 </div>
               </div>
             </fieldset>
@@ -979,6 +996,8 @@
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="DEGCORRELATION" {% if "DEGCORRELATION" in ad.sa_stat_groups %}checked{% endif %}>Degree correlation<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Measures whether heavily-connected channels tend to link up with other heavily-connected channels, or with quieter ones."></i></label>
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CENTRALIZATION" {% if "CENTRALIZATION" in ad.sa_stat_groups %}checked{% endif %}>Centralization<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="How concentrated each measure is in a few channels versus spread evenly across them. Computed from the node measures, so it adds no extra time."></i></label>
               <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="CONTENT" {% if "CONTENT" in ad.sa_stat_groups %}checked{% endif %}>Content<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Network-wide originality (share of posts that are original rather than forwarded) and amplification (forwards received per message). Requires database queries."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="HOMOPHILY" {% if "HOMOPHILY" in ad.sa_stat_groups %}checked{% endif %}>Homophily<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="For every partition label group (e.g. Nation): how strongly ties stay inside a label (assortativity, E-I), each label's inbreeding homophily corrected for its size, which labels export or import content, and the label-to-label citation flows — each tested against random relabellings of the channels. A few seconds."></i></label>
+              <label class="ops-flag"><input type="checkbox" name="network_stat_groups" value="SIGNIFICANCE" data-skip-all {% if "SIGNIFICANCE" in ad.sa_stat_groups %}checked{% endif %}>Significance<i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Test the reciprocity, clustering, transitivity, degree CV, component, assortativity and centralisation figures of the other selected groups against random graphs: same degrees, same degrees and reciprocated ties, and a random network of the same size. Adds z and p columns to the network table. Slow (minutes); not ticked by All."></i></label>
             </div>
           </fieldset>
 
@@ -1788,6 +1807,8 @@ function showToast(msg, type) {
     var fieldset = btn.closest('fieldset');
     if (!fieldset) return;
     fieldset.querySelectorAll('input[type="checkbox"][name="' + name + '"]').forEach(function (cb) {
+      // An opt-in box (data-skip-all, e.g. the slow Significance stat group) is cleared by None, never set by All.
+      if (selectAll && cb.dataset.skipAll !== undefined) return;
       cb.checked = selectAll;
       cb.dispatchEvent(new Event('change', { bubbles: true }));
     });
@@ -2093,6 +2114,9 @@ function showToast(msg, type) {
         setCheck('dominance',    opts.dominance);
         setVal('dominance_min_events', opts.dominance_min_events != null ? opts.dominance_min_events : '');
         setVal('dominance_permutations', opts.dominance_permutations != null ? opts.dominance_permutations : '');
+        setCheck('mrqap',            opts.mrqap);
+        setVal('mrqap_permutations', opts.mrqap_permutations != null ? opts.mrqap_permutations : '');
+        setCheck('dyadic_export',    opts.dyadic_export);
         setCheck('draw_dead_leaves', opts.draw_dead_leaves);
         setCheck('timeline_step',    opts.timeline_step === 'year');
 

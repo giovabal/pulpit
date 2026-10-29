@@ -91,6 +91,9 @@ STRUCTURAL_DEFAULTS: dict = {
         "structural_similarity": False,
         "behavioural_equivalence": False,
         "dominance": False,
+        # Dyadic regression (MRQAP) and the dyads/ export bundle for external network-modelling tools.
+        "mrqap": False,
+        "dyadic_export": False,
         "consensus_matrix": False,
         "draw_dead_leaves": False,
         "timeline_step": "none",
@@ -125,6 +128,8 @@ STRUCTURAL_DEFAULTS: dict = {
         # the number of orientation-shuffled permutations behind the hierarchy p-values.
         "dominance_min_events": 3,
         "dominance_permutations": 200,
+        # MRQAP: channel relabellings per predictor behind each dyadic-regression p-value.
+        "mrqap_permutations": 1000,
     },
     "layouts": {
         "layouts_2d": [],

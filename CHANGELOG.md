@@ -1,9 +1,11 @@
 # Changelog
 ## [0.29] - To be announced
-*Methodology review of the measures and community detection. Bots detection. Emoji packs.*
+*Methodology review of the measures and community detection, with homophily and significance. Bots detection. Emoji packs.*
 
 ### New features
 - **Custom emoji are kept, drawn, and tracked by pack.** The crawler now records the custom emoji in a post's text and its custom-emoji reactions, looks up each emoji's pack, and — with *Sticker download* on — stores each emoji's file once. Post cards draw them in place, animated TGS and webm ones included, and so are animated stickers, previously only a download link. A new **Emoji packs** page (from the channel list) shows which packs and which emoji in-target channels use, with own posts counted apart from forwards, which carry their source's emoji. Each emoji has its own page: uses per month, the channels using it and the posts drawing it. Channel × pack and channel × emoji CSVs export the figures, and each channel page lists its own packs. Packs can be marked in target in **Manage → Emoji** (all start out of target), and every list and CSV filters by it. A boosted group's own emoji pack is recorded with its channel details and shown on its page and the pack's. `--refresh-messages-stats` fills in messages crawled earlier. See [Workflow § Custom emoji](docs/workflow.md#custom-emoji).
+
+- **Inference for label groups and the whole network.** Raw E-I and modularity read a big nation as inward-looking just because it is big, and whole-network figures had no reference point. A new `HOMOPHILY` stat group tests every partition label group against random relabellings of its channels: assortativity, inbreeding homophily corrected for each label's size, a net-exporter index and a label → label citation-flow heat map with BH-corrected cells. The opt-in `SIGNIFICANCE` group sets reciprocity, clustering, assortativity, components and centralisation against three random-graph baselines. `--mrqap` fits a dyadic regression of who cites whom — same label, reverse tie, activity, audience — with MRQAP permutation p-values, and `--dyadic-export` writes `dyads/` (actors, ties, timestamped citation events, yearly waves) for ERGM, relational event models and RSiena. See [Homophily](docs/whole-network-statistics.md#homophily) and [Dyadic models](docs/dyadic-models.md).
 
 ### Improvements
 - **Community partitions are the best of many fits, and record how stable they are.** Every stochastic detector used to report a single seeded run, and on real data single runs disagree: Leiden seeds agreed at a median ARI of 0.68. Leiden-family strategies and Louvain now keep the best of 50 seeded runs, and the SBM family the lowest description length of 10 refined fits. Each partition's fit summary — runs, best and worst objective, and *stability* (how far the other fits agree with the reported partition) — goes to `summary.json` (`community_fits`), `PARAMETERS.md` and the run log. See [Best of many fits](docs/community-detection.md#best-of-many-fits-and-how-stable-the-answer-is).
@@ -23,6 +25,7 @@
 - **Structural equivalence no longer penalises mutual pairs.** The tie between the two channels compared is left out of their profiles.
 - **HITS converges on large graphs.** It stopped at 100 iterations without saying so; with dead leaves it needed about 300. It now iterates up to 1,000 times and warns if it still has not converged.
 - **Amplification is empty, not 0, for a channel with no messages** in the analysis, like content originality.
+- **An Excel export without community strategies no longer fails** on an empty community workbook.
 
 ### Backward incompatibility
 - **New exports will not match earlier ones.** Every partition, module role and several network statistics change with the fixes above.

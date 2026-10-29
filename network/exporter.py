@@ -711,6 +711,7 @@ def write_summary_json(
     near_copies: int | None = None,
     community_resolutions: dict[str, Any] | None = None,
     community_fits: dict[str, Any] | None = None,
+    homophily: list[dict[str, Any]] | None = None,
 ) -> None:
     """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
 
@@ -725,6 +726,9 @@ def write_summary_json(
     ``worst`` objective value, ``stability`` (mean Adjusted Rand Index of the other fits to the reported
     partition) and ``identical_share``; LEIDEN_TEMPORAL's adds the absolute ``interslice_weight``. The
     per-year summaries travel in each ``data/timeline.json`` entry.
+    ``homophily`` — per partition label group, the headline label-mixing tests of the full range
+    (nominal assortativity on ties and citations, E-I over labelled ties, each with its label-permutation
+    null mean, z and p; ``network.label_mixing``); ``[]`` when the HOMOPHILY group was not computed.
     """
     _OPTION_KEYS = (
         "graph",
@@ -788,6 +792,9 @@ def write_summary_json(
         "dominance",
         "dominance_min_events",
         "dominance_permutations",
+        "mrqap",
+        "mrqap_permutations",
+        "dyadic_export",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -807,11 +814,32 @@ def write_summary_json(
         "near_copies": near_copies,
         "community_resolutions": community_resolutions or {},
         "community_fits": community_fits or {},
+        "homophily": homophily or [],
         "options": opts,
     }
     os.makedirs(graph_dir, exist_ok=True)
     with open(os.path.join(graph_dir, "summary.json"), "w") as f:
         f.write(json.dumps(payload, indent=2))
+
+
+def write_mrqap_json(payload: dict, graph_dir: str) -> None:
+    """Write data/mrqap.json from the :func:`network.mrqap.compute_mrqap` payload."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "mrqap.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload)))
+
+
+def write_label_flows_csv(periods: list[tuple[str, dict[str, Any]]], output_dir: str) -> None:
+    """Write label_flows.csv: the label → label citation flows of every partition label group, one row per
+    label pair with a tie observed or expected, for the full range (``All``) and each timeline year."""
+    from network.label_mixing import FLOW_COLUMNS, flow_rows
+
+    with open(os.path.join(output_dir, "label_flows.csv"), "w", newline="", encoding="utf-8") as f:
+        writer = _csv.writer(f)
+        writer.writerow(FLOW_COLUMNS)
+        for period, payload in periods:
+            writer.writerows(flow_rows(payload, period))
 
 
 def write_vacancy_analysis_json(payload: dict, graph_dir: str) -> None:

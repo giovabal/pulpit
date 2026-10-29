@@ -19,11 +19,13 @@ from network import (
     community_stats,
     coordination,
     dominance,
+    dyads,
     exporter,
     graph_builder,
     interest_structural,
     layout,
     measures,
+    mrqap,
     parameters,
     robustness,
     tables,
@@ -435,6 +437,11 @@ class ResolvedOptions:
     dominance_min_events: int = 3
     dominance_permutations: int = 200
 
+    # Dyadic regression (MRQAP) and the dyadic export bundle for external network-modelling tools
+    do_mrqap: bool = False
+    mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT
+    do_dyadic_export: bool = False
+
     # Export naming
     export_name: str = ""
 
@@ -498,6 +505,9 @@ class ResolvedOptions:
             "dominance": self.do_dominance,
             "dominance_min_events": self.dominance_min_events,
             "dominance_permutations": self.dominance_permutations,
+            "mrqap": self.do_mrqap,
+            "mrqap_permutations": self.mrqap_permutations,
+            "dyadic_export": self.do_dyadic_export,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -691,7 +701,10 @@ class Command(BaseCommand):
             help=(
                 "Comma-separated list of whole-network stat groups to compute (requires --html, --xlsx, or "
                 "--consensus-matrix). Available: SIZE, PATHS, COHESION, COMPONENTS, DEGCORRELATION, "
-                "CENTRALIZATION, CONTENT, ALL. "
+                "CENTRALIZATION, CONTENT, HOMOPHILY (assortativity, inbreeding homophily and citation flows of "
+                "every partition label group, tested against label permutations), SIGNIFICANCE (z and p of the "
+                "other selected groups' statistics against three random-graph baselines — minutes, not seconds; "
+                "never implied by ALL), ALL. "
                 "Default: none — pass ALL explicitly."
             ),
         )
@@ -939,6 +952,42 @@ class Command(BaseCommand):
                 "Dominance: a directed link needs at least N citation events to be statistically tested, a "
                 "satellite tie to count and a channel's own dependence to be assessed (links below the floor "
                 "are listed with no p/q and can never be validated). Default: 3."
+            ),
+        )
+        parser.add_argument(
+            "--mrqap",
+            dest="mrqap",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Fit the dyadic regression of citation ties (data/mrqap.json; a section of the network table with "
+                "--html, an MRQAP sheet with --xlsx): does channel i cite channel j (and how often) given the same "
+                "label in each partition label group, the reverse tie, and both sides' activity and audience. "
+                "p-values by MRQAP with double semi-partialling (Dekker, Krackhardt & Snijders 2007). "
+                "See docs/dyadic-models.md."
+            ),
+        )
+        parser.add_argument(
+            "--mrqap-permutations",
+            dest="mrqap_permutations",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "MRQAP: channel relabellings per predictor behind each p-value (the smallest p is 1/(N+1); "
+                f"0 = coefficients only). Default: {mrqap.MRQAP_PERMUTATIONS_DEFAULT}."
+            ),
+        )
+        parser.add_argument(
+            "--dyadic-export",
+            dest="dyadic_export",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Write dyads/ — the citation network as data for network-modelling tools: actors.csv, edgelist.csv, "
+                "a timestamped events.csv for relational event models, dyads.csv (with --mrqap) and, with "
+                "--timeline-step year, one adjacency matrix per year for stochastic actor-oriented models. "
+                "See docs/dyadic-models.md."
             ),
         )
         parser.add_argument(
@@ -2073,6 +2122,9 @@ class Command(BaseCommand):
         do_dominance: bool = False,
         dominance_min_events: int = 3,
         dominance_permutations: int = 200,
+        do_mrqap: bool = False,
+        mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT,
+        do_dyadic_export: bool = False,
     ) -> dict | None:
         """Run the full export pipeline for a single calendar year and write per-year files."""
         # Clamp the calendar year to the user's --startdate/--enddate window so a
@@ -2213,6 +2265,10 @@ class Command(BaseCommand):
                 detection_graph=detection_graph,
                 environment_depth=options.get("environment_depth"),
             )
+            if do_mrqap:
+                year_mrqap = mrqap.compute_mrqap(graph, graph_data, permutations=mrqap_permutations)
+                community_table_data["mrqap"] = year_mrqap
+                exporter.write_mrqap_json(year_mrqap, tmp_dir)
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=tmp_dir)
 
@@ -2344,6 +2400,8 @@ class Command(BaseCommand):
             "_xlsx_community_data": community_table_data if do_xlsx else None,
             "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
             "_xlsx_dominance_data": dominance_payload if (do_xlsx and dominance_payload is not None) else None,
+            "_label_mixing": (community_table_data or {}).get("label_mixing"),
+            "_dyad_wave": dyads.wave_of(year, graph) if do_dyadic_export else None,
         }
 
     def _resolve_options(self, options: dict[str, Any]) -> ResolvedOptions:
@@ -2404,8 +2462,11 @@ class Command(BaseCommand):
         except ValueError as exc:
             raise CommandError(f"--measures: {exc}") from exc
         raw_network_stat_groups = _parse_csv(_o("network_stat_groups", ""))
+        # ALL expands to every group but SIGNIFICANCE, which stays opt-in: "ALL,SIGNIFICANCE" asks for both.
         network_stat_groups = (
-            measures.ALL_NETWORK_STAT_GROUPS if "ALL" in raw_network_stat_groups else raw_network_stat_groups
+            [*measures.ALL_NETWORK_STAT_GROUPS, *(g for g in raw_network_stat_groups if g == "SIGNIFICANCE")]
+            if "ALL" in raw_network_stat_groups
+            else raw_network_stat_groups
         )
         channel_types_raw = options["channel_types"]
         # No --channel-types on a bare CLI run resolves to the built-in default rather than
@@ -2590,6 +2651,9 @@ class Command(BaseCommand):
             do_dominance=_o("dominance", False),
             dominance_min_events=max(int(_o("dominance_min_events", 3) or 0), 1),
             dominance_permutations=max(int(_o("dominance_permutations", 200) or 0), 0),
+            do_mrqap=_o("mrqap", False),
+            mrqap_permutations=max(int(_o("mrqap_permutations", mrqap.MRQAP_PERMUTATIONS_DEFAULT) or 0), 0),
+            do_dyadic_export=_o("dyadic_export", False),
             seo=_o("seo", False),
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
@@ -2683,6 +2747,8 @@ class Command(BaseCommand):
                 opts.do_interest_structural,
                 opts.do_coordination,
                 opts.do_dominance,
+                opts.do_mrqap,
+                opts.do_dyadic_export,
             )
         ):
             self.stdout.write(
@@ -2907,6 +2973,23 @@ class Command(BaseCommand):
             community_backbone_alpha=opts.community_backbone_alpha,
         )
 
+        # Dyadic regression: computed before the community metrics so the network table's JSON and XLSX carry it.
+        mrqap_design: "mrqap.Design | str | None" = None
+        mrqap_payload: dict | None = None
+        if opts.do_mrqap:
+            self.stdout.write("- dyadic regression (MRQAP) … ", ending="")
+            self.stdout.flush()
+            mrqap_design = mrqap.build_design(graph, graph_data)
+            mrqap_payload = mrqap.compute_mrqap(
+                graph, graph_data, permutations=opts.mrqap_permutations, design=mrqap_design
+            )
+            if mrqap_payload["skipped"]:
+                self.stdout.write(self.style.WARNING(f"skipped ({mrqap_payload['skipped']})"))
+            else:
+                self.stdout.write("done")
+            exporter.write_mrqap_json(mrqap_payload, root_target)
+
+        community_table_data: dict | None = None
         need_community_metrics = opts.do_html or opts.do_xlsx or opts.do_consensus_matrix
         if need_community_metrics:
             self.stdout.write("- community metrics")
@@ -2939,6 +3022,8 @@ class Command(BaseCommand):
                 detection_graph=detection_graph,
                 environment_depth=opts.environment_depth,
             )
+            if mrqap_payload is not None:
+                community_table_data["mrqap"] = mrqap_payload
             tables.write_network_metrics_json(community_table_data, strategies, graph_dir=root_target)
             tables.write_community_metrics_json(community_table_data, strategies, graph_dir=root_target)
         if opts.do_html:
@@ -3301,6 +3386,9 @@ class Command(BaseCommand):
                         do_dominance=opts.do_dominance,
                         dominance_min_events=opts.dominance_min_events,
                         dominance_permutations=opts.dominance_permutations,
+                        do_mrqap=opts.do_mrqap,
+                        mrqap_permutations=opts.mrqap_permutations,
+                        do_dyadic_export=opts.do_dyadic_export,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
@@ -3308,6 +3396,26 @@ class Command(BaseCommand):
                     tables.write_timeline_json(timeline_entries, graph_dir=root_target)
                     if coordination_written and any(e.get("has_coordination") for e in timeline_entries):
                         exporter.write_coordination_timeline_json(timeline_entries, root_target)
+
+        if opts.do_csv and community_table_data is not None and community_table_data.get("label_mixing"):
+            mixing_periods = [("All", community_table_data["label_mixing"])]
+            mixing_periods += [(str(e["year"]), e["_label_mixing"]) for e in timeline_entries if e.get("_label_mixing")]
+            self.stdout.write("- label_flows.csv")
+            exporter.write_label_flows_csv(mixing_periods, root_target)
+
+        if opts.do_dyadic_export:
+            self.stdout.write(f"- {dyads.DYADS_DIR}/")
+            dyads.write_dyadic_bundle(
+                root_target,
+                graph,
+                graph_data,
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                environment_depth=opts.environment_depth,
+                include_mentions=opts.include_mentions,
+                design=mrqap_design if isinstance(mrqap_design, mrqap.Design) else None,
+                waves=[e["_dyad_wave"] for e in timeline_entries if e.get("_dyad_wave")] or None,
+            )
 
         if opts.do_xlsx:
             year_xlsx = [
@@ -3398,6 +3506,7 @@ class Command(BaseCommand):
             include_coordination_3d=coordination_written and opts.do_coordination_3d,
             include_dominance_html=opts.do_dominance and opts.do_html,
             include_dominance_xlsx=opts.do_dominance and opts.do_xlsx,
+            include_dyads=opts.do_dyadic_export,
         )
 
         near_copy_count: int | None = None
@@ -3426,6 +3535,7 @@ class Command(BaseCommand):
             near_copies=near_copy_count,
             community_resolutions=community_resolutions,
             community_fits=community_fits,
+            homophily=(community_table_data or {}).get("network_summary", {}).get("homophily"),
         )
 
         _atomic_publish(root_target, _final_target)

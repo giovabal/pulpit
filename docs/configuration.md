@@ -193,6 +193,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles over third channels) | `false` |
 | `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (Gower similarity of behavioural-measure profiles) | `false` |
 | `outputs.dominance` | Run the dominance analysis: David's score ranking and roles per channel, two-sided dependence per connected pair with hypergeometric validation, SpringRank / transitivity / consistency tests of the whole network ([docs](dominance.md)) | `false` |
+| `outputs.mrqap` | Fit the dyadic regression of citation ties — same label per partition group, reverse tie, activity and audience — with MRQAP permutation p-values ([docs](dyadic-models.md)) | `false` |
+| `outputs.dyadic_export` | Write `dyads/`: actors, ties, timestamped citation events and yearly waves for ERGM, relational event models and RSiena ([docs](dyadic-models.md)) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
 | `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"` or `"year"` | `"none"` |
@@ -215,6 +217,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `computation.diffusion_window` | Reaction window in days for `DIFFUSIONLAG`. `0` = no window. | `30` |
 | `computation.dominance_min_events` | Dominance: minimum citation events for a directed link to be statistically tested, for a satellite tie to count and for a channel's own dependence to be assessed (links below the floor are listed but never validated). | `3` |
 | `computation.dominance_permutations` | Dominance: number of orientation-shuffled null networks behind the SpringRank, triangle-transitivity and rank-consistency p-values; `0` skips the tests. Cost grows with the square of the ranked channels. | `200` |
+| `computation.mrqap_permutations` | MRQAP: channel relabellings per predictor behind each dyadic-regression p-value (the smallest p is 1/(N+1)); `0` = coefficients only. | `1000` |
 
 ## `[interest]`
 
@@ -241,7 +244,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`. Use `["ALL"]` for every group. See [Whole-network statistics](whole-network-statistics.md). | `[]` |
+| `network_stats.groups` | Whole-network statistic groups. Available: `SIZE`, `PATHS`, `COHESION`, `COMPONENTS`, `DEGCORRELATION`, `CENTRALIZATION`, `CONTENT`, `HOMOPHILY`, `SIGNIFICANCE`. Use `["ALL"]` for every group but `SIGNIFICANCE` (random-graph tests, minutes on a large graph), which must be listed explicitly. See [Whole-network statistics](whole-network-statistics.md). | `[]` |
 
 ## `[edges]`
 

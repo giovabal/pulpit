@@ -25,8 +25,10 @@ Metrics are organized into selectable groups. Controlled via `--network-stat-gro
 | `DEGCORRELATION` | Directed assortativity (4 coefficients) | Low |
 | `CENTRALIZATION` | Freeman centralisation per measure, Mean Burt's Constraint | Low–Medium |
 | `CONTENT` | Content Originality, Amplification Ratio | Low |
+| `HOMOPHILY` | Per partition label group: assortativity, E-I against its expectation, inbreeding homophily and net-exporter index per label, label → label citation flows — all tested against label permutations | Low (seconds) |
+| `SIGNIFICANCE` | z and p of the other selected groups' tie statistics against three random-graph baselines | High (minutes); **not included in `ALL`** |
 
-> Deselect `PATHS` and `COHESION` to skip the expensive O(n·m) path-length and eigendecomposition calculations on large networks.
+> Deselect `PATHS` and `COHESION` to skip the expensive O(n·m) path-length and eigendecomposition calculations on large networks. `SIGNIFICANCE` must be named explicitly (`--network-stat-groups ALL,SIGNIFICANCE`); the panel's *All* button leaves it unticked.
 
 ---
 
@@ -209,6 +211,57 @@ The total number of forwards received by in-target channels, divided by the tota
 
 ---
 
+## HOMOPHILY
+
+*Do citations stay inside the analyst's labels — nation, region, organisation — more than the labels' sizes predict?*
+
+The raw readings of that question mislead whenever the labels differ in size. A label holding half the channels keeps about half its ties inside by pure chance, so its E-I looks inward-looking; a label of one channel cannot cite inside at all, so its E-I is +1 by construction. The `HOMOPHILY` group answers the question for **every partition label group** (no `LABELGROUP<id>` strategy has to be selected) with statistics that carry their own chance baseline, and tests each against one null: **label permutation**. The labels are shuffled over the labelled channels while the graph stays fixed (the node-label permutation of the quadratic assignment procedure; Hubert & Schultz 1976; Krackhardt 1988; the test Krackhardt & Stern 1988 propose for E-I). Group sizes and every channel's ties are kept, so all the citations of a channel move together: the null controls for activity, popularity and the overdispersion of citation counts, and asks only whether *which label a channel carries* predicts whom it cites. 10,000 permutations per group, two-sided add-one p (floor ≈ 0.0002), Benjamini–Hochberg q within the group.
+
+Only **observed** channels holding a label in the group take part, and only the ties between two of them (dead leaves' own citations are never read, self-citations are left out). Ties to unlabelled or out-of-target channels are reported separately as the *out-of-scope share* — not counted as "external", as the community-table E-I counts them.
+
+### Assortativity and E-I (network table, *Homophily* rows)
+
+- **Nominal assortativity r** (Newman 2003, directed form), on ties and on citations: (Σ e_ii − Σ a_i b_i) / (1 − Σ a_i b_i) on the label mixing matrix. 1 = every tie stays inside its label, 0 = labels unrelated to ties, negative = ties prefer other labels. Unlike modularity it is normalised by its own maximum, so it compares across groups with different numbers of labels.
+- **E-I index, labelled ties**, next to its **expected value** under the permutations. The gap between the two is the size-corrected reading.
+
+The rows sit in the *Homophily* group of the whole-network table; their *vs label permutation* column gives z and p.
+
+### Per label (network table, *Homophily by label group* section)
+
+- **Inbreeding homophily** IH = (H − w) / (1 − w) (Coleman 1958; Currarini, Jackson & Pin 2009), for the label's **sent** ties ("citing": the share of its citations of labelled channels that stay inside) and its **received** ties ("cited"). The baseline w = (n − 1)/(N − 1) is the share of partners inside the label when they are chosen regardless of label. 0 = no preference beyond its size, 1 = cites only its own label, negative = avoids it. Undefined for a one-channel label.
+- **Net-exporter index** (cross-label ties received − given) / (received + given): positive = channels of other labels cite this one more than it cites them — the label exports its content.
+- **Out-of-scope share**: the share of the label's citations that go to channels holding no label in the group, or to out-of-target channels. Out-of-target sources are in the graph only with dead leaves drawn (`--draw-dead-leaves`) or the environment admitted (`--environment-depth`); without them the share counts only in-target channels unlabelled in the group, often none.
+
+### Citation flows between labels
+
+The label × label matrix of ties (and citations), its permutation expectation and the observed / expected ratio. A cell is tested when its observed or expected tie count reaches 3; the tested cells of a group share one Benjamini–Hochberg correction. In the heat map (rows cite columns) red cells are over-represented flows, blue under-represented ones; `*` marks q < 0.05. The same data is in the *Label flows* sheet of `network_table.xlsx` and in `label_flows.csv` (with `--csv`), one row per label pair, for the full range and every timeline year.
+
+**In practice:** on a transnational network labelled by nation, a clearly positive r with a strongly negative E-I-minus-expected says national scenes are real; per-label IH then tells *which* nations are inward-looking once their size is discounted, the net-exporter index which ones supply content across borders, and the significant off-diagonal flows which national pairs are tied beyond chance. A small label's statistics rest on few ties — read its q, not its point value. For a model that holds activity, audience and reciprocity fixed while estimating the same-nation effect, see the [dyadic regression](dyadic-models.md).
+
+**References:** Coleman, J.S. (1958) "Relational analysis: the study of social organizations with survey methods." *Human Organization* 17(4). Currarini, S., Jackson, M.O. & Pin, P. (2009) "An economic model of friendship: homophily, minorities, and segregation." *Econometrica* 77(4). [doi:10.3982/ECTA7528](https://doi.org/10.3982/ECTA7528). Hubert, L.J. & Schultz, J. (1976) "Quadratic assignment as a general data analysis strategy." *British Journal of Mathematical and Statistical Psychology* 29. Krackhardt, D. (1988) "Predicting with networks: nonparametric multiple regression analysis of dyadic data." *Social Networks* 10(4). Newman, M.E.J. (2003) "Mixing patterns in networks." *Physical Review E* 67, 026126. [doi:10.1103/PhysRevE.67.026126](https://doi.org/10.1103/PhysRevE.67.026126).
+
+---
+
+## SIGNIFICANCE
+
+*Is the network more reciprocal, more clustered, more centralised than a random network would be?*
+
+A whole-network statistic on its own says little: sparse citation graphs have low clustering and heavy-tailed ones high centralisation, whatever their organisation. With `SIGNIFICANCE` selected, every statistic of the other selected groups that a random graph can move is set against three baselines, 100 random graphs each, and the network table gains a column per baseline showing **z (p)** (two-sided add-one p, floor ≈ 0.02; hover for the null mean).
+
+| Baseline | What the random graphs keep | Reads as |
+| :-- | :-- | :-- |
+| **vs configuration** | every channel's in/out-degree exactly, in/out-strength approximately (Maslov–Sneppen rewiring + strength fitting — the null of the [robustness analysis](robustness-analysis.md)) | structure beyond the degree sequence |
+| **vs reciprocal** | the same, plus every channel's reciprocated ties (Squartini & Garlaschelli 2011) | structure beyond the degrees *and* mutual citation — e.g. clustering that reciprocity alone does not explain |
+| **vs random digraph** | only the number of channels and ties: ties placed uniformly, each from an observed channel (dead leaves never cite) | the baseline of the degree statistics the two rewirings hold fixed |
+
+Tested: reciprocity and average clustering (`PATHS`), transitivity and the in/out-degree CV (`COHESION`), the largest WCC and SCC fractions (`COMPONENTS`), the four degree assortativities (`DEGCORRELATION`), and the centralisation of PageRank, HITS and in/out-degree centrality (`CENTRALIZATION`, for the measures selected). A statistic a baseline holds fixed by construction — the degree CV and degree centralisation under both rewirings, reciprocity under the reciprocal null — shows *held fixed*, not a p of 1. Path lengths, efficiency and algebraic connectivity stay descriptive: they are expensive on every random graph and are shape descriptors rather than claims. The observed values are recomputed with the very functions applied to the random graphs. The cost is dominated by the rewiring: about 2–3 minutes on a graph of a few thousand ties, plus each timeline year.
+
+**In practice:** for a "leaderless" reading, the relevant pattern is high reciprocity and clustering vs configuration (peers citing each other) with PageRank centralisation *not* above the configuration baseline (no more concentrated than the degree sequence forces). A centralisation far above it says prestige concentrates on a few channels beyond what their degrees explain.
+
+**References:** Maslov, S. & Sneppen, K. (2002) "Specificity and stability in topology of protein networks." *Science* 296. Squartini, T. & Garlaschelli, D. (2011) "Analytical maximum-likelihood method to detect patterns in real networks." *New Journal of Physics* 13. Erdős, P. & Rényi, A. (1959) "On random graphs I." *Publicationes Mathematicae* 6. Phipson, B. & Smyth, G.K. (2010) "Permutation p-values should never be zero." *Statistical Applications in Genetics and Molecular Biology* 9(1).
+
+---
+
 ## Per-community statistics
 
 Beyond the whole-network level, community statistics appear in `community_table.html` for each active strategy. Key metrics per community:
@@ -248,6 +301,8 @@ where E = external ties (to non-members) and I = internal ties (between members)
 **Reference:** Krackhardt, D. & Stern, R.N. (1988) "Informal networks and organizational crises: An experimental simulation." *Social Psychology Quarterly* 51(2). [doi:10.2307/2786835](https://doi.org/10.2307/2786835)
 
 **In practice:** E-I index directly captures the cohesion-versus-competition distinction at the community level. A community with E-I ≈ −1 is self-referential; a community with E-I ≈ +1 is outward-facing. The mean E-I across all communities summarises the overall balance.
+
+**Label groups.** For a label-group partition this E-I counts every tie to a channel without a label in the group — including dead leaves and out-of-target sources — as external, and it is not corrected for the label's size. For "how inward-looking is this nation?", read the [HOMOPHILY](#homophily) statistics instead: labelled ties only, the size discounted, a permutation test attached.
 
 Use E-I index together with reciprocity and inter-community edge ratio for a composite reading:
 - **High reciprocity + negative mean E-I:** peer-like mutual amplification within cohesive camps

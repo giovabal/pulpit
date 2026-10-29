@@ -14,8 +14,10 @@ from network.community import (
     canonical_strategy_key,
     labelgroup_display_labels,
 )
+from network.label_mixing import compute_label_mixing
 from network.measures._registry import BEHAVIOURAL_MEASURE_KEYS, CENTRALITY_MEASURE_KEYS, canonical_measure_key
 from network.near_copies import forward_header_q
+from network.network_nulls import NULL_LABELS, network_significance
 from network.parameters import FixedParameter
 from network.robustness.null_model import rewire_strength_preserving, z_score
 from network.utils import (
@@ -407,6 +409,98 @@ def _transitivity(graph: nx.DiGraph, centres: "list[str]") -> float:
     return sum(triangles.values()) / triples if triples else 0.0
 
 
+def tie_statistics(
+    graph: nx.DiGraph, dead: "frozenset[str]", selected_groups: "frozenset[str] | None" = None
+) -> dict[str, Any]:
+    """The whole-network statistics of the citation ties themselves, unrounded — the part of the network summary
+    a random graph with the same nodes can be compared on (:mod:`network.network_nulls` calls it on every null graph,
+    so the observed and the null values share one definition).
+
+    ``dead`` are the graph's dead leaves (:func:`network.utils.dead_leaf_ids`, passed explicitly because a rewired
+    copy carries no graph attributes). Computed per selected group: PATHS → ``reciprocity``, ``avg_clustering``;
+    COHESION → ``transitivity``, ``in_degree_cv``, ``out_degree_cv``; COMPONENTS → ``wcc_count``, ``wcc_fraction``,
+    ``scc_count``, ``scc_fraction``; DEGCORRELATION → ``assortativity`` (four directed coefficients). Self-loops and
+    dead leaves are handled as in :func:`_network_summary` (``DEAD_LEAF_STATS_RULE``).
+    """
+
+    def _sel(key: str) -> bool:
+        return selected_groups is None or key in selected_groups
+
+    n = graph.number_of_nodes()
+    loop_free = without_self_loops(graph)
+    observed = [node for node in graph if node not in dead]
+    observed_graph = loop_free.subgraph(observed) if dead else loop_free
+    stats: dict[str, Any] = {
+        "reciprocity": None,
+        "avg_clustering": None,
+        "transitivity": None,
+        "in_degree_cv": None,
+        "out_degree_cv": None,
+        "wcc_count": None,
+        "wcc_fraction": None,
+        "scc_count": None,
+        "scc_fraction": None,
+        "assortativity": {"in_in": None, "in_out": None, "out_in": None, "out_out": None},
+    }
+    if _sel("PATHS"):
+        with _swallow_metric("reciprocity"):
+            stats["reciprocity"] = (
+                nx.overall_reciprocity(observed_graph) if observed_graph.number_of_edges() > 0 else 0.0
+            )
+        with _swallow_metric("avg_clustering"):
+            stats["avg_clustering"] = nx.average_clustering(
+                graph,
+                nodes=observed if dead else None,
+                weight=CLUSTERING_WEIGHT,
+                count_zeros=CLUSTERING_COUNT_ZEROS,
+            )
+    if _sel("COMPONENTS") and n >= 2:
+        with _swallow_metric("wcc"):
+            wccs = list(nx.weakly_connected_components(graph))
+            stats["wcc_count"] = len(wccs)
+            stats["wcc_fraction"] = len(max(wccs, key=len)) / n
+        with _swallow_metric("scc"):
+            sccs = list(nx.strongly_connected_components(graph))
+            stats["scc_count"] = len(sccs)
+            stats["scc_fraction"] = len(max(sccs, key=len)) / n
+    if _sel("COHESION"):
+        with _swallow_metric("transitivity"):
+            stats["transitivity"] = _transitivity(loop_free, observed)
+        if n >= 2:
+            # In-degrees are observed for every node (a dead leaf's citers are monitored); out-degrees
+            # only for observed channels — a dead leaf's 0 is a boundary fact, not a degree.
+            in_arr = np.array([d for _, d in loop_free.in_degree()], dtype=float)
+            out_arr = np.array([d for _, d in loop_free.out_degree(observed)], dtype=float)
+            in_mean = float(in_arr.mean()) if in_arr.size else 0.0
+            out_mean = float(out_arr.mean()) if out_arr.size else 0.0
+            if in_mean > 0:
+                stats["in_degree_cv"] = float(in_arr.std(ddof=DEGREE_CV_DDOF) / in_mean)
+            if out_mean > 0:
+                stats["out_degree_cv"] = float(out_arr.std(ddof=DEGREE_CV_DDOF) / out_mean)
+    # Ties between observed channels, each endpoint at its loop-free degree in the whole graph (a dead
+    # leaf's out-degree is unobserved, so a tie to one cannot enter the out-degree correlations).
+    assort_edges = list(observed_graph.edges())
+    if _sel("DEGCORRELATION") and len(assort_edges) >= 2:
+        try:
+            in_deg = dict(loop_free.in_degree())
+            out_deg = dict(loop_free.out_degree())
+            src_in = np.array([in_deg[u] for u, v in assort_edges], dtype=float)
+            src_out = np.array([out_deg[u] for u, v in assort_edges], dtype=float)
+            tgt_in = np.array([in_deg[v] for u, v in assort_edges], dtype=float)
+            tgt_out = np.array([out_deg[v] for u, v in assort_edges], dtype=float)
+            for key, x, y in [
+                ("in_in", src_in, tgt_in),
+                ("in_out", src_in, tgt_out),
+                ("out_in", src_out, tgt_in),
+                ("out_out", src_out, tgt_out),
+            ]:
+                if x.std() > 0 and y.std() > 0:
+                    stats["assortativity"][key] = float(np.corrcoef(x, y)[0, 1])
+        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
+            logger.debug("assortativity unavailable: %s", exc)
+    return stats
+
+
 def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None" = None) -> dict[str, Any]:
     """Compute structural metrics for the whole graph.
 
@@ -426,69 +520,33 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     e = graph.number_of_edges()
     density = nx.density(graph)
     dead = dead_leaf_ids(graph)
-    loop_free = without_self_loops(graph)
-    observed = [node for node in graph if node not in dead]
-    observed_graph = loop_free.subgraph(observed) if dead else loop_free
+    ties = tie_statistics(graph, dead, selected_groups)
 
-    # ── PATHS — reciprocity, clustering, WCC/SCC path lengths ─────────────────
-    reciprocity: float | None = None
-    avg_clustering: float | None = None
+    # ── PATHS — WCC/SCC path lengths (reciprocity and clustering come from tie_statistics) ──
     avg_path_length: float | None = None
     diameter: int | None = None
     path_on_full = True  # True = no footnote dagger when paths not computed
-    wcc_count: int | None = None
-    wcc_fraction: float | None = None
-    scc_count: int | None = None
-    scc_fraction: float | None = None
     avg_path_length_directed: float | None = None
     diameter_directed: int | None = None
     scc_path_on_full = True
 
-    if _sel("PATHS"):
-        with _swallow_metric("reciprocity"):
-            reciprocity = nx.overall_reciprocity(observed_graph) if observed_graph.number_of_edges() > 0 else 0.0
-        with _swallow_metric("avg_clustering"):
-            avg_clustering = nx.average_clustering(
-                graph,
-                nodes=observed if dead else None,
-                weight=CLUSTERING_WEIGHT,
-                count_zeros=CLUSTERING_COUNT_ZEROS,
-            )
-
-    need_wcc = _sel("PATHS") or _sel("COMPONENTS")
-    need_scc = _sel("PATHS") or _sel("COMPONENTS")
-    if n >= 2 and need_wcc:
+    if n >= 2 and _sel("PATHS"):
         with _swallow_metric("wcc/path_length/diameter"):
-            wccs = list(nx.weakly_connected_components(graph))
-            largest_wcc = max(wccs, key=len)
-            if _sel("COMPONENTS"):
-                wcc_count = len(wccs)
-                wcc_fraction = len(largest_wcc) / n
-            if _sel("PATHS"):
-                path_on_full = len(largest_wcc) == n
-                if len(largest_wcc) >= 2:
-                    ug = graph.subgraph(largest_wcc).to_undirected()
-                    avg_path_length = nx.average_shortest_path_length(ug)
-                    diameter = nx.diameter(ug)
-    if n >= 2 and need_scc:
+            largest_wcc = max(nx.weakly_connected_components(graph), key=len)
+            path_on_full = len(largest_wcc) == n
+            if len(largest_wcc) >= 2:
+                ug = graph.subgraph(largest_wcc).to_undirected()
+                avg_path_length = nx.average_shortest_path_length(ug)
+                diameter = nx.diameter(ug)
         with _swallow_metric("scc"):
-            sccs = list(nx.strongly_connected_components(graph))
-            largest_scc = max(sccs, key=len)
-            if _sel("COMPONENTS"):
-                scc_count = len(sccs)
-                scc_fraction = len(largest_scc) / n
-            if _sel("PATHS"):
-                scc_path_on_full = len(largest_scc) == n
-                if len(largest_scc) >= 2:
-                    scc_sub = graph.subgraph(largest_scc)
-                    avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
-                    diameter_directed = nx.diameter(scc_sub)
+            largest_scc = max(nx.strongly_connected_components(graph), key=len)
+            scc_path_on_full = len(largest_scc) == n
+            if len(largest_scc) >= 2:
+                scc_sub = graph.subgraph(largest_scc)
+                avg_path_length_directed = nx.average_shortest_path_length(scc_sub)
+                diameter_directed = nx.diameter(scc_sub)
 
-    # ── COHESION — transitivity, global efficiency, algebraic connectivity ─────
-    # Transitivity — fraction of closed triads (O(m))
-    # Global clustering coefficient (Newman 2003): 3 × triangles / connected triples of the
-    # undirected projection. Complements avg_clustering (per-node average).
-    transitivity: float | None = None
+    # ── COHESION — global efficiency, algebraic connectivity (transitivity, degree CV from tie_statistics) ──
     # Global Efficiency — mean reciprocal path length (O(n*(n+m)))
     # Latora & Marchiori (2001): E = (1/n(n-1)) * Σ_{i≠j} 1/d(i,j).
     # Directed BFS, unreachable pairs contribute 0.
@@ -497,99 +555,57 @@ def _network_summary(graph: nx.DiGraph, selected_groups: "frozenset[str] | None"
     # Fiedler (1973): second-smallest eigenvalue λ₂ of the Laplacian.
     # λ₂ = 0 for disconnected graphs; larger = stronger cohesion.
     algebraic_connectivity: float | None = None
-    # Degree CV — coefficient of variation σ/μ (Pastor-Satorras & Vespignani 2001)
-    in_degree_cv: float | None = None
-    out_degree_cv: float | None = None
-    if _sel("COHESION"):
-        with _swallow_metric("transitivity"):
-            transitivity = round(_transitivity(loop_free, observed), 6)
-        if n >= 2:
-            with _swallow_metric("global_efficiency"):
-                total_inv_dist = 0.0
-                for source in graph.nodes():
-                    lengths = nx.single_source_shortest_path_length(graph, source)
-                    total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
-                global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
-            with _swallow_metric("algebraic_connectivity"):
-                # Sum reciprocal weights (W + Wᵀ) so the Fiedler value reflects full
-                # mutual-tie strength; plain to_undirected() would drop one direction.
-                ug_ac = to_undirected_sum(graph)
-                lcc_nodes = max(nx.connected_components(ug_ac), key=len)
-                lcc_ac = ug_ac.subgraph(lcc_nodes)
-                if len(lcc_ac) >= 2:
-                    algebraic_connectivity = round(
-                        nx.algebraic_connectivity(
-                            lcc_ac,
-                            weight=ALGEBRAIC_CONNECTIVITY_WEIGHT,
-                            normalized=ALGEBRAIC_CONNECTIVITY_NORMALIZED,
-                            tol=ALGEBRAIC_CONNECTIVITY_TOL,
-                            method=ALGEBRAIC_CONNECTIVITY_METHOD,
-                            seed=ALGEBRAIC_CONNECTIVITY_SEED,
-                        ),
-                        6,
-                    )
-            # In-degrees are observed for every node (a dead leaf's citers are monitored); out-degrees
-            # only for observed channels — a dead leaf's 0 is a boundary fact, not a degree.
-            in_arr = np.array([d for _, d in loop_free.in_degree()], dtype=float)
-            out_arr = np.array([d for _, d in loop_free.out_degree(observed)], dtype=float)
-            in_mean = float(in_arr.mean()) if in_arr.size else 0.0
-            out_mean = float(out_arr.mean()) if out_arr.size else 0.0
-            if in_mean > 0:
-                in_degree_cv = round(float(in_arr.std(ddof=DEGREE_CV_DDOF) / in_mean), 4)
-            if out_mean > 0:
-                out_degree_cv = round(float(out_arr.std(ddof=DEGREE_CV_DDOF) / out_mean), 4)
+    if _sel("COHESION") and n >= 2:
+        with _swallow_metric("global_efficiency"):
+            total_inv_dist = 0.0
+            for source in graph.nodes():
+                lengths = nx.single_source_shortest_path_length(graph, source)
+                total_inv_dist += sum(1.0 / d for target, d in lengths.items() if target != source)
+            global_efficiency = round(total_inv_dist / (n * (n - 1)), 6)
+        with _swallow_metric("algebraic_connectivity"):
+            # Sum reciprocal weights (W + Wᵀ) so the Fiedler value reflects full
+            # mutual-tie strength; plain to_undirected() would drop one direction.
+            ug_ac = to_undirected_sum(graph)
+            lcc_nodes = max(nx.connected_components(ug_ac), key=len)
+            lcc_ac = ug_ac.subgraph(lcc_nodes)
+            if len(lcc_ac) >= 2:
+                algebraic_connectivity = round(
+                    nx.algebraic_connectivity(
+                        lcc_ac,
+                        weight=ALGEBRAIC_CONNECTIVITY_WEIGHT,
+                        normalized=ALGEBRAIC_CONNECTIVITY_NORMALIZED,
+                        tol=ALGEBRAIC_CONNECTIVITY_TOL,
+                        method=ALGEBRAIC_CONNECTIVITY_METHOD,
+                        seed=ALGEBRAIC_CONNECTIVITY_SEED,
+                    ),
+                    6,
+                )
 
-    # ── DEGCORRELATION — directed degree assortativity ─────────────────────────
-    assortativity: dict[str, float | None] = {
-        "in_in": None,
-        "in_out": None,
-        "out_in": None,
-        "out_out": None,
-    }
-    # Ties between observed channels, each endpoint at its loop-free degree in the whole graph (a dead
-    # leaf's out-degree is unobserved, so a tie to one cannot enter the out-degree correlations).
-    assort_edges = list(observed_graph.edges())
-    if _sel("DEGCORRELATION") and len(assort_edges) >= 2:
-        try:
-            in_deg = dict(loop_free.in_degree())
-            out_deg = dict(loop_free.out_degree())
-            src_in = np.array([in_deg[u] for u, v in assort_edges], dtype=float)
-            src_out = np.array([out_deg[u] for u, v in assort_edges], dtype=float)
-            tgt_in = np.array([in_deg[v] for u, v in assort_edges], dtype=float)
-            tgt_out = np.array([out_deg[v] for u, v in assort_edges], dtype=float)
-            for key, x, y in [
-                ("in_in", src_in, tgt_in),
-                ("in_out", src_in, tgt_out),
-                ("out_in", src_out, tgt_in),
-                ("out_out", src_out, tgt_out),
-            ]:
-                if x.std() > 0 and y.std() > 0:
-                    assortativity[key] = float(np.corrcoef(x, y)[0, 1])
-        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
-            logger.debug("assortativity unavailable: %s", exc)
+    def _round(value: float | None, digits: int) -> float | None:
+        return round(value, digits) if value is not None else None
 
     return {
         "n": n,
         "e": e,
         "density": density,
-        "reciprocity": reciprocity,
-        "avg_clustering": avg_clustering,
+        "reciprocity": ties["reciprocity"],
+        "avg_clustering": ties["avg_clustering"],
         "avg_path_length": avg_path_length,
         "diameter": diameter,
         "path_on_full": path_on_full,
-        "wcc_count": wcc_count,
-        "wcc_fraction": wcc_fraction,
-        "scc_count": scc_count,
-        "scc_fraction": scc_fraction,
+        "wcc_count": ties["wcc_count"],
+        "wcc_fraction": ties["wcc_fraction"],
+        "scc_count": ties["scc_count"],
+        "scc_fraction": ties["scc_fraction"],
         "avg_path_length_directed": avg_path_length_directed,
         "diameter_directed": diameter_directed,
         "scc_path_on_full": scc_path_on_full,
-        "transitivity": transitivity,
+        "transitivity": _round(ties["transitivity"], 6),
         "global_efficiency": global_efficiency,
         "algebraic_connectivity": algebraic_connectivity,
-        "in_degree_cv": in_degree_cv,
-        "out_degree_cv": out_degree_cv,
-        "assortativity": assortativity,
+        "in_degree_cv": _round(ties["in_degree_cv"], 4),
+        "out_degree_cv": _round(ties["out_degree_cv"], 4),
+        "assortativity": ties["assortativity"],
         "dead_leaves": len(dead),
         "_selected_groups": selected_groups,
     }
@@ -1301,6 +1317,31 @@ def compute_community_metrics(
     else:
         network_summary["mean_burt_constraint"] = None
 
+    # ── Significance against random graphs (opt-in: never implied by a None / ALL selection) ──
+    if selected_network_groups is not None and "SIGNIFICANCE" in selected_network_groups:
+        network_summary["significance"] = network_significance(
+            graph,
+            dead_leaf_ids(graph),
+            statistics=tie_statistics,
+            centralization=_freeman_centralization,
+            selected_groups=selected_network_groups,
+            centrality_keys=list(centralizations) if _grp("CENTRALIZATION") else [],
+        )
+
+    # ── Homophily by label group: assortativity, inbreeding homophily, label flows ──
+    label_mixing: dict[str, Any] | None = None
+    if _grp("HOMOPHILY"):
+        label_mixing = compute_label_mixing(graph)
+        network_summary["homophily"] = [
+            {
+                "group": group["group"],
+                "key": group["key"],
+                "assortativity": group["assortativity"],
+                "ei_index": group["ei_index"],
+            }
+            for group in label_mixing["groups"]
+        ]
+
     pk_to_org: dict[str, str] = {}
     if channel_qs is not None:
         if _grp("CONTENT"):
@@ -1311,6 +1352,8 @@ def compute_community_metrics(
             network_summary["channel_type_counts"] = types_present
         pk_to_org = {node["id"]: node["organization"] for node in graph_data["nodes"] if node.get("organization")}
     result: CommunityTableData = {"network_summary": network_summary, "strategies": {}}
+    if label_mixing is not None:
+        result["label_mixing"] = label_mixing
     id_to_node: dict[str, dict] = {node["id"]: node for node in graph_data["nodes"]}
     # Label-group partitions selected in this run, keyed by partition key → display name. Each becomes
     # an extra "<group> × community distribution" cross-tab under every non-label-group strategy table.
@@ -1400,67 +1443,82 @@ _DISPLAY_GROUP_TO_KEY: dict[str, str] = {
     "Degree correlation": "DEGCORRELATION",
     "Centralization": "CENTRALIZATION",
     "Content": "CONTENT",
+    "Homophily": "HOMOPHILY",
 }
 
+#: The baselines a whole-network row can be tested against, in column order: the three random-graph nulls of
+#: :mod:`network.network_nulls` and the label permutation behind the homophily rows (:mod:`network.label_mixing`).
+SIGNIFICANCE_COLUMNS: tuple[tuple[str, str], ...] = (
+    *NULL_LABELS.items(),
+    ("label_permutation", "vs label permutation"),
+)
 
-def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
-    """Return (label, value, group) rows for whole-network metrics.
+type SummaryRow = tuple[str, Any, str, "dict[str, dict[str, Any]] | None"]
+
+
+def _permutation_test(test: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {"label_permutation": {"mean": test.get("null_mean"), "z": test.get("z"), "p": test.get("p")}}
+
+
+def network_summary_rows(summary: dict[str, Any]) -> list[SummaryRow]:
+    """Return ``(label, value, group, significance)`` rows for whole-network metrics.
+
+    ``significance`` is ``None``, or ``{baseline: {"mean", "z", "p"} | {"fixed": True}}`` keyed by the
+    :data:`SIGNIFICANCE_COLUMNS` keys: the random-graph tests of the ``SIGNIFICANCE`` group for the tie
+    statistics, the label-permutation test for the homophily rows.
 
     Rows belonging to groups absent from ``summary["_selected_groups"]`` are
     omitted.  When ``_selected_groups`` is absent or ``None`` all rows are returned.
     """
     sel: "frozenset[str] | None" = summary.get("_selected_groups")
+    tests: dict[str, dict[str, Any]] = summary.get("significance") or {}
 
     def _include(display_group: str) -> bool:
         if sel is None:
             return True
         return _DISPLAY_GROUP_TO_KEY.get(display_group) in sel
 
+    rows: list[SummaryRow] = []
+
+    def _row(label: str, value: Any, group: str, stat: str | None = None) -> None:
+        rows.append((label, value, group, tests.get(stat) if stat else None))
+
     path_marker = " †" if not summary["path_on_full"] else ""
     scc_has_directed = summary.get("avg_path_length_directed") is not None
     scc_path_marker = " ‡" if (scc_has_directed and not summary.get("scc_path_on_full", True)) else ""
-    rows: list[tuple[str, Any, str]] = []
     if _include("Size"):
-        rows.append(("Nodes", summary["n"], "Size"))
+        _row("Nodes", summary["n"], "Size")
         for type_name, count in summary.get("channel_type_counts", {}).items():
-            rows.append((_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size"))
+            _row(_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size")
         if summary.get("dead_leaves"):
             # Their own citations are never read: reciprocity, clustering, transitivity, out-degree CV and
             # assortativity describe the other channels (DEAD_LEAF_STATS_RULE).
-            rows.append(("Dead leaves (own citations not observed)", summary["dead_leaves"], "Size"))
-        rows += [
-            ("Edges", summary["e"], "Size"),
-            ("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size"),
-            ("Density (0–1)", summary["density"], "Size"),
-        ]
+            _row("Dead leaves (own citations not observed)", summary["dead_leaves"], "Size")
+        _row("Edges", summary["e"], "Size")
+        _row("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size")
+        _row("Density (0–1)", summary["density"], "Size")
     if _include("Transitivity & paths"):
-        rows += [
-            ("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths"),
-            ("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths"),
-            (f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths"),
-            (f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths"),
-            (
-                f"Directed Avg Path Length{scc_path_marker}",
-                summary.get("avg_path_length_directed"),
-                "Transitivity & paths",
-            ),
-            (f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths"),
-        ]
+        _row("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths", "reciprocity")
+        _row("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths", "avg_clustering")
+        _row(f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths")
+        _row(f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths")
+        _row(
+            f"Directed Avg Path Length{scc_path_marker}",
+            summary.get("avg_path_length_directed"),
+            "Transitivity & paths",
+        )
+        _row(f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths")
     if _include("Cohesion"):
-        rows += [
-            ("Transitivity (0–1)", summary.get("transitivity"), "Cohesion"),
-            ("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion"),
-            (f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion"),
-            ("In-degree CV", summary.get("in_degree_cv"), "Cohesion"),
-            ("Out-degree CV", summary.get("out_degree_cv"), "Cohesion"),
-        ]
+        _row("Transitivity (0–1)", summary.get("transitivity"), "Cohesion", "transitivity")
+        _row("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion")
+        _row(f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion")
+        _row("In-degree CV", summary.get("in_degree_cv"), "Cohesion", "in_degree_cv")
+        _row("Out-degree CV", summary.get("out_degree_cv"), "Cohesion", "out_degree_cv")
     if _include("Component structure"):
-        rows += [
-            ("WCC count", summary["wcc_count"], "Component structure"),
-            ("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure"),
-            ("SCC count", summary["scc_count"], "Component structure"),
-            ("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure"),
-        ]
+        _row("WCC count", summary["wcc_count"], "Component structure")
+        _row("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure", "wcc_fraction")
+        _row("SCC count", summary["scc_count"], "Component structure")
+        _row("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure", "scc_fraction")
     if _include("Degree correlation"):
         for assort_key, assort_label in [
             ("in_in", "Assortativity in→in (−1–1)"),
@@ -1468,19 +1526,37 @@ def network_summary_rows(summary: dict[str, Any]) -> list[tuple[str, Any, str]]:
             ("out_in", "Assortativity out→in (−1–1)"),
             ("out_out", "Assortativity out→out (−1–1)"),
         ]:
-            rows.append((assort_label, summary.get("assortativity", {}).get(assort_key), "Degree correlation"))
+            _row(
+                assort_label,
+                summary.get("assortativity", {}).get(assort_key),
+                "Degree correlation",
+                f"assortativity.{assort_key}",
+            )
     if _include("Centralization"):
         if summary.get("mean_burt_constraint") is not None:
-            rows.append(("Mean Burt's Constraint (~0–1)", summary["mean_burt_constraint"], "Centralization"))
-        for _key, (c_val, c_label) in summary.get("centralizations", {}).items():
+            _row("Mean Burt's Constraint (~0–1)", summary["mean_burt_constraint"], "Centralization")
+        for key, (c_val, c_label) in summary.get("centralizations", {}).items():
             # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
             # for measures with a zero periphery floor (e.g. degree on a star); for measures
             # with a non-zero floor (e.g. PageRank's teleport term) it is a conservative lower
             # bound. See _freeman_centralization.
-            rows.append((f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization"))
+            _row(f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization", f"centralization.{key}")
     if _include("Content"):
         if summary.get("network_originality") is not None:
-            rows.append(("Content Originality (0–1)", summary["network_originality"], "Content"))
+            _row("Content Originality (0–1)", summary["network_originality"], "Content")
         if summary.get("network_amplification") is not None:
-            rows.append(("Amplification Ratio", summary["network_amplification"], "Content"))
+            _row("Amplification Ratio", summary["network_amplification"], "Content")
+    if _include("Homophily"):
+        # One block per partition label group, tested against label permutations (network.label_mixing).
+        for group in summary.get("homophily") or []:
+            name = group["group"]
+            for unit in ("ties", "citations"):
+                test = group["assortativity"][unit]
+                rows.append(
+                    (f"{name}: assortativity r, {unit} (−1–1)", test["value"], "Homophily", _permutation_test(test))
+                )
+            test = group["ei_index"]
+            rows.append(
+                (f"{name}: E-I index, labelled ties (−1–1)", test["value"], "Homophily", _permutation_test(test))
+            )
     return rows

@@ -1141,6 +1141,28 @@ class BuildArgsExportNetworkTests(TestCase):
         ):
             self.assertIn(negation, args)
 
+    def test_inference_flags(self):
+        # The dyadic regression and the dyadic export are bool_explicit toggles; the permutation count a value.
+        args_off = _build_args("structural_analysis", FakePost())
+        self.assertIn("--no-mrqap", args_off)
+        self.assertIn("--no-dyadic-export", args_off)
+        self.assertNotIn("--mrqap-permutations", args_off)
+        args_on = _build_args(
+            "structural_analysis",
+            FakePost(
+                {
+                    "mrqap": "on",
+                    "mrqap_permutations": "500",
+                    "dyadic_export": "on",
+                    "network_stat_groups": ["HOMOPHILY", "SIGNIFICANCE"],
+                }
+            ),
+        )
+        self.assertIn("--mrqap", args_on)
+        self.assertIn("--dyadic-export", args_on)
+        self.assertEqual(args_on[args_on.index("--mrqap-permutations") + 1], "500")
+        self.assertEqual(args_on[args_on.index("--network-stat-groups") + 1], "HOMOPHILY,SIGNIFICANCE")
+
     def test_environment_depth_value_flag(self):
         self.assertNotIn("--environment-depth", _build_args("structural_analysis", FakePost()))
         args = _build_args("structural_analysis", FakePost({"environment_depth": "2"}))

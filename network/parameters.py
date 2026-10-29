@@ -23,6 +23,10 @@ parameter only when its scope was active in the run. Scope keys:
   ``strategy:SBM``; ``strategy:LABELGROUP`` for the analyst's label-group partitions
 * ``community_backbone`` — detection on the disparity backbone (``--community-backbone-alpha``)
 * ``community_stats`` — whole-network and per-community statistics
+* ``homophily`` — label mixing: assortativity, inbreeding homophily and label flows (``HOMOPHILY`` stat group)
+* ``network_significance`` — random-graph tests of the whole-network statistics (``SIGNIFICANCE`` stat group)
+* ``mrqap`` — the dyadic regression (``--mrqap``)
+* ``dyads`` — the dyadic export bundle (``--dyadic-export``)
 * ``layout_2d`` / ``layout_3d`` — the main (ForceAtlas2) map layouts
 * ``layout:<TOKEN>`` — an extra map layout (``--layouts-2d`` / ``--layouts-3d``), e.g. ``layout:TSNE``
 * ``robustness`` / ``robustness_replay`` — the robustness analysis and its ban replay
@@ -59,6 +63,10 @@ SCOPES: frozenset[str] = frozenset(
         "communities",
         "community_backbone",
         "community_stats",
+        "homophily",
+        "network_significance",
+        "mrqap",
+        "dyads",
         "layout_2d",
         "layout_3d",
         "robustness",
@@ -116,6 +124,10 @@ PARAMETER_MODULES: tuple[str, ...] = (
     "network.measures",
     "network.community",
     "network.community_stats",
+    "network.label_mixing",
+    "network.network_nulls",
+    "network.mrqap",
+    "network.dyads",
     "network.layout",
     "network.robustness",
     "network.dominance",
@@ -130,6 +142,7 @@ SECTION_ORDER: tuple[str, ...] = (
     "Measures",
     "Communities",
     "Network & community statistics",
+    "Dyadic models",
     "Layout",
     "Robustness",
     "Coordination",
@@ -145,6 +158,10 @@ _SECTION_BY_SCOPE: dict[str, str] = {
     "communities": "Communities",
     "community_backbone": "Communities",
     "community_stats": "Network & community statistics",
+    "homophily": "Network & community statistics",
+    "network_significance": "Network & community statistics",
+    "mrqap": "Dyadic models",
+    "dyads": "Dyadic models",
     "layout_2d": "Layout",
     "layout_3d": "Layout",
     "robustness": "Robustness",
@@ -168,6 +185,10 @@ _SCOPE_LABELS: dict[str, str] = {
     "communities": "every strategy",
     "community_backbone": "detection backbone",
     "community_stats": "statistics",
+    "homophily": "homophily",
+    "network_significance": "network significance",
+    "mrqap": "MRQAP",
+    "dyads": "dyadic export",
     "layout_2d": "2D layout",
     "layout_3d": "3D layout",
     "robustness": "robustness",
@@ -254,7 +275,9 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
       and at least one algorithmic strategy runs on it.
     * ``community_stats`` whenever ``community_stats`` computes something: the network/community
       tables (``--html``, ``--xlsx``, ``--consensus-matrix``), the structural / behavioural
-      equivalence matrices, and every timeline year (the per-year export always computes them).
+      equivalence matrices, and every timeline year (the per-year export always computes them);
+      inside it ``homophily`` / ``network_significance`` when the ``HOMOPHILY`` / ``SIGNIFICANCE``
+      stat group is selected. ``mrqap`` with ``--mrqap``, ``dyads`` with ``--dyadic-export``.
     * ``layout_2d`` for either structural map (the 3D map is seeded from the same pass, which also
       computes the 2D positions) and for the coordination maps, whose own 2D layout is always
       computed when ties exist (``coordination_laid_out``); ``layout_3d`` for ``--graph-3d`` and
@@ -294,6 +317,15 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
         or timeline
     ):
         scopes.add("community_stats")
+        # The two stat groups with fixed parameters of their own, computed only inside the tables.
+        if "HOMOPHILY" in opts.selected_network_groups:
+            scopes.add("homophily")
+        if "SIGNIFICANCE" in opts.selected_network_groups:
+            scopes.add("network_significance")
+    if opts.do_mrqap:
+        scopes.add("mrqap")
+    if opts.do_dyadic_export:
+        scopes.add("dyads")
 
     if opts.do_graph or opts.do_3dgraph:
         scopes.add("layout_2d")
@@ -1075,6 +1107,31 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
         )
     else:
         _off("dominance", "--dominance")
+
+    if opts.do_mrqap or opts.do_dyadic_export:
+        rows = []
+        if opts.do_mrqap:
+            rows.append(
+                (
+                    "MRQAP permutations",
+                    format_value(opts.mrqap_permutations),
+                    _code("--mrqap-permutations"),
+                    "Channel relabellings per predictor behind each dyadic-regression p-value (0 = coefficients only).",
+                )
+            )
+        else:
+            _off("dyadic regression", "--mrqap")
+        rows.append(
+            (
+                "Dyadic export",
+                _yes(opts.do_dyadic_export),
+                _code("--dyadic-export"),
+                "dyads/: actors, ties, timestamped citation events and yearly waves for network-modelling tools.",
+            )
+        )
+        topics.append(("Dyadic models", rows))
+    else:
+        _off("dyadic regression and export", "--mrqap", "--dyadic-export")
 
     if opts.do_vacancy:
         topics.append(

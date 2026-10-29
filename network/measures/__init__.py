@@ -10,6 +10,7 @@ from network.measures._centrality import (
     apply_pagerank,
     apply_reciprocity,
     compute_hits,
+    pagerank_scores,
 )
 from network.measures._content import (
     FIXED_PARAMETERS as _CONTENT_FIXED_PARAMETERS,
@@ -68,5 +69,6 @@ __all__ = [
     "apply_pagerank",
     "apply_reciprocity",
     "compute_hits",
+    "pagerank_scores",
     "VALID_NETWORK_STAT_GROUPS",
 ]

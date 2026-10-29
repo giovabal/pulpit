@@ -74,9 +74,13 @@ VALID_NETWORK_STAT_GROUPS: frozenset[str] = frozenset(
         "DEGCORRELATION",
         "CENTRALIZATION",
         "CONTENT",
+        "HOMOPHILY",
+        "SIGNIFICANCE",
     }
 )
-ALL_NETWORK_STAT_GROUPS: list[str] = sorted(VALID_NETWORK_STAT_GROUPS)
+# SIGNIFICANCE (random-graph z / p of the other groups' statistics, minutes on a large graph) is never implied
+# by ALL — like LEIDEN_TEMPORAL for the community strategies, it has to be named.
+ALL_NETWORK_STAT_GROUPS: list[str] = sorted(VALID_NETWORK_STAT_GROUPS - {"SIGNIFICANCE"})
 
 # Static community-strategy names offered as a measure "basis" (MODULEROLE). Must mirror
 # community.VALID_STRATEGIES — a guard test enforces it. Kept here (rather than imported

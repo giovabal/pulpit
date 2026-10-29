@@ -61,7 +61,7 @@ from typing import Any
 
 from network.parameters import FixedParameter
 from network.robustness.null_model import bh_adjust
-from network.utils import GraphData
+from network.utils import GraphData, citation_count
 
 import networkx as nx
 import numpy as np
@@ -220,18 +220,6 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
 )
 
 
-def _edge_count(data: dict) -> int:
-    """Raw citation events on an edge: forwards + mentions (+ near-copies when that option is on),
-    as build_graph stores them."""
-    return int(
-        round(
-            float(data.get("weight_forwards") or 0)
-            + float(data.get("weight_mentions") or 0)
-            + float(data.get("weight_copies") or 0)
-        )
-    )
-
-
 def _node_ref(node_info: dict[str, dict], nid: str) -> dict[str, Any]:
     node = node_info.get(nid) or {}
     return {"id": nid, "label": node.get("label") or nid, "organization": node.get("organization") or ""}
@@ -382,7 +370,7 @@ def compute_dominance(
     for u, v, data in graph.edges(data=True):
         if u == v:
             continue
-        c = _edge_count(data)
+        c = citation_count(data)
         if c > 0:
             counts[(u, v)] = c
     if not counts:

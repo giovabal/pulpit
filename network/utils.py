@@ -32,7 +32,9 @@ type CommunityTableData = dict[str, Any]
 #   "partition_comparison": {         # present when >= 2 comparable strategies (see community_stats)
 #     "strategies": [strategy_key, ...],
 #     "metrics": {"ari"|"ami"|"nmi"|"vi": [[float|None, ...], ...]},  # symmetric strategy×strategy
-#   }
+#   },
+#   "label_mixing": {...},            # HOMOPHILY group: network.label_mixing.compute_label_mixing
+#   "mrqap": {...},                   # --mrqap: network.mrqap.compute_mrqap (set by structural_analysis)
 # }
 
 
@@ -162,6 +164,18 @@ def channel_period_date_q(channel: "Channel", date_field: str = "date") -> Q:
 
 # Edge attribute ``build_graph`` stores the un-rescaled tie weight under (``weight`` is ×10/max per graph).
 RAW_WEIGHT_KEY = "weight_raw"
+
+
+def citation_count(data: dict) -> int:
+    """Raw citation events on an edge: forwards + mentions (+ near-copies when that option is on), as
+    ``build_graph`` stores them — independent of ``--edge-weight-strategy``."""
+    return int(
+        round(
+            float(data.get("weight_forwards") or 0)
+            + float(data.get("weight_mentions") or 0)
+            + float(data.get("weight_copies") or 0)
+        )
+    )
 
 
 def tie_weight_key(*graphs: nx.DiGraph) -> str:
