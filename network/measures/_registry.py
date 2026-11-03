@@ -23,6 +23,7 @@ VALID_MEASURES: frozenset[str] = frozenset(
         "RECIPROCITY",
         "AMPLIFICATION",
         "CONTENTORIGINALITY",
+        "VISUALORIGINALITY",
         "DIFFUSIONLAG",
         "LOCALCLUSTERING",
         "MODULEROLE",
@@ -36,7 +37,7 @@ ALL_MEASURES: list[str] = sorted(VALID_MEASURES)
 # meaningful. Excludes audience/activity attributes (fans, messages_count), local
 # coefficients (burt_constraint, local_clustering, reciprocity), the within-module
 # role scores (within_module_z, participation — no star-based maximum), and
-# behavioural metrics (amplification_factor, content_originality, diffusion_lag). The weighted in/out
+# behavioural metrics (amplification_factor, content_originality, visual_originality, diffusion_lag). The weighted in/out
 # *strength* columns (in_deg, out_deg) are also excluded: strength has no
 # star-based theoretical maximum, so the generic (n−1)·C_max normaliser is too
 # loose to be a useful Freeman approximation. The unweighted, normalised
@@ -59,6 +60,7 @@ BEHAVIOURAL_MEASURE_KEYS: frozenset[str] = frozenset(
     {
         "amplification_factor",
         "content_originality",
+        "visual_originality",
         "diffusion_lag",
         "fans",
         "messages_count",

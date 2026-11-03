@@ -146,6 +146,13 @@ Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI fla
 | `degrees.in_degrees` | Recompute in-degree and out-degree for all in-target channels (pure DB; no Telegram connection) | `false` |
 | `degrees.out_degrees` | Recompute citation degree for out-of-target channels referenced by in-target ones | `false` |
 
+## `[index]` — offline steps after the crawl
+
+| Path | Description | Built-in default |
+| :--- | :---------- | ---------------: |
+| `index.hash_images` | Fingerprint the stored message pictures not fingerprinted yet, for image-copy detection (`--hash-images`; same as `hash_media`) — see [Image copies](image-copies.md) | `false` |
+| `index.domains` | Rebuild the outbound-link domain index of Manage → Domains (`--index-domains`; same as `index_domains`) — see [Outbound links](outbound-links.md) | `false` |
+
 ## `[environment]` — citation-neighbourhood crawl
 
 Pre-populates the **Environment** fieldset of the Crawl Channels form (CLI: `--environment`, `--environment-depth N`, `--environment-download-{images,video,audio,stickers,other-media}` and their `--no-` counterparts). When enabled, the crawler also fetches the out-of-scope channels the in-scope ones cite — forwards and `t.me/` references — up to `depth` citation hops away: full channel details plus every message dated inside the in-scope channels' in-target window. Reached channels are stamped with their distance (`Channel.environment_depth`) and their messages survive `purge_out_of_target_messages`. `depth` is the only key with reach beyond the form: it is the `--environment-depth` fallback. Media downloads for these channels follow the five toggles here, **not** `[downloads]`.
@@ -200,6 +207,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.timeline_step` | Timeline granularity: `"none"`, `"year"`, `"quarter"` or `"month"` | `"none"` |
 | `outputs.timeline_window` | Sliding-window length in months (a multiple of the step, larger than it); `0` = consecutive, non-overlapping periods | `0` |
 | `outputs.event_impact` | Test each recorded event with an interrupted time series of the network's weekly activity ([docs](event-impact.md)) | `false` |
+| `outputs.links` | Outbound-link layer: the sites the channels link to by domain category, per-channel link measures, label × category matrix, co-linking pairs ([docs](outbound-links.md)) | `false` |
 
 ## `[layouts]`
 
@@ -260,6 +268,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `edges.near_copy_threshold` | Minimum Jaccard resemblance of the two posts' word-shingle sets for the later one to count as a copy (`--near-copy-threshold`; panel *Near-copy similarity ≥*) | `0.8` |
 | `edges.near_copy_min_tokens` | Posts with fewer normalised word tokens are ignored by the near-copy search (`--near-copy-min-tokens`) | `8` |
 | `edges.near_copy_shingle_size` | Word-shingle length the resemblance is computed over (`--near-copy-shingle-size`) | `3` |
+| `edges.image_copy_edges` | Read **image copies** as citations: a picture post re-posting an earlier post's image without a forward header counts as a citation of the earliest one (panel: *Include image copies as edges*; CLI `--image-copy-edges`). See [Image copies](image-copies.md) | `false` |
+| `edges.image_copy_distance` | Largest pHash Hamming distance (of 64 bits) at which two images count as the same; also used by `VISUALORIGINALITY` (`--image-copy-distance`; panel *Image-copy distance ≤*) | `6` |
 
 ### Edge-weight strategies
 

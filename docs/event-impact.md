@@ -80,4 +80,4 @@ The fixed parameters — the week rule, the share floor, the minimum weeks per s
 
 ---
 
-← [Dyadic models](dyadic-models.md) · [Workflow](workflow.md) →
+← [Dyadic models](dyadic-models.md) · [Image copies](image-copies.md) →

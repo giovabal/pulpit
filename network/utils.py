@@ -167,13 +167,14 @@ RAW_WEIGHT_KEY = "weight_raw"
 
 
 def citation_count(data: dict) -> int:
-    """Raw citation events on an edge: forwards + mentions (+ near-copies when that option is on), as
-    ``build_graph`` stores them — independent of ``--edge-weight-strategy``."""
+    """Raw citation events on an edge: forwards + mentions (+ text near-copies and image copies when those
+    options are on), as ``build_graph`` stores them — independent of ``--edge-weight-strategy``."""
     return int(
         round(
             float(data.get("weight_forwards") or 0)
             + float(data.get("weight_mentions") or 0)
             + float(data.get("weight_copies") or 0)
+            + float(data.get("weight_image_copies") or 0)
         )
     )
 

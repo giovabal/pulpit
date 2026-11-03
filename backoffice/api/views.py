@@ -12,6 +12,8 @@ from webapp.models import (
     ChannelSource,
     ChannelVacancy,
     CustomEmojiPack,
+    Domain,
+    DomainCategory,
     Label,
     LabelGroup,
     LabelParent,
@@ -31,6 +33,8 @@ from .serializers import (
     ChannelSourceSerializer,
     ChannelVacancySerializer,
     CustomEmojiPackSerializer,
+    DomainCategorySerializer,
+    DomainSerializer,
     EventSerializer,
     EventTypeSerializer,
     LabelGroupSerializer,
@@ -550,6 +554,55 @@ class CustomEmojiPackViewSet(
         context = {**self.get_serializer_context(), "previews": pack_previews(None, {p.pk for p in packs})}
         data = self.get_serializer_class()(packs, many=True, context=context).data
         return self.get_paginated_response(data) if page is not None else Response(data)
+
+
+class DomainCategoryViewSet(viewsets.ModelViewSet):
+    """Manage → Domains: the categories sites are filed under (full CRUD; deleting one uncategorises its
+    sites). Unpaginated: a handful of rows, shown whole above the sites."""
+
+    serializer_class = DomainCategorySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return DomainCategory.objects.annotate(domain_count=Count("domains")).order_by("name")
+
+
+class DomainViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Manage → Domains: the linked sites ``index_domains`` found. ``?q=`` searches the name,
+    ``?category=<id>|none`` keeps one category or the uncategorised sites, ``?seen=1`` only the sites a
+    message still links to; most linked first. ``POST reindex/`` rebuilds the counts."""
+
+    serializer_class = DomainSerializer
+    http_method_names = ["get", "patch", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = Domain.objects.all()
+        q = self.request.query_params.get("q", "").strip().lower()
+        if q:
+            qs = qs.filter(name__contains=q)
+        category = self.request.query_params.get("category", "")
+        if category == "none":
+            qs = qs.filter(category__isnull=True)
+        elif category.isdigit():
+            qs = qs.filter(category_id=int(category))
+        if self.request.query_params.get("seen") == "1":
+            qs = qs.filter(posts__gt=0)
+        return qs.order_by("-posts", "name")
+
+    def create(self, request, *args, **kwargs):
+        raise PermissionDenied("Sites are added by the domain index, not by hand.")
+
+    @action(detail=False, methods=["post"])
+    def reindex(self, request):
+        """Rebuild the counts from the in-target channels' messages (``network.links.index_domains``)."""
+        from network.links import index_domains
+
+        return Response(index_domains())
 
 
 class UserViewSet(viewsets.ModelViewSet):

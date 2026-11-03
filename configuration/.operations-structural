@@ -37,6 +37,8 @@ near_copy_edges = false
 near_copy_threshold = 0.8
 near_copy_min_tokens = 8
 near_copy_shingle_size = 3
+image_copy_edges = false
+image_copy_distance = 6
 
 [scope]
 include_lost = false

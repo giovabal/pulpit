@@ -588,6 +588,24 @@ class RunTaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Near-copy similarity", resp.json()["error"])
 
+    def test_run_rejects_structural_image_copy_distance_outside_64_bits(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["structural_analysis"]),
+                {"graph": "on", "image_copy_edges": "on", "image_copy_distance": "65"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Image-copy distance", resp.json()["error"])
+
+    def test_structural_image_copy_and_links_flags(self):
+        args = _build_args(
+            "structural_analysis", FakePost({"image_copy_edges": "on", "image_copy_distance": "4", "links": "on"})
+        )
+        self.assertIn("--image-copy-edges", args)
+        self.assertEqual(args[args.index("--image-copy-distance") + 1], "4")
+        self.assertIn("--links", args)
+        self.assertIn("--no-links", _build_args("structural_analysis", FakePost()))
+
     def test_run_rejects_structural_environment_level_deeper_than_crawled(self):
         from webapp.models import Channel
 
@@ -972,6 +990,8 @@ class BuildArgsGetChannelsTests(TestCase):
                 "--no-download-other-media",
                 "--no-in-degrees",
                 "--no-out-degrees",
+                "--no-hash-images",
+                "--no-index-domains",
                 "--no-environment",
                 "--no-environment-download-images",
                 "--no-environment-download-video",
@@ -993,6 +1013,8 @@ class BuildArgsGetChannelsTests(TestCase):
             "out_degrees": "--out-degrees",
             "fix_missing_media": "--fix-missing-media",
             "update_type_excluded_info": "--update-type-excluded-info",
+            "hash_images": "--hash-images",
+            "index_domains": "--index-domains",
         }
         for field, expected_flag in flags.items():
             with self.subTest(field=field):

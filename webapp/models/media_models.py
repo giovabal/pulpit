@@ -5,6 +5,7 @@ from django.core.files import File
 from django.db import models
 
 from webapp.models.base import (
+    BaseModel,
     OverwriteStorage,
     TelegramBaseModel,
     TelegramBasePictureModel,
@@ -264,3 +265,34 @@ class MessageOtherMedia(TelegramBaseModel):
             with open(filename, "rb") as f:
                 obj.media_file.save(os.path.basename(filename), File(f), save=True)
         return obj
+
+
+class ImageFingerprint(BaseModel):
+    """Perceptual fingerprints of one stored image file (``hash_media`` / ``crawl_channels --hash-images``).
+
+    One row per stored file, keyed like the file itself by the Telegram photo id (``telegram_id``,
+    unique per ``kind``): a forward shares its source's file, so it shares this row too. ``phash`` is the
+    64-bit DCT perceptual hash (Zauner 2010) and ``dhash`` the 64-bit difference hash, both stored as signed
+    64-bit integers; two images are near-copies when their hashes differ in few bits
+    (``network.image_copies``). ``file_name`` is the file hashed, so a re-downloaded file is re-hashed.
+    """
+
+    KIND_PICTURE = "picture"
+    KIND_CHOICES: ClassVar = [(KIND_PICTURE, "Message picture")]
+
+    telegram_id = models.BigIntegerField()
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_PICTURE)
+    phash = models.BigIntegerField()
+    dhash = models.BigIntegerField()
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    file_name = models.CharField(max_length=255)
+    hashed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["telegram_id", "kind"], name="imagefingerprint_tid_kind_uniq"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.telegram_id}: {self.phash & 0xFFFFFFFFFFFFFFFF:016x}"

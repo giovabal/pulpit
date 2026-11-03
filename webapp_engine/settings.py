@@ -447,6 +447,8 @@ CRAWL_RETRY_REFERENCES = _crawl.messages.retry_references
 CRAWL_FORCE_RETRY_UNRESOLVED_REFERENCES = _crawl.messages.force_retry_unresolved_references
 CRAWL_IN_DEGREES = _crawl.degrees.in_degrees
 CRAWL_OUT_DEGREES = _crawl.degrees.out_degrees
+CRAWL_HASH_IMAGES = bool(getattr(_crawl.index, "hash_images", False))
+CRAWL_INDEX_DOMAINS = bool(getattr(_crawl.index, "domains", False))
 # Environment pass: out-of-scope channels within N citation hops of the in-scope ones.
 # `depth` is tuning (the --environment-depth fallback); the rest pre-populate the form.
 CRAWL_ENVIRONMENT = _crawl.environment.enabled
@@ -483,6 +485,8 @@ SA_NEAR_COPY_EDGES = bool(_structural.edges.near_copy_edges)
 SA_NEAR_COPY_THRESHOLD = float(_structural.edges.near_copy_threshold)
 SA_NEAR_COPY_MIN_TOKENS = int(_structural.edges.near_copy_min_tokens)
 SA_NEAR_COPY_SHINGLE_SIZE = int(_structural.edges.near_copy_shingle_size)
+SA_IMAGE_COPY_EDGES = bool(getattr(_structural.edges, "image_copy_edges", False))
+SA_IMAGE_COPY_DISTANCE = int(getattr(_structural.edges, "image_copy_distance", 6))
 SA_DIFFUSION_WINDOW = _structural.computation.diffusion_window
 SA_DRAW_DEAD_LEAVES = _structural.outputs.draw_dead_leaves
 SA_STRUCTURAL_SIMILARITY = _structural.outputs.structural_similarity
@@ -502,6 +506,7 @@ SA_ENVIRONMENT_DEPTH = int(getattr(_structural.scope, "environment_depth", 0) or
 SA_TIMELINE_STEP = _structural.outputs.timeline_step
 SA_TIMELINE_WINDOW = int(getattr(_structural.outputs, "timeline_window", 0) or 0)
 SA_EVENT_IMPACT = bool(getattr(_structural.outputs, "event_impact", False))
+SA_LINKS = bool(getattr(_structural.outputs, "links", False))
 SA_EVENT_WINDOW_WEEKS = int(getattr(_structural.computation, "event_window_weeks", 26) or 26)
 SA_VACANCY_MEASURES = ",".join(_structural.vacancy.measures)
 SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before

@@ -2,6 +2,7 @@ from .label_models import ChannelLabel, Label, LabelGroup, LabelParent  # NOQA
 from .search_models import SearchTerm  # NOQA
 from .telegram_models import Channel, Message, MessageReaction, MessageReply, Poll, PollAnswer  # NOQA
 from .media_models import (  # NOQA
+    ImageFingerprint,
     MessageAudio,
     MessageOtherMedia,
     MessagePicture,
@@ -14,3 +15,4 @@ from .vacancy_models import ChannelVacancy  # NOQA
 from .project_models import Project  # NOQA
 from .tag_models import MessageTag, MessageTagging, TaggedMessage  # NOQA
 from .emoji_models import CustomEmoji, CustomEmojiPack, MessageCustomEmoji, MessageCustomReaction  # NOQA
+from .link_models import Domain, DomainCategory  # NOQA

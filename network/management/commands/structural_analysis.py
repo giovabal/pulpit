@@ -25,6 +25,7 @@ from network import (
     graph_builder,
     interest_structural,
     layout,
+    link_layer,
     measures,
     mrqap,
     parameters,
@@ -34,6 +35,7 @@ from network import (
     vacancy_analysis,
 )
 from network.graph_builder import VALID_EDGE_WEIGHT_STRATEGIES
+from network.image_copies import IMAGE_COPY_DISTANCE_DEFAULT
 from network.near_copies import NEAR_COPY_MIN_TOKENS, NEAR_COPY_SHINGLE_SIZE, NEAR_COPY_THRESHOLD
 from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.tokens import split_tokens
@@ -148,6 +150,7 @@ _MEASURE_PROGRESS: dict[str, str] = {
     "RECIPROCITY": "reciprocity",
     "AMPLIFICATION": "amplification factor",
     "CONTENTORIGINALITY": "content originality",
+    "VISUALORIGINALITY": "visual originality",
     "DIFFUSIONLAG": "diffusion lag",
     "HITSHUB": "HITS hub",
     "HITSAUTH": "HITS authority",
@@ -380,6 +383,10 @@ class ResolvedOptions:
     near_copy_threshold: float
     near_copy_min_tokens: int
     near_copy_shingle_size: int
+    # Image copies as edges (off by default): a picture post re-posting an earlier post's image without a
+    # forward header counts as a citation of the earliest one (network.image_copies).
+    include_image_copies: bool
+    image_copy_distance: int
 
     # Communities and measures
     communities_strategy: list["community.StrategyInstance"]
@@ -445,6 +452,8 @@ class ResolvedOptions:
     # Event impact (interrupted time series around the recorded events)
     do_event_impact: bool = False
     event_window_weeks: int = event_impact.EVENT_WINDOW_WEEKS_DEFAULT
+    # Outbound-link layer (network.link_layer): the sites linked to, by domain category.
+    do_links: bool = False
 
     timeline_window: int | None = None
 
@@ -493,6 +502,8 @@ class ResolvedOptions:
             "near_copy_threshold": self.near_copy_threshold,
             "near_copy_min_tokens": self.near_copy_min_tokens,
             "near_copy_shingle_size": self.near_copy_shingle_size,
+            "image_copy_edges": self.include_image_copies,
+            "image_copy_distance": self.image_copy_distance,
             "include_lost": self.include_lost,
             "include_private": self.include_private,
             "environment_depth": self.environment_depth,
@@ -525,6 +536,7 @@ class ResolvedOptions:
             "dyadic_export": self.do_dyadic_export,
             "event_impact": self.do_event_impact,
             "event_window_weeks": self.event_window_weeks,
+            "links": self.do_links,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -809,6 +821,33 @@ class Command(BaseCommand):
             help=(
                 "Word-shingle length the near-copy resemblance is computed over. Defaults to "
                 f"[edges].near_copy_shingle_size, else {NEAR_COPY_SHINGLE_SIZE}."
+            ),
+        )
+        parser.add_argument(
+            "--image-copy-edges",
+            dest="image_copy_edges",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Also read image copies as citations (default: off): a picture post without a forward header "
+                "showing an image of an earlier in-scope post — the same Telegram photo, or a perceptual hash "
+                "within --image-copy-distance bits (run hash_media first) — counts as a citation of the "
+                "earliest one: an edge copier → origin, one citation event per post (an album counts once), "
+                "also counted by AMPLIFICATION, CONTENTORIGINALITY and DIFFUSIONLAG. Images on at least a fifth "
+                "of a channel's posts (logos, banners) are ignored for it; a copy of the channel's own post "
+                "follows --self-references. The links are written to data/image_copies.csv."
+            ),
+        )
+        parser.add_argument(
+            "--image-copy-distance",
+            dest="image_copy_distance",
+            type=int,
+            default=None,
+            metavar="BITS",
+            help=(
+                "Largest pHash Hamming distance (0–64 bits) at which two images count as the same (0 = same "
+                "Telegram photo or identical hash). Defaults to [edges].image_copy_distance in "
+                f"configuration/.operations-structural, else {IMAGE_COPY_DISTANCE_DEFAULT}."
             ),
         )
         parser.add_argument(
@@ -1304,6 +1343,20 @@ class Command(BaseCommand):
                 f"Default: {event_impact.EVENT_WINDOW_WEEKS_DEFAULT}."
             ),
         )
+        parser.add_argument(
+            "--links",
+            dest="links",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "Outbound-link layer: the web sites the observed channels link to (text URLs, hidden links, "
+                "buttons, previews; t.me excluded), grouped by the domain categories of Manage → Domains — "
+                "per-channel link measures (links per post, platform diversity, monetisation / mainstream / "
+                "alternative shares), a sites table, a label × category matrix and statistically validated "
+                "co-linking pairs. Writes data/links.json; links.html with --html, links.xlsx with --xlsx, "
+                "channel_sites.csv with --csv. See docs/outbound-links.md."
+            ),
+        )
         # ── Interest structural analysis (per-message C + D) ─────────────────
         parser.add_argument(
             "--interest-structural",
@@ -1452,6 +1505,21 @@ class Command(BaseCommand):
                 f"--near-copy-min-tokens ({min_tokens}) must be at least the shingle size ({shingle_size})."
             )
         return threshold, min_tokens, shingle_size
+
+    @staticmethod
+    def _resolve_image_copy_distance(options: dict) -> int:
+        """``--image-copy-distance`` (CLI value, else ``[edges].image_copy_distance``, else the module
+        default), validated to 0–64 bits."""
+        value = options.get("image_copy_distance")
+        if value is None or value == "":
+            value = getattr(settings, "SA_IMAGE_COPY_DISTANCE", None)
+        try:
+            distance = int(IMAGE_COPY_DISTANCE_DEFAULT if value is None or value == "" else value)
+        except (TypeError, ValueError) as exc:
+            raise CommandError(f"Invalid --image-copy-distance: {exc}") from exc
+        if not 0 <= distance <= 64:
+            raise CommandError(f"--image-copy-distance must be in [0, 64], got {distance}.")
+        return distance
 
     def _validate_settings(
         self,
@@ -1947,6 +2015,15 @@ class Command(BaseCommand):
                     end_date=end_date,
                     environment_depth=environment_depth,
                 )
+            elif m == "VISUALORIGINALITY":
+                labels = measures.apply_visual_originality(
+                    graph_data,
+                    graph,
+                    channel_dict,
+                    start_date=start_date,
+                    end_date=end_date,
+                    environment_depth=environment_depth,
+                )
             elif m == "DIFFUSIONLAG":
                 labels = measures.apply_diffusion_lag(
                     graph_data,
@@ -2007,6 +2084,8 @@ class Command(BaseCommand):
                 near_copy_threshold=opts.near_copy_threshold,
                 near_copy_min_tokens=opts.near_copy_min_tokens,
                 near_copy_shingle_size=opts.near_copy_shingle_size,
+                include_image_copies=opts.include_image_copies,
+                image_copy_distance=opts.image_copy_distance,
             )
         except ValueError:
             return None  # a period without relationships — no slice, matching the period loop's skip
@@ -2166,6 +2245,7 @@ class Command(BaseCommand):
         do_mrqap: bool = False,
         mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT,
         do_dyadic_export: bool = False,
+        do_links: bool = False,
     ) -> dict | None:
         """Run the full export pipeline for one timeline period and write its ``data_<key>/`` files.
 
@@ -2195,6 +2275,8 @@ class Command(BaseCommand):
                 near_copy_threshold=options.get("near_copy_threshold") or NEAR_COPY_THRESHOLD,
                 near_copy_min_tokens=options.get("near_copy_min_tokens") or NEAR_COPY_MIN_TOKENS,
                 near_copy_shingle_size=options.get("near_copy_shingle_size") or NEAR_COPY_SHINGLE_SIZE,
+                include_image_copies=bool(options.get("image_copy_edges")),
+                image_copy_distance=self._resolve_image_copy_distance(options),
             )
         except ValueError as e:
             self.stdout.write(self.style.WARNING(f"skipped ({e})"))
@@ -2265,6 +2347,17 @@ class Command(BaseCommand):
                 graph, graph_data, min_events=dominance_min_events, permutations=dominance_permutations
             )
             measures_labels += dominance.inject_node_scores(graph_data, dominance_payload)
+
+        links_payload: dict | None = None
+        if do_links:
+            links_payload = link_layer.compute_links(
+                graph,
+                graph_data,
+                start_date=start_date,
+                end_date=end_date,
+                environment_depth=options.get("environment_depth"),
+            )
+            measures_labels += link_layer.inject_node_scores(graph_data, links_payload)
 
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         community_table_data = None
@@ -2361,6 +2454,10 @@ class Command(BaseCommand):
 
             if options.get("near_copy_edges"):
                 exporter.write_near_copies_csv(graph, graph_data, os.path.join(tmp_dir, "data"))
+            if options.get("image_copy_edges"):
+                exporter.write_image_copies_csv(graph, graph_data, os.path.join(tmp_dir, "data"))
+            if links_payload is not None:
+                exporter.write_links_json(links_payload, graph_dir=tmp_dir)
             year_data_dst = os.path.join(root_target, f"data_{period.key}")
             if os.path.exists(year_data_dst):
                 shutil.rmtree(year_data_dst)
@@ -2430,6 +2527,7 @@ class Command(BaseCommand):
             "has_community_html": True,
             "has_robustness": do_robustness and rob_payload is not None,
             "has_dominance": dominance_payload is not None,
+            "has_links": links_payload is not None,
             "has_coordination": has_coordination,
             "coordination_nodes": coordination_nodes,
             "coordination_ties": coordination_ties,
@@ -2442,6 +2540,7 @@ class Command(BaseCommand):
             "_xlsx_community_data": community_table_data if do_xlsx else None,
             "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
             "_xlsx_dominance_data": dominance_payload if (do_xlsx and dominance_payload is not None) else None,
+            "_xlsx_links_data": links_payload if (do_xlsx and links_payload is not None) else None,
             "_label_mixing": (community_table_data or {}).get("label_mixing"),
             "_dyad_wave": dyads.wave_of(period.key, graph) if do_dyadic_export else None,
         }
@@ -2538,6 +2637,8 @@ class Command(BaseCommand):
         # three parameters fall back to the config file so a hand-tuned threshold is honoured.
         include_near_copies = bool(_o("near_copy_edges", False))
         near_copy_threshold, near_copy_min_tokens, near_copy_shingle_size = self._resolve_near_copy_params(options)
+        include_image_copies = bool(_o("image_copy_edges", False))
+        image_copy_distance = self._resolve_image_copy_distance(options)
         _raw_vacancy = _o("vacancy_measures", "")
         raw_vacancy_measures = _parse_csv(_raw_vacancy) if _raw_vacancy else []
         selected_vacancy_measures = (
@@ -2710,6 +2811,7 @@ class Command(BaseCommand):
             mrqap_permutations=max(int(_o("mrqap_permutations", mrqap.MRQAP_PERMUTATIONS_DEFAULT) or 0), 0),
             do_dyadic_export=_o("dyadic_export", False),
             do_event_impact=_o("event_impact", False),
+            do_links=_o("links", False),
             event_window_weeks=max(
                 int(_o("event_window_weeks", event_impact.EVENT_WINDOW_WEEKS_DEFAULT) or 0),
                 event_impact.MIN_WEEKS_PER_SIDE,
@@ -2732,6 +2834,8 @@ class Command(BaseCommand):
             near_copy_threshold=near_copy_threshold,
             near_copy_min_tokens=near_copy_min_tokens,
             near_copy_shingle_size=near_copy_shingle_size,
+            include_image_copies=include_image_copies,
+            image_copy_distance=image_copy_distance,
             include_lost=_o("include_lost", False),
             include_private=_o("include_private", False),
             channel_types=channel_types,
@@ -2840,6 +2944,8 @@ class Command(BaseCommand):
                 near_copy_threshold=opts.near_copy_threshold,
                 near_copy_min_tokens=opts.near_copy_min_tokens,
                 near_copy_shingle_size=opts.near_copy_shingle_size,
+                include_image_copies=opts.include_image_copies,
+                image_copy_distance=opts.image_copy_distance,
             )
         except ValueError as e:
             raise CommandError(str(e)) from e
@@ -2850,6 +2956,13 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"- near-copies read as citations: {cross} cross-channel, {len(links) - cross} self "
                 f"(Jaccard ≥ {opts.near_copy_threshold:g}, ≥ {opts.near_copy_min_tokens} tokens)"
+            )
+        if opts.include_image_copies:
+            links = graph.graph.get("image_copies") or []
+            cross = sum(1 for link in links if not link.is_self_copy)
+            self.stdout.write(
+                f"- image copies read as citations: {cross} cross-channel, {len(links) - cross} self "
+                f"(pHash distance ≤ {opts.image_copy_distance})"
             )
         self.stdout.flush()
 
@@ -2949,6 +3062,25 @@ class Command(BaseCommand):
             measures_labels += dominance.inject_node_scores(graph_data, global_dominance_payload)
             self.stdout.write("done")
 
+        # The outbound-link layer's per-channel measures join measures_labels like David's score.
+        global_links_payload: dict | None = None
+        if opts.do_links:
+            self.stdout.write("- outbound links (sites, categories, co-linking) … ", ending="")
+            self.stdout.flush()
+            global_links_payload = link_layer.compute_links(
+                graph,
+                graph_data,
+                start_date=opts.start_date,
+                end_date=opts.end_date,
+                environment_depth=opts.environment_depth,
+            )
+            measures_labels += link_layer.inject_node_scores(graph_data, global_links_payload)
+            summary = global_links_payload["summary"]
+            self.stdout.write(
+                f"{summary['sites']} sites over {summary['linking_messages']} messages "
+                f"({global_links_payload['colinking']['validated']} validated co-linking pairs)"
+            )
+
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
         # All writes go to the staging directory; it is renamed to _final_target only after
         # write_summary_json completes, making every live export atomically consistent.
@@ -2982,6 +3114,7 @@ class Command(BaseCommand):
             or opts.do_vacancy
             or opts.do_robustness
             or (opts.do_dominance and opts.do_html)
+            or (opts.do_links and opts.do_html)
             # interest_structural.html imports ./js/utils.js and css/tables.css from
             # the copied map assets, like the vacancy/robustness pages above.
             or opts.do_interest_structural
@@ -3156,6 +3289,18 @@ class Command(BaseCommand):
                 )
             if opts.do_csv:
                 exporter.write_dominance_csv(global_dominance_payload, root_target)
+
+        if opts.do_links and global_links_payload is not None:
+            self.stdout.write("- outbound links (json" + (" + html" if opts.do_html else "") + ")")
+            exporter.write_links_json(global_links_payload, root_target)
+            if opts.do_html:
+                tables.write_links_html(
+                    output_filename=os.path.join(root_target, "links.html"),
+                    seo=opts.seo,
+                    project_title=project_title,
+                )
+            if opts.do_csv:
+                exporter.write_channel_sites_csv(global_links_payload, root_target)
 
         if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("- media")
@@ -3480,6 +3625,7 @@ class Command(BaseCommand):
                         do_mrqap=opts.do_mrqap,
                         mrqap_permutations=opts.mrqap_permutations,
                         do_dyadic_export=opts.do_dyadic_export,
+                        do_links=opts.do_links,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
@@ -3577,6 +3723,17 @@ class Command(BaseCommand):
                     project_title=project_title,
                     year_data=dominance_years,
                 )
+            if opts.do_links and global_links_payload is not None:
+                links_periods = [
+                    (e["key"], e["_xlsx_links_data"]) for e in timeline_entries if e.get("_xlsx_links_data") is not None
+                ] or None
+                self.stdout.write("- outbound links (xlsx)")
+                tables.write_links_xlsx(
+                    global_links_payload,
+                    output_filename=os.path.join(root_target, "links.xlsx"),
+                    project_title=project_title,
+                    year_data=links_periods,
+                )
 
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)
@@ -3610,16 +3767,23 @@ class Command(BaseCommand):
             include_dyads=opts.do_dyadic_export,
             include_event_impact_html=opts.do_event_impact and opts.do_html,
             include_event_impact_xlsx=opts.do_event_impact and opts.do_xlsx,
+            include_links_html=opts.do_links and opts.do_html,
+            include_links_xlsx=opts.do_links and opts.do_xlsx,
         )
 
         near_copy_count: int | None = None
         if opts.include_near_copies:
             near_copy_count = len(graph.graph.get("near_copies") or [])
             exporter.write_near_copies_csv(graph, graph_data, os.path.join(root_target, "data"))
+        image_copy_count: int | None = None
+        if opts.include_image_copies:
+            image_copy_count = len(graph.graph.get("image_copies") or [])
+            exporter.write_image_copies_csv(graph, graph_data, os.path.join(root_target, "data"))
 
         # The reproducibility record: run options as resolved + the fixed parameters of the parts that
         # ran. Written inside the staging dir, before summary.json, so it is published atomically.
         run_facts.near_copies = near_copy_count
+        run_facts.image_copies = image_copy_count
         run_facts.timeline_periods = [(e["key"], e["label"]) for e in timeline_entries]
         run_facts.year_resolutions = {
             e["key"]: e["community_resolutions"] for e in timeline_entries if e.get("community_resolutions")
@@ -3636,6 +3800,7 @@ class Command(BaseCommand):
             len(graph.nodes),
             len(graph.edges),
             near_copies=near_copy_count,
+            image_copies=image_copy_count,
             community_resolutions=community_resolutions,
             community_fits=community_fits,
             homophily=(community_table_data or {}).get("network_summary", {}).get("homophily"),

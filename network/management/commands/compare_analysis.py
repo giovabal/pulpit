@@ -106,6 +106,11 @@ class Command(BaseCommand):
             include_coordination_3d=exists("coordination3d.html"),
             include_dominance_html=exists("dominance.html"),
             include_dominance_xlsx=exists("dominance.xlsx"),
+            include_dyads=os.path.isdir(os.path.join(root_target, "dyads")),
+            include_event_impact_html=exists("events.html"),
+            include_event_impact_xlsx=exists("event_impact.xlsx"),
+            include_links_html=exists("links.html"),
+            include_links_xlsx=exists("links.xlsx"),
             include_compare_html=True,
             compare_files=compare_files,
         )

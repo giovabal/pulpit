@@ -39,6 +39,10 @@ force_retry_unresolved_references = false
 in_degrees = true
 out_degrees = true
 
+[index]
+hash_images = false
+domains = false
+
 [environment]
 enabled = false
 depth = 1

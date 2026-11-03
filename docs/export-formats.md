@@ -23,6 +23,9 @@ exports/
     dominance.html          ← dominance analysis (with --dominance)
     events.html             ← event impact: interrupted time series around recorded events (with --event-impact --html)
     event_impact.xlsx / .csv  ← its effects table and weekly series (with --xlsx / --csv)
+    links.html              ← outbound links: sites, categories, label × category matrix, co-linking (with --links --html)
+    links.xlsx              ← its channels / sites / categories / co-linking / matrix sheets (with --links --xlsx)
+    channel_sites.csv, links_colinking.csv  ← channel × site long table and co-linking pairs (with --links --csv)
     coordination.html       ← 2D co-forwarding coordination map (with --coordination-2d)
     coordination3d.html     ← 3D co-forwarding coordination map (with --coordination-3d)
     vacancy_analysis.html   ← replacement-candidate ranking (optional)
@@ -46,6 +49,7 @@ exports/
     PARAMETERS.md           ← every parameter behind the numbers (always)
     summary.json            ← name, counts and CLI options, machine-readable (always)
     data/near_copies.csv    ← near-copy audit list (only with --near-copy-edges)
+    data/image_copies.csv   ← image-copy audit list (only with --image-copy-edges)
     data/
       channels.json
       channel_position.json
@@ -58,6 +62,7 @@ exports/
       dominance.json    (when --dominance)
       mrqap.json            (when --mrqap)
       event_impact.json     (when --event-impact)
+      links.json            (when --links)
       timeline.json         (when --timeline-step)
     data_<period>/          (one per period with --timeline-step: data_2024/, data_2024Q1/, data_2024-03/)
       ...
@@ -342,8 +347,9 @@ One row per directed edge in the network:
 | `weight_forwards` | Raw count of message forwards contributing to this edge (before normalisation) |
 | `weight_mentions` | Raw count of `t.me/` reference mentions contributing to this edge (before normalisation) |
 | `weight_copies` | Raw count of near-copies contributing to this edge — posts of the source channel whose text re-posted an earlier post of the target channel without the forward header; always `0` unless `--near-copy-edges` was on (see [Configuration § Near-copies as edges](configuration.md#near-copies-as-edges)) |
+| `weight_image_copies` | Raw count of image copies contributing to this edge — picture posts of the source channel re-posting an image of an earlier post of the target channel without the forward header; always `0` unless `--image-copy-edges` was on (see [Image copies](image-copies.md)) |
 
-`weight_forwards + weight_mentions + weight_copies` equals the raw total from which `weight` is computed (with the exception of the `NONE` strategy, where `weight` is always 1.0 regardless of counts). This lets you re-apply any normalisation or filter to only forwards vs. only mentions vs. only copies — in particular to drop the *inferred* copy citations and keep Telegram's own forward provenance.
+`weight_forwards + weight_mentions + weight_copies + weight_image_copies` equals the raw total from which `weight` is computed (with the exception of the `NONE` strategy, where `weight` is always 1.0 regardless of counts). This lets you re-apply any normalisation or filter to only forwards vs. only mentions vs. only copies — in particular to drop the *inferred* copy citations and keep Telegram's own forward provenance.
 
 **Quick start in Python:**
 
@@ -388,6 +394,21 @@ Written whenever **Include near-copies as edges** (`--near-copy-edges`) is on, w
 
 A match proves the same text appeared earlier in another in-scope channel, not who copied whom; read this file before interpreting a copy edge.
 
+### data/image_copies.csv
+
+Written whenever **Include image copies as edges** (`--image-copy-edges`) is on; per timeline period too. One row per copy → origin **post** (an album is one post, identified by its first message):
+
+| Column | Content |
+| :----- | :------ |
+| `copy_channel`, `copy_channel_id`, `copy_message_id`, `copy_date` | The later picture post and its channel |
+| `origin_channel`, `origin_channel_id`, `origin_message_id`, `origin_date` | The earliest in-scope post showing the same image — the edge target |
+| `lag_hours` | `copy_date − origin_date` in hours |
+| `distance` | pHash Hamming distance of the matched images (0 = the same Telegram photo or an identical hash) |
+| `cluster_size` | Posts in scope showing the image, transitively — a picture shown by many posts is more likely a common meme |
+| `self_copy` | `1` when the origin is the copier's own earlier post |
+
+See [Image copies](image-copies.md) for the guardrails.
+
 ---
 
 ## data/timeline.json — the timeline's periods
@@ -403,6 +424,10 @@ Written with `--timeline-step`. `{"step", "window_months", "overlapping", "perio
 ## events.html / event_impact.xlsx / .csv — event impact
 
 Written with `--event-impact` (`data/event_impact.json` always; the page with `--html`). For every event recorded inside the data: the weekly series of each metric around it, the fitted segments and the counterfactual continuation of the pre-event trend, and an effects table — level change (and its % for count metrics), slope change, HAC p, placebo p and BH q, plus notes (window cut by the data edge, few placebo dates, other events inside the window). A network-wide chart shows any metric's whole weekly series with the events marked. The XLSX has an `Effects` sheet (one row per event × metric, the CSV's layout) and a `Weekly series` sheet. See [Event impact](event-impact.md).
+
+## links.html / links.xlsx / channel_sites.csv — outbound links
+
+Written with `--links` (`data/links.json` always, per timeline period too; the page with `--html`). The categories' share of link events, a label × category matrix per partition label group, one row per observed channel (linking posts share, distinct sites, platform diversity, monetisation / mainstream / alternative shares, categorised share, top sites), one row per site (category, messages, channels, first and last link, the labels linking most) and the co-linking pairs (shared sites against the number expected by chance, BH q, the shared sites rarest first). The per-channel measures also join the channel table, `nodes.csv` and GEXF/GraphML. The XLSX has `Channels` / `Sites` (with one sheet per period on a timeline export), `Categories`, `Co-linking` and `Matrix <group>` sheets; `channel_sites.csv` is the long channel × site table with message counts, `links_colinking.csv` the pairs. See [Outbound links](outbound-links.md).
 
 ## network.gexf / network.graphml — network exchange formats
 

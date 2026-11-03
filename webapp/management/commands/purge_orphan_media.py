@@ -17,7 +17,8 @@ that isn't pointed to by one of the eight file-bearing model fields:
 * ``ProfilePicture.thumbnail`` (under ``channels/<X>/profile/``)
 
 Anything outside these six roots is untouched. Symlinks are skipped. Empty
-directories left behind by the cleanup are removed at the end.
+directories left behind by the cleanup are removed at the end, and so are the
+image fingerprints (``hash_media``) of photos no ``MessagePicture`` row carries.
 
 Safe to run while a crawl is downloading media. The referenced-path snapshot is
 taken before the walk, so two guards cover what a crawl does meanwhile: a file
@@ -90,6 +91,8 @@ class OrphanReport:
     empty_dirs_removed: int = 0
     skipped_recent: int = 0
     skipped_referenced: int = 0
+    # Image fingerprints (``hash_media``) of photos no message references any more, deleted with the files.
+    fingerprints_removed: int = 0
     dry_run: bool = False
 
 
@@ -234,6 +237,7 @@ def purge_orphans(*, dry_run: bool = False, grace_seconds: float = RECENT_FILE_G
     empty_dirs = 0
     for root in roots:
         empty_dirs += _remove_empty_dirs(root)
+    fingerprints_removed = purge_orphan_fingerprints()
 
     return OrphanReport(
         candidate_files=total_files,
@@ -244,7 +248,20 @@ def purge_orphans(*, dry_run: bool = False, grace_seconds: float = RECENT_FILE_G
         empty_dirs_removed=empty_dirs,
         skipped_recent=skipped_recent,
         skipped_referenced=skipped_referenced,
+        fingerprints_removed=fingerprints_removed,
     )
+
+
+def purge_orphan_fingerprints() -> int:
+    """Delete the image fingerprints whose photo id no ``MessagePicture`` row carries any more. Returns the count."""
+    from webapp.models import ImageFingerprint, MessagePicture
+
+    deleted, _ = (
+        ImageFingerprint.objects.filter(kind=ImageFingerprint.KIND_PICTURE)
+        .exclude(telegram_id__in=MessagePicture.objects.values("telegram_id"))
+        .delete()
+    )
+    return deleted
 
 
 def fmt_bytes(n: int) -> str:
@@ -316,3 +333,5 @@ class Command(BaseCommand):
             self.stdout.write(f"Kept {report.skipped_referenced:,} files a database row started referencing meanwhile.")
         if report.empty_dirs_removed:
             self.stdout.write(f"Cleaned up {report.empty_dirs_removed:,} empty directories.")
+        if report.fingerprints_removed:
+            self.stdout.write(f"Dropped {report.fingerprints_removed:,} fingerprints of photos no message references.")

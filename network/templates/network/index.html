@@ -217,6 +217,22 @@
   </div>
   {% endif %}
 
+  {% if include_links_html or include_links_xlsx %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="card-title h5"><i class="bi bi-box-arrow-up-right text-secondary me-2" aria-hidden="true"></i>Outbound links</h3>
+        <p class="card-text text-muted small">The web sites the channels send their readers to, by category — donations, shops, mainstream and alternative platforms — who links where, and which channels share their infrastructure.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          {% if include_links_html %}<a href="links.html" class="btn btn-outline-primary btn-sm">Open analysis</a>{% endif %}
+          {% if include_links_xlsx %}<a href="links.xlsx" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> XLSX</a>{% endif %}
+          <a href="{{ repository_url }}/blob/main/docs/outbound-links.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if include_dyads %}
   <div class="col-md-6 col-xl-4">
     <div class="card h-100">
