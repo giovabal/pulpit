@@ -111,6 +111,8 @@ class OperationsView(View):
             "CRAWL_DOWNLOAD_TIMEOUT": settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT,
             "CRAWL_IN_DEGREES": settings.CRAWL_IN_DEGREES,
             "CRAWL_OUT_DEGREES": settings.CRAWL_OUT_DEGREES,
+            "CRAWL_HASH_IMAGES": settings.CRAWL_HASH_IMAGES,
+            "CRAWL_INDEX_DOMAINS": settings.CRAWL_INDEX_DOMAINS,
             "CRAWL_ENVIRONMENT": settings.CRAWL_ENVIRONMENT,
             "CRAWL_ENVIRONMENT_DEPTH": settings.CRAWL_ENVIRONMENT_DEPTH,
             "CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES": settings.CRAWL_ENVIRONMENT_DOWNLOAD_IMAGES,
@@ -140,6 +142,7 @@ class OperationsView(View):
             "SA_TIMELINE_WINDOW": settings.SA_TIMELINE_WINDOW,
             "SA_EVENT_IMPACT": settings.SA_EVENT_IMPACT,
             "SA_EVENT_WINDOW_WEEKS": settings.SA_EVENT_WINDOW_WEEKS,
+            "SA_LINKS": settings.SA_LINKS,
             "SA_INCLUDE_MENTIONS": settings.SA_INCLUDE_MENTIONS,
             "SA_INCLUDE_SELF_REFERENCES": settings.SA_INCLUDE_SELF_REFERENCES,
             "SA_INCLUDE_LOST": settings.SA_INCLUDE_LOST,
@@ -182,6 +185,8 @@ class OperationsView(View):
             # SA near-copy edges (Edge weights fieldset)
             "SA_NEAR_COPY_EDGES": settings.SA_NEAR_COPY_EDGES,
             "SA_NEAR_COPY_THRESHOLD": settings.SA_NEAR_COPY_THRESHOLD,
+            "SA_IMAGE_COPY_EDGES": settings.SA_IMAGE_COPY_EDGES,
+            "SA_IMAGE_COPY_DISTANCE": settings.SA_IMAGE_COPY_DISTANCE,
             # SA expanded sets for checkbox groups
             # sa_measure_tokens / sa_strategy_tokens seed the drag-and-drop builders; passed at top
             # level (below) so the templates' json_script tags can read them.
@@ -617,6 +622,9 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Degrees
         ("bool_explicit", "in_degrees", "--in-degrees", "--no-in-degrees"),
         ("bool_explicit", "out_degrees", "--out-degrees", "--no-out-degrees"),
+        # Offline index steps
+        ("bool_explicit", "hash_images", "--hash-images", "--no-hash-images"),
+        ("bool_explicit", "index_domains", "--index-domains", "--no-index-domains"),
         # Environment
         ("bool_explicit", "environment", "--environment", "--no-environment"),
         ("value", "environment_depth", "--environment-depth"),
@@ -702,6 +710,8 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "edge_weight_strategy", "--edge-weight-strategy"),
         ("bool_explicit", "near_copy_edges", "--near-copy-edges", "--no-near-copy-edges"),
         ("value", "near_copy_threshold", "--near-copy-threshold"),
+        ("bool_explicit", "image_copy_edges", "--image-copy-edges", "--no-image-copy-edges"),
+        ("value", "image_copy_distance", "--image-copy-distance"),
         ("value", "diffusion_window", "--diffusion-window"),
         ("bool_explicit", "consensus_matrix", "--consensus-matrix", "--no-consensus-matrix"),
         ("bool_explicit", "structural_similarity", "--structural-similarity", "--no-structural-similarity"),
@@ -733,6 +743,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("value", "timeline_window", "--timeline-window"),
         ("bool_explicit", "event_impact", "--event-impact", "--no-event-impact"),
         ("value", "event_window_weeks", "--event-window-weeks"),
+        ("bool_explicit", "links", "--links", "--no-links"),
         ("csv", "vacancy_measures", "--vacancy-measures"),
         ("value", "vacancy_months_before", "--vacancy-months-before"),
         ("value", "vacancy_months_after", "--vacancy-months-after"),
@@ -801,6 +812,8 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("force_retry_unresolved_references", "messages.force_retry_unresolved_references", "bool"),
         ("in_degrees", "degrees.in_degrees", "bool"),
         ("out_degrees", "degrees.out_degrees", "bool"),
+        ("hash_images", "index.hash_images", "bool"),
+        ("index_domains", "index.domains", "bool"),
         ("download_images", "downloads.images", "bool"),
         ("download_video", "downloads.video", "bool"),
         ("download_audio", "downloads.audio", "bool"),
@@ -846,11 +859,14 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("timeline_window", "outputs.timeline_window", "int"),
         ("event_impact", "outputs.event_impact", "bool"),
         ("event_window_weeks", "computation.event_window_weeks", "int"),
+        ("links", "outputs.links", "bool"),
         ("edge_weight_strategy", "edges.weight_strategy", "value"),
         ("include_mentions", "edges.include_mentions", "bool"),
         ("include_self_references", "edges.include_self_references", "bool"),
         ("near_copy_edges", "edges.near_copy_edges", "bool"),
         ("near_copy_threshold", "edges.near_copy_threshold", "float"),
+        ("image_copy_edges", "edges.image_copy_edges", "bool"),
+        ("image_copy_distance", "edges.image_copy_distance", "int"),
         ("include_lost", "scope.include_lost", "bool"),
         ("include_private", "scope.include_private", "bool"),
         ("environment_depth", "scope.environment_depth", "int"),
@@ -1004,6 +1020,15 @@ def _validate_post_constraints(task: str, post: Any, *, launching: bool = False)
                 raise ValueError(f"Near-copy similarity must be a number, got {raw_threshold!r}") from exc
             if not 0 < threshold <= 1:
                 raise ValueError(f"Near-copy similarity must be above 0 and at most 1, got {raw_threshold}")
+
+        raw_distance = (post.get("image_copy_distance") or "").strip()
+        if raw_distance:
+            try:
+                distance = int(raw_distance)
+            except ValueError as exc:
+                raise ValueError(f"Image-copy distance must be a whole number of bits, got {raw_distance!r}") from exc
+            if not 0 <= distance <= 64:
+                raise ValueError(f"Image-copy distance must be between 0 and 64 bits, got {distance}")
 
         raw_depth = (post.get("environment_depth") or "").strip()
         if raw_depth:

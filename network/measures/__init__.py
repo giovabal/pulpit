@@ -17,6 +17,7 @@ from network.measures._content import (
     apply_amplification_factor,
     apply_content_originality,
     apply_diffusion_lag,
+    apply_visual_originality,
 )
 from network.measures._registry import (
     ALL_MEASURES,
@@ -68,6 +69,7 @@ __all__ = [
     "apply_out_degree_centrality",
     "apply_pagerank",
     "apply_reciprocity",
+    "apply_visual_originality",
     "compute_hits",
     "pagerank_scores",
     "VALID_NETWORK_STAT_GROUPS",

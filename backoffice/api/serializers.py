@@ -8,6 +8,8 @@ from webapp.models import (
     ChannelSource,
     ChannelVacancy,
     CustomEmojiPack,
+    Domain,
+    DomainCategory,
     Label,
     LabelGroup,
     LabelParent,
@@ -622,3 +624,30 @@ class CustomEmojiPackSerializer(serializers.ModelSerializer):
 
     def get_preview_html(self, obj: CustomEmojiPack) -> str:
         return "".join(str(emoji_html(e, play="hover")) for e in self.context.get("previews", {}).get(obj.pk, [])[:3])
+
+
+class DomainCategorySerializer(serializers.ModelSerializer):
+    """Manage → Domains: an analyst-defined kind of site; ``domain_count`` is annotated by the viewset."""
+
+    domain_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = DomainCategory
+        fields = ["id", "name", "color", "role", "description", "domain_count"]
+
+
+class DomainSerializer(serializers.ModelSerializer):
+    """Manage → Domains: a linked site with the counts of the last ``index_domains`` run; only ``category``
+    and ``note`` are editable, each saved on its own (see :meth:`update`)."""
+
+    class Meta:
+        model = Domain
+        fields = ["id", "name", "category", "note", "posts", "channels", "first_seen", "last_seen"]
+        read_only_fields = ["name", "posts", "channels", "first_seen", "last_seen"]
+
+    def update(self, instance: Domain, validated_data: dict) -> Domain:
+        # The page PATCHes the category and the note separately, possibly a moment apart.
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save(update_fields=[*validated_data, "_updated"])
+        return instance

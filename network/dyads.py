@@ -16,9 +16,9 @@ read from the very graph and messages the export was computed on:
 
 ``events.csv`` lists the forwards and mentions through :func:`network.graph_builder.forward_messages_qs` /
 :func:`~network.graph_builder.reference_rows_qs` — the querysets ``build_graph`` aggregates — and the
-near-copies the graph was built with, keeping only those on an edge of the graph: one event per counted
-citation, so its per-pair counts equal the edge's ``weight_forwards`` / ``weight_mentions`` /
-``weight_copies``.
+near-copies and image copies the graph was built with, keeping only those on an edge of the graph: one
+event per counted citation, so its per-pair counts equal the edge's ``weight_forwards`` / ``weight_mentions``
+/ ``weight_copies`` / ``weight_image_copies``.
 """
 
 import csv
@@ -40,8 +40,8 @@ WAVE_ACTOR_RULE = (
     "from a period's graph is marked absent in waves/presence.csv and has an empty row and column that period"
 )
 EVENT_RULE = (
-    "one row per forward, mention and near-copy counted on an edge of the exported graph, at the citing "
-    "message's timestamp (UTC)"
+    "one row per forward, mention, near-copy and image copy counted on an edge of the exported graph, at the "
+    "citing message's timestamp (UTC)"
 )
 
 _SOURCE = "network/dyads.py"
@@ -123,6 +123,9 @@ def citation_events(
     for link in graph.graph.get("near_copies") or []:
         if (link.copy_channel_id, link.origin_channel_id) in edges:
             events.append((link.copy_date, link.copy_id, link.copy_channel_id, link.origin_channel_id, "copy"))
+    for link in graph.graph.get("image_copies") or []:
+        if (link.copy_channel_id, link.origin_channel_id) in edges:
+            events.append((link.copy_date, link.copy_id, link.copy_channel_id, link.origin_channel_id, "image_copy"))
     epoch = datetime.datetime.min.replace(tzinfo=datetime.UTC)
     events.sort(key=lambda e: (e[0] or epoch, e[1]))
     return [[sender, receiver, _iso(date), kind, message_id] for date, message_id, sender, receiver, kind in events]
@@ -195,6 +198,7 @@ def _edge_rows(graph: nx.DiGraph) -> list[list[Any]]:
             int(round(float(data.get("weight_forwards") or 0))),
             int(round(float(data.get("weight_mentions") or 0))),
             int(round(float(data.get("weight_copies") or 0))),
+            int(round(float(data.get("weight_image_copies") or 0))),
             data.get("weight_raw", data.get("weight")),
         ]
         for u, v, data in sorted(graph.edges(data=True), key=lambda e: (int(e[0]), int(e[1])))
@@ -248,8 +252,8 @@ the citing channel to the cited one: a forward or mention of j by i is a tie i �
 | File | Content |
 | :-- | :-- |
 | `actors.csv` | Every node: title, URL, its label in each partition label group, `observed` (1 = its own messages were read; 0 = a dead leaf, cited only), environment depth, messages in the window, subscribers, activity period, lost flag, channel type |
-| `edgelist.csv` | Every tie: `citations` = `forwards` + `mentions` + `copies` (raw counts), `weight` = the `--edge-weight-strategy` tie weight |
-| `events.csv` | One row per citation counted on a tie, in time order: `sender`, `receiver`, `timestamp` (UTC), `type` (forward / mention / copy), `message_id`. Its per-pair counts equal `edgelist.csv` |
+| `edgelist.csv` | Every tie: `citations` = `forwards` + `mentions` + `copies` + `image_copies` (raw counts), `weight` = the `--edge-weight-strategy` tie weight |
+| `events.csv` | One row per citation counted on a tie, in time order: `sender`, `receiver`, `timestamp` (UTC), `type` (forward / mention / copy / image_copy), `message_id` (an image copy's is its post's first message). Its per-pair counts equal `edgelist.csv` |
 {dyads_row}{waves_row}
 Typical uses:
 
@@ -282,7 +286,7 @@ def write_dyadic_bundle(
     _write_csv(os.path.join(directory, "actors.csv"), header, rows)
     _write_csv(
         os.path.join(directory, "edgelist.csv"),
-        ["sender", "receiver", "citations", "forwards", "mentions", "copies", "weight"],
+        ["sender", "receiver", "citations", "forwards", "mentions", "copies", "image_copies", "weight"],
         _edge_rows(graph),
     )
     _write_csv(

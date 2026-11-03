@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet
 from django.utils import timezone
 
+from network.image_copies import IMAGE_COPY_DISTANCE_DEFAULT, ImageCopy, image_copies_for_channels
 from network.near_copies import (
     NEAR_COPY_MIN_TOKENS,
     NEAR_COPY_SHINGLE_SIZE,
@@ -270,24 +271,29 @@ def _build_edge_list(
     edge_weight_strategy: str,
     include_self_references: bool = False,
     copy_counts: dict | None = None,
+    image_copy_counts: dict | None = None,
 ) -> list[list[str | float]]:
     """Compute weighted edge list from raw count dicts.
 
-    Each row: ``[amplifier, cited, weight, weight_forwards, weight_mentions, weight_copies]``,
-    matching the citation orientation the graph is built in (citing → cited).
-    ``weight_forwards``, ``weight_mentions`` and ``weight_copies`` are the raw
-    forward / mention / near-copy counts (before any normalisation), available
-    for CSV export. ``copy_counts`` is empty unless near-copy edges are on.
+    Each row: ``[amplifier, cited, weight, weight_forwards, weight_mentions, weight_copies,
+    weight_image_copies]``, matching the citation orientation the graph is built in (citing → cited).
+    The last four are the raw forward / mention / near-copy / image-copy counts (before any
+    normalisation), available for CSV export. ``copy_counts`` is empty unless near-copy edges are on,
+    ``image_copy_counts`` unless image-copy edges are.
     """
     copy_counts = copy_counts or {}
+    image_copy_counts = image_copy_counts or {}
     edge_list: list[list[str | float]] = []
-    for amplifier_pk, source_pk in set(forwarded_counts) | set(reference_counts) | set(copy_counts):
+    for amplifier_pk, source_pk in (
+        set(forwarded_counts) | set(reference_counts) | set(copy_counts) | set(image_copy_counts)
+    ):
         if not include_self_references and amplifier_pk == source_pk:
             continue
         f_count = forwarded_counts.get((amplifier_pk, source_pk), 0)
         m_count = reference_counts.get((amplifier_pk, source_pk), 0)
         c_count = copy_counts.get((amplifier_pk, source_pk), 0)
-        total = f_count + m_count + c_count
+        i_count = image_copy_counts.get((amplifier_pk, source_pk), 0)
+        total = f_count + m_count + c_count + i_count
         if edge_weight_strategy == "NONE":
             weight = 1.0
         elif edge_weight_strategy == "TOTAL":
@@ -305,7 +311,7 @@ def _build_edge_list(
             # the opposite content-flow orientation (SIR spreading, trophic
             # level) reverse the graph internally.
             edge: list[str | float] = [pk_to_str[amplifier_pk], pk_to_str[source_pk]]
-            edge.extend([weight, float(f_count), float(m_count), float(c_count)])
+            edge.extend([weight, float(f_count), float(m_count), float(c_count), float(i_count)])
             edge_list.append(edge)
     return edge_list
 
@@ -363,6 +369,8 @@ def build_graph(
     near_copy_threshold: float = NEAR_COPY_THRESHOLD,
     near_copy_min_tokens: int = NEAR_COPY_MIN_TOKENS,
     near_copy_shingle_size: int = NEAR_COPY_SHINGLE_SIZE,
+    include_image_copies: bool = False,
+    image_copy_distance: int = IMAGE_COPY_DISTANCE_DEFAULT,
 ) -> tuple[nx.DiGraph, dict[str, dict[str, Any]], list[list[str | float]], QuerySet[Channel]]:
     """Build a directed NetworkX graph from channels in the DB.
 
@@ -618,6 +626,36 @@ def build_graph(
     graph.graph["near_copies"] = near_copies
     graph.graph["near_copies_enabled"] = bool(include_near_copies)
 
+    # Image copies: a picture post re-posting an earlier post's image without a forward header (network.image_copies)
+    # — one citation event per copying post, which joins the citing-message denominator unless its first message
+    # already counts there (a t.me/ reference, or a text near-copy).
+    image_copies: list[ImageCopy] = []
+    image_copy_counts: dict[tuple[int, int], int] = {}
+    if include_image_copies:
+        detection = image_copies_for_channels(
+            channel_ids, cutoff_q=cutoff_q, start_date=start_date, end_date=end_date, distance=image_copy_distance
+        )
+        image_copies = detection["links"]
+        graph.graph["image_post_counts"] = detection["image_posts"]
+        graph.graph["image_copied_posts"] = detection["copied_posts"]
+        citing_ids = {link.copy_id for link in near_copies}
+        if include_mentions:
+            ids = [link.copy_id for link in image_copies]
+            for start in range(0, len(ids), 500):
+                citing_ids.update(
+                    references_through.objects.filter(message_id__in=ids[start : start + 500])
+                    .values_list("message_id", flat=True)
+                    .distinct()
+                )
+        for link in image_copies:
+            pair = (link.copy_channel_id, link.origin_channel_id)
+            image_copy_counts[pair] = image_copy_counts.get(pair, 0) + 1
+            if link.copy_id not in citing_ids:
+                referencing_counts[link.copy_channel_id] = referencing_counts.get(link.copy_channel_id, 0) + 1
+    graph.graph["image_copies"] = image_copies
+    graph.graph["image_copies_enabled"] = bool(include_image_copies)
+    graph.graph["image_copy_distance"] = int(image_copy_distance)
+
     for entry in channel_dict.values():
         entry["data"]["citing_messages"] = int(referencing_counts.get(entry["channel"].pk, 0))
 
@@ -631,6 +669,7 @@ def build_graph(
         edge_weight_strategy,
         include_self_references=include_self_references,
         copy_counts=copy_counts,
+        image_copy_counts=image_copy_counts,
     )
 
     if not edge_list:
@@ -648,6 +687,7 @@ def build_graph(
             weight_forwards=edge[3],
             weight_mentions=edge[4],
             weight_copies=edge[5],
+            weight_image_copies=edge[6],
         )
 
     # Remove org-less nodes that ended up with no edges. Two ways they arise:

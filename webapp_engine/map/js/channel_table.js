@@ -7,7 +7,8 @@ import { fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeli
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
 var INFLUENCE_KEYS = { "pagerank": 1, "hits_hub": 1, "hits_authority": 1, "in_degree_centrality": 1, "out_degree_centrality": 1 };
 var STRUCTURAL_KEYS = { "burt_constraint": 1, "within_module_z": 1, "participation": 1, "participation_weighted": 1, "reciprocity": 1, "david_score": 1 };
-var CONTENT_KEYS = { "content_originality": 1, "amplification_factor": 1, "diffusion_lag": 1 };
+var CONTENT_KEYS = { "content_originality": 1, "visual_originality": 1, "amplification_factor": 1, "diffusion_lag": 1 };
+var LINK_KEYS = { "link_share": 1, "distinct_sites": 1, "platform_diversity": 1, "monetisation_share": 1, "mainstream_share": 1, "alternative_share": 1 };
 var POSITION_ORDER = ["in_deg", "out_deg", "fans", "messages_count"];
 var POSITION_LABELS = { "in_deg": "In-strength", "out_deg": "Out-strength", "fans": "Users", "messages_count": "Messages" };
 var COL_TOOLTIPS = {
@@ -27,7 +28,14 @@ var COL_TOOLTIPS = {
     "david_score": "David's score (dominance): sum of the channel's dyadic dominance proportions over its citation partners — each pair's citations split in proportion to the dependence each side places on the other, corrected for sparse dyads (de Vries et al. 2006); positive → its partners rely on it more than it relies on them, negative → dependent; null for channels with no dyad above the evidence floor. From the Dominance analysis",
     "reciprocity": "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
+    "visual_originality": "Visual originality (0–1): share of picture posts whose images are not copies of another channel's earlier post",
     "amplification_factor": "Amplification factor: forwards received from tracked channels per own message",
+    "link_share": "Linking posts share (0–1): share of the channel's messages carrying at least one outbound web link (t.me excluded). From the Outbound links analysis",
+    "distinct_sites": "Distinct sites: number of different web sites the channel links to in the period",
+    "platform_diversity": "Platform diversity: effective number of equally used link categories (Hill number of order 2 over the categorised links; 1 → all in one category). Null when no link is categorised",
+    "monetisation_share": "Monetisation link share (0–1): share of the channel's links pointing to donation and shop sites (categories with the Monetisation role); a lower bound while sites stay uncategorised",
+    "mainstream_share": "Mainstream link share (0–1): share of the channel's links pointing to mainstream platforms (Mainstream role) — its exposure to mainstream moderation; a lower bound while sites stay uncategorised",
+    "alternative_share": "Alternative link share (0–1): share of the channel's links pointing to alternative platforms (Alternative role); a lower bound while sites stay uncategorised",
     "diffusion_lag": "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
     "sbm_confidence": "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
     "environment_depth": "Environment depth: citation hops from the monitored channels — 0 in target, k for an environment channel the crawler reached k hops out, 1 for a dead leaf",
@@ -225,13 +233,15 @@ function _render(d) {
     var influenceCols = extraMeasures.filter(function(m) { return INFLUENCE_KEYS[canonicalKey(m[0])]; });
     var structuralCols = extraMeasures.filter(function(m) { return STRUCTURAL_KEYS[canonicalKey(m[0])]; });
     var contentCols = extraMeasures.filter(function(m) { return CONTENT_KEYS[canonicalKey(m[0])]; });
-    var otherCols = extraMeasures.filter(function(m) { var c = canonicalKey(m[0]); return !INFLUENCE_KEYS[c] && !STRUCTURAL_KEYS[c] && !CONTENT_KEYS[c]; });
+    var linkCols = extraMeasures.filter(function(m) { return LINK_KEYS[canonicalKey(m[0])]; });
+    var otherCols = extraMeasures.filter(function(m) { var c = canonicalKey(m[0]); return !INFLUENCE_KEYS[c] && !STRUCTURAL_KEYS[c] && !CONTENT_KEYS[c] && !LINK_KEYS[c]; });
 
     var cols = [];
     POSITION_ORDER.forEach(function(key) { cols.push({ key: key, label: POSITION_LABELS[key], group: "network_position", isBase: true }); });
     influenceCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "influence", isBase: false }); });
     structuralCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "structural", isBase: false }); });
     contentCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "content", isBase: false }); });
+    linkCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "links", isBase: false }); });
     otherCols.forEach(function(m) { cols.push({ key: m[0], label: m[1], group: "other", isBase: false }); });
     confCols.forEach(function(c) { cols.push({ key: c.key, label: c.label, group: "sbm_confidence", isBase: false }); });
 

@@ -171,6 +171,50 @@ def _reply_peer_id(telegram_message: Any) -> int | None:
     return marked
 
 
+#: Longest URL and most URLs kept per message in ``Message.link_urls``.
+LINK_URL_MAX_LENGTH = 2048
+LINK_URLS_PER_MESSAGE = 100
+
+
+def _utf16_slice(text: str, offset: int, length: int) -> str:
+    """The substring of *text* at a Telegram entity's UTF-16 ``offset`` / ``length``."""
+    encoded = text.encode("utf-16-le")
+    return encoded[2 * offset : 2 * (offset + length)].decode("utf-16-le", errors="ignore")
+
+
+def _link_urls(telegram_message: Any) -> list[str]:
+    """The URLs behind *telegram_message*'s link entities and inline URL buttons, in order, deduplicated.
+
+    Hidden links (``MessageEntityTextUrl``, whose URL is not in the text), auto-linked text
+    (``MessageEntityUrl``, including bare domains Telegram linked without a scheme) and the URL buttons of
+    the reply markup — the links the stored text alone loses. A button carries its URL itself in older
+    layers (``KeyboardButtonUrl``) and on its ``type`` in newer ones (``InlineButtonTypeUrl``, the login and
+    web-app variants); both are read.
+    """
+    from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
+
+    text = getattr(telegram_message, "message", None) or ""
+    urls: list[str] = []
+    for entity in getattr(telegram_message, "entities", None) or ():
+        if isinstance(entity, MessageEntityTextUrl):
+            urls.append(entity.url or "")
+        elif isinstance(entity, MessageEntityUrl):
+            urls.append(_utf16_slice(text, entity.offset, entity.length))
+    for row in getattr(getattr(telegram_message, "reply_markup", None), "rows", None) or ():
+        for button in getattr(row, "buttons", None) or ():
+            url = getattr(button, "url", None) or getattr(getattr(button, "type", None), "url", None)
+            if isinstance(url, str):
+                urls.append(url)
+    seen: set[str] = set()
+    out: list[str] = []
+    for url in urls:
+        url = url.strip()[:LINK_URL_MAX_LENGTH]
+        if url and url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out[:LINK_URLS_PER_MESSAGE]
+
+
 def _build_msg_update_kwargs(telegram_message: Any, now: datetime.datetime) -> dict:
     """Build the volatile-stats update dict used to refresh a stored Message row.
 
@@ -981,6 +1025,7 @@ class ChannelCrawler:
                 # preview yet); slicing / saving None crashed the whole channel.
                 fields["webpage_url"] = (getattr(media.webpage, "url", None) or "")[:2048]
                 fields["webpage_type"] = getattr(media.webpage, "type", None) or ""
+        fields["link_urls"] = _link_urls(telegram_message)
         fields["replies"] = getattr(getattr(telegram_message, "replies", None), "replies", None)
         fields["reply_to_msg_id"] = getattr(getattr(telegram_message, "reply_to", None), "reply_to_msg_id", None)
         fields["reply_to_peer_id"] = _reply_peer_id(telegram_message)
@@ -1233,7 +1278,7 @@ class ChannelCrawler:
             update_kwargs = _build_msg_update_kwargs(telegram_message, now)
             msg_row = (
                 Message.objects.filter(channel=channel, telegram_id=telegram_message.id)
-                .values("pk", "replies_unavailable", "is_lost", "views", "forwards", "replies", "message")
+                .values("pk", "replies_unavailable", "is_lost", "views", "forwards", "replies", "message", "link_urls")
                 .first()
             )
             if msg_row is not None:
@@ -1271,9 +1316,13 @@ class ChannelCrawler:
                 _save_reactions(msg_pk, telegram_message)
                 _save_poll(msg_pk, telegram_message)
                 # Custom emoji spans are offsets into the text, so they are (back)filled only while
-                # Telegram still serves the text stored at first crawl — never from a stub.
+                # Telegram still serves the text stored at first crawl — never from a stub. The link
+                # URLs follow the same rule: a ban stub carries no links, or the wrong ones.
                 if (telegram_message.message or "") == msg_row["message"]:
                     save_message_custom_emoji(msg_pk, telegram_message)
+                    link_urls = _link_urls(telegram_message)
+                    if link_urls != msg_row["link_urls"]:
+                        Message.objects.filter(pk=msg_pk).update(link_urls=link_urls)
             update_status(f"refreshing message stats … {updated}/{total_in_db}")
         newly_lost = 0
         if not limit_hit:

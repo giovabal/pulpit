@@ -16,6 +16,7 @@ parameter only when its scope was active in the run. Scope keys:
 
 * ``graph`` — graph construction and edge weights (always active)
 * ``near_copies`` — near-copy edges (``--near-copy-edges``)
+* ``image_copies`` — image-copy detection (``--image-copy-edges``, or the ``VISUALORIGINALITY`` measure)
 * ``environment`` — environment channels admitted (``--environment-depth`` > 0)
 * ``measure:<TOKEN>`` — a selected measure, e.g. ``measure:PAGERANK``, ``measure:MODULEROLE``
 * ``communities`` — any community detection (settings shared by every strategy)
@@ -36,6 +37,7 @@ parameter only when its scope was active in the run. Scope keys:
 * ``interest`` — the structural interest of messages
 * ``timeline`` — the per-period exports
 * ``event_impact`` — the interrupted time series around recorded events (``--event-impact``)
+* ``links`` — the outbound-link layer (``--links``)
 """
 
 import datetime
@@ -60,6 +62,7 @@ SCOPES: frozenset[str] = frozenset(
     {
         "graph",
         "near_copies",
+        "image_copies",
         "environment",
         "communities",
         "community_backbone",
@@ -78,6 +81,7 @@ SCOPES: frozenset[str] = frozenset(
         "interest",
         "timeline",
         "event_impact",
+        "links",
     }
 )
 SCOPE_PREFIXES: tuple[str, ...] = ("measure:", "strategy:", "layout:")
@@ -123,6 +127,7 @@ PARAMETER_MODULES: tuple[str, ...] = (
     "network.graph_builder",
     "network.utils",
     "network.near_copies",
+    "network.image_copies",
     "network.measures",
     "network.community",
     "network.community_stats",
@@ -132,6 +137,8 @@ PARAMETER_MODULES: tuple[str, ...] = (
     "network.dyads",
     "network.periods",
     "network.event_impact",
+    "network.links",
+    "network.link_layer",
     "network.layout",
     "network.robustness",
     "network.dominance",
@@ -155,10 +162,12 @@ SECTION_ORDER: tuple[str, ...] = (
     "Structural interest",
     "Timeline",
     "Event impact",
+    "Outbound links",
 )
 _SECTION_BY_SCOPE: dict[str, str] = {
     "graph": "Graph & edges",
     "near_copies": "Graph & edges",
+    "image_copies": "Graph & edges",
     "environment": "Graph & edges",
     "communities": "Communities",
     "community_backbone": "Communities",
@@ -177,6 +186,7 @@ _SECTION_BY_SCOPE: dict[str, str] = {
     "interest": "Structural interest",
     "timeline": "Timeline",
     "event_impact": "Event impact",
+    "links": "Outbound links",
 }
 _SECTION_BY_PREFIX: dict[str, str] = {"measure:": "Measures", "strategy:": "Communities", "layout:": "Layout"}
 
@@ -187,6 +197,7 @@ _SCOPE_RANK: dict[str, int] = {scope: rank for rank, scope in enumerate(_SECTION
 _SCOPE_LABELS: dict[str, str] = {
     "graph": "graph construction",
     "near_copies": "near-copy edges",
+    "image_copies": "image copies",
     "environment": "environment channels",
     "communities": "every strategy",
     "community_backbone": "detection backbone",
@@ -205,6 +216,7 @@ _SCOPE_LABELS: dict[str, str] = {
     "interest": "structural interest",
     "timeline": "timeline",
     "event_impact": "event impact",
+    "links": "outbound links",
     "strategy:LABELGROUP": "label-group partitions",
 }
 
@@ -273,7 +285,8 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
 
     ``opts`` is the command's ``ResolvedOptions``. The derivation mirrors ``structural_analysis``:
 
-    * ``graph`` always; ``near_copies`` with ``--near-copy-edges``; ``environment`` when the
+    * ``graph`` always; ``near_copies`` with ``--near-copy-edges``; ``image_copies`` with
+      ``--image-copy-edges`` or the ``VISUALORIGINALITY`` measure; ``environment`` when the
       resolved ``--environment-depth`` is set (it resolves to ``None`` when 0 or nothing is registered).
     * ``measure:<NAME>`` per selected measure (a setting shared by two measures — HITS hub and
       authority come out of one computation — is declared under both scopes and listed once).
@@ -297,6 +310,10 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
     scopes = {"graph"}
     if opts.include_near_copies:
         scopes.add("near_copies")
+    if getattr(opts, "include_image_copies", False) or any(
+        inst.measure == "VISUALORIGINALITY" for inst in opts.measure_instances
+    ):
+        scopes.add("image_copies")
     if opts.environment_depth:
         scopes.add("environment")
 
@@ -364,6 +381,8 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
         scopes.add("timeline")
     if getattr(opts, "do_event_impact", False):
         scopes.add("event_impact")
+    if getattr(opts, "do_links", False):
+        scopes.add("links")
     return scopes
 
 
@@ -550,6 +569,7 @@ class RunFacts:
     coordination_fa2_iterations: int | None = None
     coordination_ties: int | None = None
     near_copies: int | None = None
+    image_copies: int | None = None
     interest_community: str = ""
     interest_authority: str = ""
     timeline_periods: list[tuple[str, str]] = field(default_factory=list)
@@ -576,6 +596,8 @@ _MEASURE_DESCRIPTIONS: dict[str, str] = {
     "basis partition.",
     "AMPLIFICATION": "Forwards received from channels in scope per own message.",
     "CONTENTORIGINALITY": "1 − the share of the channel's messages that are forwards.",
+    "VISUALORIGINALITY": "Share of the channel's picture posts whose images are not copies of another channel's "
+    "earlier post.",
     "DIFFUSIONLAG": "Median hours between an original post and its forwards, within the window.",
 }
 
@@ -895,6 +917,35 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
         topics.append(("Near-copies", rows))
     else:
         _off("near-copy edges", "--near-copy-edges")
+
+    if getattr(opts, "include_image_copies", False):
+        rows = [
+            (
+                "Image-copy edges",
+                "on",
+                _code("--image-copy-edges"),
+                "A picture post re-posting an earlier post's image without a forward header counts as a citation "
+                "of the earliest one.",
+            ),
+            (
+                "Hash distance",
+                format_value(opts.image_copy_distance),
+                _code("--image-copy-distance"),
+                "Largest pHash Hamming distance (of 64 bits) at which two images count as the same.",
+            ),
+        ]
+        if facts.image_copies is not None:
+            rows.append(
+                (
+                    "Image-copy links found",
+                    str(facts.image_copies),
+                    "—",
+                    "Copy → origin post links the graph was built with (listed in data/image_copies.csv).",
+                )
+            )
+        topics.append(("Image copies", rows))
+    else:
+        _off("image-copy edges", "--image-copy-edges")
 
     if opts.measure_instances:
         topics.append(("Measures", _measure_rows(opts, facts)))
@@ -1242,6 +1293,24 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
         )
     else:
         _off("event impact", "--event-impact")
+
+    if getattr(opts, "do_links", False):
+        topics.append(
+            (
+                "Outbound links",
+                [
+                    (
+                        "Outbound-link layer",
+                        "on",
+                        _code("--links"),
+                        "The sites the observed channels link to, read against the domain categories of Manage → "
+                        "Domains as they stood at export time.",
+                    ),
+                ],
+            )
+        )
+    else:
+        _off("outbound links", "--links")
 
     if timeline_on(opts):
         exported = facts.timeline_periods

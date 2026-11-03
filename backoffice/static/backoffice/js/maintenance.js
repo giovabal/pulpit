@@ -301,6 +301,9 @@
                 if (data.empty_dirs_removed) {
                     parts.push("cleaned up " + fmtCount(data.empty_dirs_removed) + " empty directories");
                 }
+                if (data.fingerprints_removed) {
+                    parts.push("dropped " + fmtCount(data.fingerprints_removed) + " fingerprints of deleted photos");
+                }
                 $orphanResultSum.textContent = parts.join(" · ");
                 showToast(data.failed_files ? "Cleanup completed with errors." : "Cleanup complete.",
                     data.failed_files ? "error" : "success");

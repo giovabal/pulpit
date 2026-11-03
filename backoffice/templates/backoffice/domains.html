@@ -1,0 +1,98 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% load vstatic %}
+
+{% block bo_heading %}Domains{% endblock bo_heading %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Domain categories</h2>
+    <button class="bo-btn" id="dc-add-btn"><i class="bi bi-plus me-1" aria-hidden="true"></i>Add category</button>
+  </div>
+  <p class="text-muted small">
+    The kinds of web site the channels link to. The outbound-link analysis (<code>structural_analysis --links</code>) reports
+    each channel's links by category, and three <em>roles</em> drive its share measures: <strong>Monetisation</strong>
+    (donations, shops), <strong>Mainstream platform</strong> and <strong>Alternative platform</strong>. The starter list is a
+    starting point: rename, recolour or delete any category; deleting one leaves its sites uncategorised. Changes save as you make them.
+  </p>
+  <form class="bo-add-form d-none" id="dc-add-form" autocomplete="off">
+    <input class="bo-input bo-input--color" type="color" name="color" value="#6b7280" aria-label="Category colour">
+    <input class="bo-input" name="name" placeholder="Name" maxlength="64" required aria-label="Category name">
+    <select class="bo-select" name="role" aria-label="Category role">
+      <option value="">No role</option>
+      <option value="monetisation">Monetisation</option>
+      <option value="mainstream">Mainstream platform</option>
+      <option value="alternative">Alternative platform</option>
+    </select>
+    <input class="bo-input bo-input--wide" name="description" placeholder="Description (optional)" aria-label="Category description">
+    <button type="submit" class="bo-btn">Save</button>
+    <button type="button" class="bo-btn bo-btn--ghost" id="dc-add-cancel">Cancel</button>
+  </form>
+  <div class="table-responsive">
+    <table class="bo-table" id="dc-table">
+      <caption class="sr-only">Domain categories</caption>
+      <thead>
+        <tr>
+          <th scope="col">Colour</th>
+          <th scope="col">Name</th>
+          <th scope="col">Role</th>
+          <th scope="col">Description</th>
+          <th class="bo-th--num" scope="col">Sites</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="dc-tbody">
+        <tr><td colspan="6" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="bo-panel mt-3">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Sites</h2>
+    <button class="bo-btn bo-btn--ghost" id="dm-reindex"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Rebuild index</button>
+  </div>
+  <p class="text-muted small">
+    Every site the in-target channels link to inside their in-target periods — URLs in the text, hidden links, buttons and
+    link previews; t.me links are citations and are not listed. A site is a registered domain (<code>news.example.co.uk</code>
+    is <code>example.co.uk</code>), except on hosting platforms such as Substack or Shopify, where each outlet is a site of its
+    own and starts in its platform's category. Counts are messages linking to the site, as of the last index
+    (<code>python manage.py index_domains</code>, the crawl option <em>Index link domains</em>, or <em>Rebuild index</em> here).
+  </p>
+  <div class="bo-toolbar">
+    <input class="bo-search" id="dm-search" type="search" placeholder="Search sites…" autocomplete="off" aria-label="Search sites">
+    <select class="bo-select" id="dm-category" aria-label="Filter by category"></select>
+    <label class="bo-check-label"><input type="checkbox" id="dm-seen" checked> Linked to</label>
+    <span class="bo-count" id="dm-count"></span>
+    <div class="bo-pagination" id="dm-pagination-top"></div>
+  </div>
+  <div class="table-responsive">
+    <table class="bo-table" id="dm-table">
+      <caption class="sr-only">Linked sites</caption>
+      <thead>
+        <tr>
+          <th scope="col">Site</th>
+          <th scope="col">Category</th>
+          <th class="bo-th--num" scope="col">Messages</th>
+          <th class="bo-th--num" scope="col">Channels</th>
+          <th scope="col">First link</th>
+          <th scope="col">Last link</th>
+          <th scope="col">Note</th>
+        </tr>
+      </thead>
+      <tbody id="dm-tbody">
+        <tr><td colspan="7" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="bo-pagination bo-pagination--bottom" id="dm-pagination-bottom"></div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/domains.js' %}"></script>
+{% endblock extra_scripts %}

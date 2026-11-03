@@ -25,6 +25,10 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'custom-emoji-packs' %} active{% endif %}">
       <i class="bi bi-emoji-smile me-1" aria-hidden="true"></i>Emoji
     </a>
+    <a href="{% url 'backoffice:domains' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'domains' %} active{% endif %}">
+      <i class="bi bi-globe2 me-1" aria-hidden="true"></i>Domains
+    </a>
     <a href="{% url 'backoffice:sources' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'sources' %} active{% endif %}">
       <i class="bi bi-collection me-1" aria-hidden="true"></i>Sources

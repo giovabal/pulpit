@@ -41,6 +41,8 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 - Which channels bridge ideologically separate communities — the only link between two groups that otherwise share no direct contact? *([Burt's Constraint](docs/network-measures.md#burts-constraint))*
 - Whose content spreads farthest per post published, despite a modest following? *([Amplification Factor](docs/network-measures.md#amplification-factor))*
 - Which channels repeatedly forward the same content within minutes of each other — moving in step rather than merely citing one another? *([Coordination Analysis](docs/coordination-analysis.md))*
+- Who re-posts whose pictures without forwarding them, and which channels photograph their own activity? *([Image copies](docs/image-copies.md))*
+- Where do the channels send their readers — donation pages, shops, mainstream or alternative platforms — and who shares that infrastructure? *([Outbound links](docs/outbound-links.md))*
 
 **About communities:**
 
@@ -124,6 +126,7 @@ After export, the output directory contains self-contained files that can be sha
 | **Vacancy Analysis** (`vacancy_analysis.html`) | Replacement candidates ranked by up to six scores after a channel goes silent [more](docs/vacancy-analysis.md) |
 | **Robustness analysis** (`robustness_table.html` / `.xlsx`) | Resistance to node removal: R-index over four damage metrics per attack strategy on the (optionally disparity-filtered) backbone, z-score + FDR-corrected empirical p against a configuration-model null, intra/inter community edge survival, ban-wave scenarios, and ban-replay validation [more](docs/robustness-analysis.md) |
 | **Dominance analysis** (`dominance.html` / `.xlsx` / `.csv`) | Dominant and dependent channels in a milieu where citation is endorsement: David's score and SpringRank rankings, dominant / dependent / broker / peripheral roles, two-sided dependence per pair with statistical validation, and SpringRank / transitivity / consistency tests of whether a hierarchy exists at all [more](docs/dominance.md) |
+| **Outbound links** (`links.html` / `.xlsx` / `channel_sites.csv`) | The web sites the channels link to by category (Manage → Domains): per-channel link measures, a label × category matrix, and statistically validated co-linking pairs [more](docs/outbound-links.md) |
 | **Coordination maps** (`coordination.html` / `coordination3d.html`) | Temporal co-forwarding layer: dedicated 2D and 3D maps of channels that repeatedly forwarded the same origin message within a short time window [more](docs/coordination-analysis.md) |
 | **Timeline animation** | Step through annual snapshots with animated node transitions in the structural and coordination maps, 2D and 3D [more](docs/workflow.md#timeline-see-how-the-network-changed-over-time) |
 | **Network comparison** (`network_compare_table.html`) | Side-by-side comparison of two exports: which channels gained or lost influence [more](docs/workflow.md#compare-two-networks) |

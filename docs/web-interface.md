@@ -197,6 +197,10 @@ The shared list of [message tags](#message-tags) with the number of messages car
 
 The custom emoji packs the crawler found, most used first, with their preview, `t.me/addemoji/` link, the groups that set it as their own pack, and how many emoji, uses and channels each has across every stored post. Tick **In target** for the packs your study is about — an organisation's own pack, say — and add a note; both save as you change them. Every pack starts out of target. The flag classifies: it drives the in-target filter of the [Emoji packs](#emoji-packs--channelsemoji-packs) pages and the `pack_in_target` CSV column, and never removes a pack's uses from a count. Search by title or short name, or filter by status.
 
+### Domains — `/manage/domains/`
+
+The web sites the in-target channels link to, and the categories they are filed under, for the [outbound-link analysis](outbound-links.md). **Domain categories** (top) are editable in place — colour, name, *role* (Monetisation, Mainstream platform, Alternative platform: the roles behind the link layer's share measures) and description — and can be added or deleted (deleting one uncategorises its sites). A starter list ships with Pulpit. **Sites** (below) lists the domain index, most linked first: the site (a registered domain, or one outlet on a hosting platform such as `name.substack.com`), its category, the messages and channels linking to it, and the first and last link; pick a category or add a note and it saves at once. Filter by category (*Uncategorised* to work through the unfiled sites), search by name, and untick *Linked to* to see the starter sites nobody links to. **Rebuild index** recounts the sites from the in-target channels' messages (also `python manage.py index_domains` and the crawl option *Index link domains*).
+
 ### Sources — `/manage/sources/`
 
 ChannelSources are tags you apply to channels for flexible filtering. They are independent of labels — a channel can be in any number of sources, regardless of its label periods. Use sources to define subsets for targeted analysis (e.g. run an export with `--channel-sources activist,media` to analyse only those channels).

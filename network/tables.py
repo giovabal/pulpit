@@ -991,6 +991,58 @@ def write_event_impact_xlsx(payload: dict, output_filename: str, project_title: 
     wb.save(output_filename)
 
 
+def write_links_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
+    _write_page(
+        "network/links.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Outbound links",
+        seo_title_part="Outbound links",
+    )
+
+
+def write_links_xlsx(
+    payload: dict,
+    output_filename: str,
+    project_title: str = "",
+    year_data: "list[tuple[str, dict]] | None" = None,
+) -> None:
+    """The outbound-link layer as a workbook: ``Channels``, ``Sites``, ``Categories``, ``Co-linking`` and one
+    ``Matrix <group>`` sheet per partition label group; with *year_data* ``[(period key, payload), …]`` the
+    channel and site sheets get ``… All`` plus one sheet per period."""
+    from network.link_layer import CATEGORY_COLUMNS, CHANNEL_COLUMNS, PAIR_COLUMNS, SITE_COLUMNS, flat_rows
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+
+    def _sheet(title: str, headers: list[str], rows: list[list]) -> None:
+        ws = wb.create_sheet(title=_safe_sheet_title(title))
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row in rows:
+            ws.append(row)
+
+    scopes: list[tuple[str, dict]] = [("All", payload)] if year_data else [("", payload)]
+    scopes += [(str(key), period_payload) for key, period_payload in year_data or []]
+    for suffix, scope_payload in scopes:
+        _sheet(f"Channels {suffix}".strip(), *flat_rows(CHANNEL_COLUMNS, scope_payload.get("channels", [])))
+        _sheet(f"Sites {suffix}".strip(), *flat_rows(SITE_COLUMNS, scope_payload.get("sites", [])))
+    _sheet("Categories", *flat_rows(CATEGORY_COLUMNS, payload.get("categories", [])))
+    _sheet("Co-linking", *flat_rows(PAIR_COLUMNS, payload.get("colinking", {}).get("pairs", [])))
+    for matrix in payload.get("matrices", []):
+        _sheet(
+            f"Matrix {matrix['group']}",
+            [matrix["group"], *matrix["categories"], "Total"],
+            [[label, *counts, sum(counts)] for label, counts in zip(matrix["labels"], matrix["counts"], strict=True)],
+        )
+    wb.save(output_filename)
+
+
 def write_dominance_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
     _write_page(
         "network/dominance.html",
@@ -1077,6 +1129,8 @@ def write_index_html(
     include_dyads: bool = False,
     include_event_impact_html: bool = False,
     include_event_impact_xlsx: bool = False,
+    include_links_html: bool = False,
+    include_links_xlsx: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -1115,6 +1169,8 @@ def write_index_html(
         "include_dyads": include_dyads,
         "include_event_impact_html": include_event_impact_html,
         "include_event_impact_xlsx": include_event_impact_xlsx,
+        "include_links_html": include_links_html,
+        "include_links_xlsx": include_links_xlsx,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)

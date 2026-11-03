@@ -3,7 +3,7 @@ from collections import Counter
 from typing import Any, ClassVar
 
 from django.db import models
-from django.db.models import Avg, Count, Max, Min, Sum
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -16,9 +16,7 @@ from webapp.utils.emoji import emoji_present
 
 import pandas as pd
 
-_URL_RE = re.compile(r"https?://(?:www\.)?([^/\s?#\[<>\"\']+)", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
-_TELEGRAM_HOSTS = frozenset({"t.me", "telegram.me", "telegram.org", "telegra.ph", "telesco.pe"})
 
 
 def _scoped_in_target_channels(request: HttpRequest):
@@ -425,22 +423,25 @@ class ChannelReactionsHistoryView(View):
 
 
 class ChannelContactInfoView(View):
+    """The web sites a channel links to (``network.links``: one count per message and site, hidden links,
+    buttons and previews included, t.me left out) and the e-mail addresses in its texts."""
+
     def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        from network.links import link_candidates_q, message_sites
+
         channel = get_object_or_404(Channel, pk=pk)
         msg_qs = Message.objects.alive().filter(channel=channel)
         if channel.in_target_periods.exists():
             from network.utils import channel_period_date_q
 
             msg_qs = msg_qs.filter(channel_period_date_q(channel))
-        texts = msg_qs.exclude(message__isnull=True).exclude(message="").values_list("message", flat=True)
         domain_counter: Counter = Counter()
         email_counter: Counter = Counter()
-        for text in texts:
-            for raw_host in _URL_RE.findall(text):
-                host = raw_host.split(":")[0].lower().rstrip(".,;)")
-                if host and host not in _TELEGRAM_HOSTS and not host.endswith(".telegram.org"):
-                    domain_counter[host] += 1
-            for email in _EMAIL_RE.findall(text):
+        for text, webpage_url, link_urls in msg_qs.filter(link_candidates_q() | Q(message__contains="@")).values_list(
+            "message", "webpage_url", "link_urls"
+        ):
+            domain_counter.update(message_sites(text, webpage_url, link_urls))
+            for email in _EMAIL_RE.findall(text or ""):
                 email_counter[email.lower()] += 1
         return JsonResponse(
             {

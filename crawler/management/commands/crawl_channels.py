@@ -120,6 +120,11 @@ class CrawlOptions:
     # assigned under at least one of them (empty = no filter).
     filter_labels: list[int]
 
+    # Offline steps, after the crawl (no Telegram client needed): perceptual fingerprints of the stored
+    # pictures (crawler.image_hash) and the outbound-link domain index (network.links)
+    hash_images: bool = False
+    index_domains: bool = False
+
     @property
     def need_client(self) -> bool:
         return (
@@ -600,6 +605,25 @@ class Command(BaseCommand):
                 "and reset it to 0 for out-of-target channels no longer cited."
             ),
         )
+        # ── Media and links (offline) ─────────────────────────────────────────
+        parser.add_argument(
+            "--hash-images",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "After the crawl, fingerprint the stored message pictures not fingerprinted yet (perceptual "
+                "hashes for image-copy detection; same as the hash_media command)."
+            ),
+        )
+        parser.add_argument(
+            "--index-domains",
+            action=BooleanOptionalAction,
+            default=None,
+            help=(
+                "After the crawl, rebuild the outbound-link domain index of Manage → Domains from the in-target "
+                "channels' messages (same as the index_domains command)."
+            ),
+        )
         # ── Environment ───────────────────────────────────────────────────────
         parser.add_argument(
             "--environment",
@@ -926,6 +950,29 @@ class Command(BaseCommand):
             ensure_newline_on_success=False,
         ):
             crawler._resolve_pending_forwards(lambda message, idx=index: printer.status(message, idx))
+
+    def _hash_images(self) -> None:
+        """Fingerprint the stored pictures not fingerprinted yet (``--hash-images``)."""
+        from crawler.image_hash import hash_stored_pictures
+
+        self.stdout.write("\nHashing stored images")
+        self.stdout.flush()
+        counts = hash_stored_pictures(progress=lambda line: (self.stdout.write(line), self.stdout.flush()))
+        self.stdout.write(
+            f"Images: {counts['hashed']} fingerprinted, {counts['skipped']} unreadable or uniform, "
+            f"{counts['unchanged']} already done"
+        )
+
+    def _index_domains(self) -> None:
+        """Rebuild the outbound-link domain index (``--index-domains``)."""
+        from network.links import index_domains
+
+        self.stdout.write("\nIndexing link domains")
+        self.stdout.flush()
+        counts = index_domains(progress=lambda line: (self.stdout.write(line), self.stdout.flush()))
+        self.stdout.write(
+            f"Domains: {counts['domains']} sites over {counts['messages']} messages ({counts['new']} new)"
+        )
 
     def _resolve_custom_emoji(self, crawler: ChannelCrawler) -> None:
         """Resolve the custom emoji the messages loop left pending, without ever aborting the run.
@@ -1489,6 +1536,8 @@ class Command(BaseCommand):
             channel_types=channel_types,
             channel_sources=channel_sources,
             filter_labels=filter_labels,
+            hash_images=_resolve_optional_bool(options.get("hash_images")),
+            index_domains=_resolve_optional_bool(options.get("index_domains")),
         )
 
     @staticmethod
@@ -2350,6 +2399,12 @@ class Command(BaseCommand):
                 )
 
         self._sync_message_tags()
+
+        # ── MEDIA AND LINKS (no Telegram client needed) ───────────────────────
+        if opts.hash_images:
+            self._hash_images()
+        if opts.index_domains:
+            self._index_domains()
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))
 

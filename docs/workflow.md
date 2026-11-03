@@ -116,7 +116,7 @@ This step can take a while, especially on a first run. The log shows progress ch
 
 ### What the options do (expand Options to see them)
 
-The options panel is organized into three independent groups — each is its own pass over the channels in scope.
+The options panel is organized into four independent groups — each is its own pass over the channels in scope.
 
 **1. Channels** — update channel metadata without touching messages.
 
@@ -133,7 +133,7 @@ The options panel is organized into three independent groups — each is its own
 | :----- | :------------- |
 | **Get new messages** | On by default. Downloads messages published since the last crawl. Pulpit keeps, per channel, the dates it has already walked in full (`Channel.history_coverage`), and on each run also fetches — once — any required date not walked yet: required means inside the channel's in-target periods (every date for a *To inspect* channel, the environment window for an environment channel). So an in-target period added, started earlier, inserted between two others or extended, *To inspect* switched on, or a wider environment window all get their messages on the next run, walking back from the end of each missing stretch to its start; nothing needs to be flagged. An interrupted crawl keeps the dates it finished and resumes from there. |
 | **Fetch replies** | Fetch reply threads from linked discussion groups for posts that have replies. |
-| **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages — and record the custom emoji of messages crawled before Pulpit kept them (see [Custom emoji](#custom-emoji)). Messages that Telegram no longer returns are flipped to `is_lost=True` and stop counting toward charts, edge weights, and citation measures (they still appear in the message list when the *Lost messages* filter is set to *Include* or *Only*). A previously-lost message that Telegram returns again is automatically un-marked. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
+| **Refresh message stats** | Periodically re-fetch view counts, forward counts, and reactions for already-downloaded messages — and record the custom emoji and the hidden links and URL buttons of messages crawled before Pulpit kept them (see [Custom emoji](#custom-emoji), [Outbound links](outbound-links.md)). Messages that Telegram no longer returns are flipped to `is_lost=True` and stop counting toward charts, edge weights, and citation measures (they still appear in the message list when the *Lost messages* filter is set to *Include* or *Only*). A previously-lost message that Telegram returns again is automatically un-marked. Use the *Limit*, *From date*, and *To date* fields to restrict which messages are refreshed. |
 | **Fix message holes** | Scan message ID sequences for gaps and fill them in. Can run without *Get new messages*. |
 | **Fix missing media** | Re-download photos, videos, audio (voice notes and audio files), stickers, custom emoji, and other media that were never saved or are missing from disk. Honors the toggles in the **Media types** sidebar — uncheck a type to skip it. |
 | **Retry lost messages** | Re-fetch every message currently marked as lost. Messages that Telegram returns are unmarked and their stats refreshed; the rest stay lost. Useful after a transient outage or to clean up stale lost-flags accumulated by older refreshes that ran with a small date window. |
@@ -145,6 +145,13 @@ The options panel is organized into three independent groups — each is its own
 | :----- | :------------- |
 | **In target channels** | On by default. Recomputes in-degree and out-degree for all in-target channels. |
 | **Out of target channels** | On by default. Recomputes citation degree for out-of-target channels referenced by in-target ones, and resets to 0 the degrees of out-of-target channels no longer referenced (e.g. a channel whose in-target labels were removed). |
+
+**4. Index** — offline steps after the crawl (no Telegram connection needed).
+
+| Option | When to use it |
+| :----- | :------------- |
+| **Hash stored images** | Fingerprint every stored message picture not fingerprinted yet (perceptual hashes), so the structural analysis can find pictures re-posted without a forward — see [Image copies](image-copies.md). About 10 ms per picture; incremental. Same as `python manage.py hash_media`. |
+| **Index link domains** | Recount the web sites the in-target channels link to, for *Manage → Domains* — see [Outbound links](outbound-links.md). Same as `python manage.py index_domains`. |
 
 **Limiting the scope:** you can restrict the crawl to a subset of channels in two ways:
 
@@ -269,6 +276,12 @@ Three additions answer *is it more than chance?* (see [Whole-network statistics]
 Enable with the two **Coordination map** toggles on the second row of the Outputs fieldset (or `--coordination-2d` / `--coordination-3d` on the CLI — the coordination counterparts of `--graph-2d` / `--graph-3d`). Pulpit ties together channels that repeatedly forward the **same origin message** within `--coordination-window` seconds of each other (default 300), keeping only pairs with at least `--coordination-min-events` distinct shared origins (default 3) — repetition across different content is what separates coordination from coincidence on viral posts. The result is a second network layer with its own force-directed layouts, rendered per selected toggle as a dedicated interactive map: `coordination.html` (2D) and `coordination3d.html` (3D), backed by `data_coordination/`. Node colours and community assignments are carried over from the main citation graph so the two maps read side by side; node size defaults to the number of coordinated co-forwards. Combined with `--timeline-step year`, the layer is recomputed per year (`data_coordination_YYYY/`, layouts seeded from the full-range coordination layout) and the coordination maps gain the same in-page year switcher as the main maps, listing only the years with surviving ties. See [Coordination analysis](coordination-analysis.md) for the method, the parameter guidance, and the interpretation guardrails.
 
 **Near-copies as edges.** Off by default. Tick **Include near-copies as edges** in the Edge weights fieldset (CLI `--near-copy-edges`) and Pulpit also reads a post whose text is near-identical to an *earlier* original post of another channel as a forward of that earliest publication — the text-reuse counterpart of the forward edge, for the copy-paste that bypasses Telegram's forward header. The criterion is Broder's shingle resemblance (Jaccard of word 3-shingles) at or above the **Near-copy similarity ≥** field (`--near-copy-threshold`, default 0.8; `--near-copy-min-tokens` and `--near-copy-shingle-size` tune the search from the CLI or the config file). Each re-post is one citation event copier → origin, counted by the edge weights, Amplification, Content originality, Diffusion lag and the dominance analysis; forwards are never copies, and a copy of the channel's own earlier post follows *Include self-references*. Every detected link is listed in `data/near_copies.csv` with its similarity, lag and text-cluster size — read it before interpreting a copy edge, because a match shows the same text appeared earlier elsewhere in scope, not who copied whom. See [Configuration § Near-copies as edges](configuration.md#near-copies-as-edges).
+
+### Images and outbound links
+
+Two modalities beyond the text and the forwards. **Image copies** (Edge weights → *Include image copies as edges*, CLI `--image-copy-edges`) read a picture post that re-uploads an earlier post's image — the same Telegram photo, or a perceptual hash within *Image-copy distance ≤* bits (`--image-copy-distance`, default 6) — as a citation of the earliest post showing it, one per post (an album counts once). Hash the stored pictures first (crawl option *Hash stored images*). The **Visual originality** measure (`VISUALORIGINALITY`) gives each channel's share of picture posts whose images are its own. See [Image copies](image-copies.md).
+
+**Outbound links** (Outputs → *Outbound links*, CLI `--links`) read the web links of the channels' messages — text URLs, hidden links, buttons and previews; t.me excluded — against the domain categories of *Manage → Domains* (a starter list is provided: mainstream and alternative platforms, crowdfunding, shops, …). They give per-channel link measures (linking posts, distinct sites, platform diversity, monetisation / mainstream / alternative shares), a sites table, a label × category matrix and statistically validated co-linking pairs (`links.html`, `links.xlsx`, `channel_sites.csv`). See [Outbound links](outbound-links.md).
 
 ### Interesting messages
 
@@ -398,6 +411,15 @@ python manage.py structural_analysis --coordination-2d --coordination-3d        
 python manage.py structural_analysis --coordination-2d --coordination-window 60         # 2D map only, strict: automation-scale synchrony
 python manage.py structural_analysis --coordination-2d --coordination-min-events 2      # looser repetition threshold for small corpora
 
+# Image copies as edges (fingerprint the stored pictures first; links in data/image_copies.csv)
+python manage.py hash_media
+python manage.py structural_analysis --image-copy-edges --measures VISUALORIGINALITY,PAGERANK --csv
+python manage.py structural_analysis --image-copy-edges --image-copy-distance 0   # the same Telegram photo only
+
+# Outbound links (rebuild the domain index of Manage → Domains, then the link layer)
+python manage.py index_domains
+python manage.py structural_analysis --links --html --xlsx --csv
+
 # Near-copies as edges (text re-posted without the forward header read as a forward of the earliest publication)
 python manage.py structural_analysis --near-copy-edges --csv                              # default: Jaccard ≥ 0.8 over word 3-shingles, posts ≥ 8 tokens; links in data/near_copies.csv
 python manage.py structural_analysis --near-copy-edges --near-copy-threshold 0.9          # stricter: verbatim re-posts only
@@ -418,6 +440,6 @@ See `python manage.py <command> --help` for the full list of flags for any comma
 
 ---
 
-← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Coordination](coordination-analysis.md) · [Interesting messages](interesting-messages.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
+← [README](../README.md) · [Getting started](getting-started.md) · [Workflow](workflow.md) · [Measures](network-measures.md) · [Communities](community-detection.md) · [Network stats](whole-network-statistics.md) · [Layouts](graph-layouts.md) · [Vacancy analysis](vacancy-analysis.md) · [Robustness](robustness-analysis.md) · [Coordination](coordination-analysis.md) · [Interesting messages](interesting-messages.md) · [Image copies](image-copies.md) · [Outbound links](outbound-links.md) · [Web interface](web-interface.md) · [Exports](export-formats.md)
 
 <img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">

@@ -225,6 +225,7 @@ def orphan_media_run(request: Any) -> Response:
             # (before or after the scan), or referenced by a row saved since the scan.
             "skipped_recent": report.skipped_recent,
             "skipped_referenced": report.skipped_referenced,
+            "fingerprints_removed": report.fingerprints_removed,
             "recent_file_grace_seconds": RECENT_FILE_GRACE_SECONDS,
             "total_duration_seconds": time.perf_counter() - overall_t,
         }

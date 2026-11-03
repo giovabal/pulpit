@@ -1,0 +1,122 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-2">
+  <h2 class="mb-0">Outbound links</h2>
+  <div class="d-flex gap-2">
+    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
+    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
+    <a href="{{ repository_url }}/blob/main/docs/outbound-links.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
+  </div>
+</div>
+<p class="text-muted small mb-2">
+  <strong>Where the channels send their readers.</strong> Every web link in the observed channels' messages — written in the
+  text, hidden behind link text, on a button or in the link preview — is reduced to its <em>site</em> (the registered domain;
+  each outlet on a hosting platform such as Substack is a site of its own) and filed under the categories of
+  <em>Manage → Domains</em>. A site counts once per message; t.me links are citations and stay in the graph. Shares by role
+  (monetisation, mainstream, alternative) count uncategorised links in the denominator, so they are lower bounds until every
+  site is filed. <em>Co-linking</em> pairs share more sites than their activity and the sites' popularity explain (bipartite
+  configuration model, exact p-values, Benjamini–Hochberg q over every pair); a link is a pointer the channel published,
+  not a visit, a payment or an affiliation.
+</p>
+<div id="timeline-nav" class="mb-2"></div>
+<div id="ln-preamble" class="mb-2"></div>
+
+<h3 class="h5 mt-3">Categories</h3>
+<div id="ln-category-bar" class="mb-2"></div>
+<div class="table-responsive">
+  <table class="table table-hover table-sm sortable" id="ln-categories" aria-label="Link categories">
+    <caption class="sr-only">One row per domain category: link events, their share, channels and sites. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h3 class="h5 mt-4">Who links where</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div>
+    <label for="ln-group" class="form-label mb-0 small">Label group</label>
+    <select id="ln-group" class="form-select form-select-sm"></select>
+  </div>
+  <div>
+    <label for="ln-matrix-mode" class="form-label mb-0 small">Cells</label>
+    <select id="ln-matrix-mode" class="form-select form-select-sm">
+      <option value="row" selected>Share of the label's links</option>
+      <option value="count">Link events</option>
+    </select>
+  </div>
+</div>
+<p class="text-muted small" id="ln-matrix-note"></p>
+<div class="table-responsive export-wide">
+  <table class="table table-sm sortable" id="ln-matrix" aria-label="Labels by link category">
+    <caption class="sr-only">One row per label: its links by category. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h3 class="h5 mt-4">Channels</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div class="flex-grow-1">
+    <label for="ln-channel-search" class="form-label mb-0 small">Channel</label>
+    <input type="search" id="ln-channel-search" class="form-control form-control-sm" placeholder="Filter by channel, label or site…">
+  </div>
+</div>
+<p class="text-muted" id="ln-channel-count">Loading…</p>
+<div class="table-responsive export-wide">
+  <table class="table table-hover table-sm sortable" id="ln-channels" aria-label="Outbound links per channel">
+    <caption class="sr-only">One row per observed channel: how often it links out, to how many sites, how diverse its platforms are and the shares of monetisation, mainstream and alternative links. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h3 class="h5 mt-4">Sites</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div>
+    <label for="ln-site-category" class="form-label mb-0 small">Category</label>
+    <select id="ln-site-category" class="form-select form-select-sm"></select>
+  </div>
+  <div>
+    <label for="ln-site-min" class="form-label mb-0 small">Min. channels</label>
+    <input type="number" id="ln-site-min" class="form-control form-control-sm" min="1" step="1" value="1">
+  </div>
+  <div class="flex-grow-1">
+    <label for="ln-site-search" class="form-label mb-0 small">Site</label>
+    <input type="search" id="ln-site-search" class="form-control form-control-sm" placeholder="Filter by site or label…">
+  </div>
+</div>
+<p class="text-muted" id="ln-site-count">Loading…</p>
+<div class="table-responsive export-wide">
+  <table class="table table-hover table-sm sortable" id="ln-sites" aria-label="Linked sites">
+    <caption class="sr-only">One row per linked site: category, messages linking to it, channels, first and last link, and the labels linking to it most. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h3 class="h5 mt-4">Co-linking pairs</h3>
+<div class="d-flex flex-wrap gap-3 align-items-end mb-2">
+  <div>
+    <label for="ln-pair-filter" class="form-label mb-0 small">Pairs</label>
+    <select id="ln-pair-filter" class="form-select form-select-sm">
+      <option value="validated" selected>Validated only</option>
+      <option value="cross">Validated, across labels</option>
+      <option value="all">All listed</option>
+    </select>
+  </div>
+  <div class="flex-grow-1">
+    <label for="ln-pair-search" class="form-label mb-0 small">Channel</label>
+    <input type="search" id="ln-pair-search" class="form-control form-control-sm" placeholder="Filter by channel, label or site…">
+  </div>
+</div>
+<p class="text-muted" id="ln-pair-count">Loading…</p>
+<div class="table-responsive export-wide">
+  <table class="table table-hover table-sm sortable" id="ln-pairs" aria-label="Co-linking pairs">
+    <caption class="sr-only">One row per pair of channels sharing linked sites: shared sites against the number expected by chance, q-value and the shared sites, rarest first. Sort by clicking a column header.</caption>
+    <thead></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<script type="module" src="js/links.js"></script>
+{% endblock %}

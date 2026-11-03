@@ -234,6 +234,22 @@
                 </div>
               </fieldset>
 
+              <fieldset class="ops-fieldset">
+                <legend>4. Index</legend>
+                <div class="ops-flags">
+                  <label class="ops-flag">
+                    <input type="checkbox" name="hash_images" {% if ad.CRAWL_HASH_IMAGES %}checked{% endif %}>Hash stored images
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Fingerprint every stored message picture not fingerprinted yet (perceptual hashes), so the structural analysis can find images re-posted without a forward. About 10 ms per picture; same as python manage.py hash_media. Does not open a Telegram connection."></i>
+                  </label>
+                  <label class="ops-flag">
+                    <input type="checkbox" name="index_domains" {% if ad.CRAWL_INDEX_DOMAINS %}checked{% endif %}>Index link domains
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Recount the web sites the in-target channels link to, for Manage → Domains (new sites start uncategorised). Same as python manage.py index_domains. Does not open a Telegram connection."></i>
+                  </label>
+                </div>
+              </fieldset>
+
             </div>
             <div class="ops-fieldset-col">
 
@@ -542,6 +558,10 @@
                   <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Tunable: Event window (Linked parameters)"></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="links" {% if ad.SA_LINKS %}checked{% endif %}>Outbound links
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="The web sites the observed channels link to, by the categories of Manage → Domains: per-channel link measures in the channel table (linking posts, distinct sites, platform diversity, monetisation / mainstream / alternative shares), a sites table, a label × category matrix and statistically validated co-linking pairs. Writes links.html with HTML tables, links.xlsx, channel_sites.csv. See docs/outbound-links.md."></i>
+                </label>
                 <label class="ops-flag"><input type="checkbox" name="interest_structural" {% if ad.SA_INTEREST_STRUCTURAL %}checked{% endif %}>Interesting messages
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Rank individual messages by how far they travelled — how many different groups they reached and how influential the channels that picked them up were. Writes data/interest_structural.json. Each message is also scored on the engagement it drew compared with its channel's usual level (always on, computed at crawl time)."></i>
@@ -638,6 +658,24 @@
                        title="Minimum Jaccard resemblance of two posts' word 3-shingle sets (links, handles, punctuation and emoji removed; posts under 8 words ignored; a channel's recurring header or signature lines discounted) for the later post to count as a copy of the earlier one. 1 = verbatim; 0.8 (default) = verbatim text with a prefix or suffix added; below 0.8 the same organisation's announcement templates with a city swapped start to match. Only used when near-copies are on."></i>
                   </label>
                   <input type="number" name="near_copy_threshold" id="near_copy_threshold" placeholder="{{ ad.SA_NEAR_COPY_THRESHOLD }}" value="{{ ad.SA_NEAR_COPY_THRESHOLD }}" min="0.01" max="1" step="0.01" data-width="sm">
+                </div>
+              </div>
+              <div class="ops-flags" style="margin-top:.5rem">
+                <label class="ops-flag">
+                  <input type="checkbox" name="image_copy_edges" {% if ad.SA_IMAGE_COPY_EDGES %}checked{% endif %}>Include image copies as edges
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Also read a picture post without a forward header that shows an image of an earlier in-scope post — the same Telegram photo, or a perceptual hash within the distance below (hash the stored images first: crawl option Hash stored images, or python manage.py hash_media) — as a citation of that earliest post: an edge from the copier to the origin, one citation event per post (an album counts once), counted by Amplification, Content originality and Diffusion lag too. A channel's logos and banners are ignored. Every link is listed in data/image_copies.csv — a match shows the image appeared earlier in scope, not who made it."></i>
+                  <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="Tunable: Image-copy distance ≤"></i>
+                </label>
+              </div>
+              <div class="ops-params" style="margin-top:.5rem">
+                <div class="ops-param" data-requires-flag="image_copy_edges">
+                  <label for="image_copy_distance">Image-copy distance ≤
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Largest number of differing bits (of 64) between two images' perceptual hashes for them to count as the same image. 0 = the same Telegram photo or an identical hash; 6 (default) = re-encoded or resized copies; distinct images typically differ in about 32 bits. The Visual originality measure uses the same distance."></i>
+                  </label>
+                  <input type="number" name="image_copy_distance" id="image_copy_distance" placeholder="{{ ad.SA_IMAGE_COPY_DISTANCE }}" value="{{ ad.SA_IMAGE_COPY_DISTANCE }}" min="0" max="64" step="1" data-width="sm">
                 </div>
               </div>
             </fieldset>
@@ -914,6 +952,7 @@
                   <div class="ops-mchip" draggable="true" data-measure="MODULEROLE" data-label="Module Role" data-multi="1" data-params='[{"name":"basis","kind":"basis-role","default":"","label":"Basis"}]'><i class="bi bi-circle-fill ops-dir" title="Direction-invariant — counts neighbours on both sides (predecessors ∪ successors); direction enters only via the chosen basis partition"></i><span class="ops-mchip-label">Module Role</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Guimerà & Amaral (2005) within-module role — within-module degree z-score and participation coefficient (the continuous cross-community bridging score), plus the 7-role label (provincial / connector / kinless hub, etc.). Needs a community strategy; pick the basis per instance, or leave (auto) to resolve from the computed partitions."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: community basis (or auto). Can be added multiple times with different bases."></i><button type="button" class="ops-mchip-add" aria-label="Add Module Role" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="AMPLIFICATION" data-label="Amplification"><i class="bi bi-arrow-right ops-dir" title="Directional — based on forwards received vs sent (from messages, not graph edges)"></i><span class="ops-mchip-label">Amplification</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Amplification factor — forwards received from in-target channels divided by the channel's own message count."></i><button type="button" class="ops-mchip-add" aria-label="Add Amplification" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="CONTENTORIGINALITY" data-label="Content Originality"><i class="bi bi-circle ops-dir" title="Not a graph measure — computed from each channel's messages, so citation direction doesn't apply"></i><span class="ops-mchip-label">Content Originality</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Content originality — share of messages that are not forwards; 1 = fully original, 0 = fully reposted."></i><button type="button" class="ops-mchip-add" aria-label="Add Content Originality" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
+                  <div class="ops-mchip" draggable="true" data-measure="VISUALORIGINALITY" data-label="Visual Originality"><i class="bi bi-circle ops-dir" title="Not a graph measure — computed from each channel's picture posts, so citation direction doesn't apply"></i><span class="ops-mchip-label">Visual Originality</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Visual originality — share of a channel's picture posts whose images are not copies of another channel's earlier post (same photo, or a perceptual hash within the image-copy distance; run hash_media first). 1 = all its images seen first here."></i><button type="button" class="ops-mchip-add" aria-label="Add Visual Originality" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                   <div class="ops-mchip" draggable="true" data-measure="DIFFUSIONLAG" data-label="Diffusion Lag" data-multi="1" data-params='[{"name":"window","kind":"int","default":{{ ad.SA_DIFFUSION_WINDOW }},"min":0,"label":"Window (days)"}]'><i class="bi bi-circle ops-dir" title="Not a graph measure — computed from each channel's messages, so citation direction doesn't apply"></i><span class="ops-mchip-label">Diffusion Lag</span><i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top" title="Diffusion lag — median hours between the original post date and when this channel forwarded it. Low = early adopter; high = late amplifier; null for channels with no dated forwards."></i><i class="bi bi-sliders ops-tip ops-flag-param" title="Tunable: reaction window (days). Can be added multiple times with different windows."></i><button type="button" class="ops-mchip-add" aria-label="Add Diffusion Lag" title="Add"><i class="bi bi-plus-lg" aria-hidden="true"></i></button></div>
                 </div>
               </div>
@@ -2145,6 +2184,7 @@ function showToast(msg, type) {
         setVal('timeline_step', ['year', 'quarter', 'month'].indexOf(opts.timeline_step) !== -1 ? opts.timeline_step : 'none');
         setVal('timeline_window', opts.timeline_window ? opts.timeline_window : '');
         setCheck('event_impact', opts.event_impact);
+        setCheck('links', opts.links);
         setVal('event_window_weeks', opts.event_window_weeks != null ? opts.event_window_weeks : '');
 
         // Text / number fields
@@ -2189,6 +2229,8 @@ function showToast(msg, type) {
         if (opts.include_self_references !== undefined) setCheck('include_self_references', opts.include_self_references);
         if (opts.near_copy_edges !== undefined) setCheck('near_copy_edges', opts.near_copy_edges);
         setVal('near_copy_threshold', opts.near_copy_threshold != null ? opts.near_copy_threshold : '');
+        if (opts.image_copy_edges !== undefined) setCheck('image_copy_edges', opts.image_copy_edges);
+        setVal('image_copy_distance', opts.image_copy_distance != null ? opts.image_copy_distance : '');
 
         // Vacancy analysis
         setMulti('vacancy_measures',       opts.vacancy_measures || '');

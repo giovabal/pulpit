@@ -153,6 +153,9 @@ class BackofficePageTests(TestCase):
     def test_emoji_packs_page(self):
         self._check("custom-emoji-packs")
 
+    def test_domains_page(self):
+        self._check("domains")
+
 
 # ---------------------------------------------------------------------------
 # Helpers shared by API tests
@@ -1264,3 +1267,46 @@ class CustomEmojiPackViewSetTests(_ApiTestCase):
     def test_packs_cannot_be_created_or_deleted(self):
         self.assertEqual(self.jpost(_api("emoji-packs/"), {"telegram_id": 5}).status_code, 405)
         self.assertEqual(self.jdelete(_api(f"emoji-packs/{self.pack.pk}/")).status_code, 405)
+
+
+class DomainViewSetTests(_ApiTestCase):
+    """Manage → Domains: categories (CRUD), sites (PATCH of category and note), the index rebuild."""
+
+    def setUp(self):
+        from webapp.models import Domain, DomainCategory, Message
+
+        self.Domain, self.DomainCategory = Domain, DomainCategory
+        channel = make_channel(telegram_id=1, title="A", label=make_label("Org"))
+        Message.objects.create(channel=channel, telegram_id=1, message="https://www.newsite.org/a https://gab.com/b")
+
+    def test_starter_categories_are_listed_with_their_sites(self):
+        rows = {r["name"]: r for r in self.jget(_api("domain-categories/")).json()}
+        self.assertEqual(rows["Alternative platform"]["role"], "alternative")
+        self.assertGreater(rows["Shortener"]["domain_count"], 5)
+
+    def test_reindex_then_file_an_uncategorised_site(self):
+        counts = self.jpost(_api("domains/reindex/"), {}).json()
+        self.assertEqual((counts["messages"], counts["new"]), (1, 1))
+        uncategorised = self.jget(_api("domains/?category=none&seen=1")).json()["results"]
+        self.assertEqual([r["name"] for r in uncategorised], ["newsite.org"])
+        site = uncategorised[0]
+        shop = self.DomainCategory.objects.get(name="Shop / merch")
+        self.assertEqual(self.jpatch(_api(f"domains/{site['id']}/"), {"category": shop.pk}).status_code, 200)
+        self.assertEqual(self.jpatch(_api(f"domains/{site['id']}/"), {"note": "the club's shop"}).status_code, 200)
+        row = self.Domain.objects.get(name="newsite.org")
+        self.assertEqual((row.category_id, row.note, row.posts), (shop.pk, "the club's shop", 1))
+
+    def test_counts_are_read_only_and_sites_are_not_created_by_hand(self):
+        site = self.Domain.objects.get(name="gab.com")
+        self.jpatch(_api(f"domains/{site.pk}/"), {"posts": 99, "name": "other.com"})
+        site.refresh_from_db()
+        self.assertEqual((site.posts, site.name), (0, "gab.com"))
+        self.assertEqual(self.jpost(_api("domains/"), {"name": "x.org"}).status_code, 403)
+
+    def test_deleting_a_category_uncategorises_its_sites(self):
+        category = self.jpost(_api("domain-categories/"), {"name": "Party sites", "color": "#123456"}).json()
+        site = self.Domain.objects.get(name="gab.com")
+        self.jpatch(_api(f"domains/{site.pk}/"), {"category": category["id"]})
+        self.assertEqual(self.jdelete(_api(f"domain-categories/{category['id']}/")).status_code, 204)
+        site.refresh_from_db()
+        self.assertIsNone(site.category)

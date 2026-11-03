@@ -258,8 +258,9 @@ def _prepare_export_graph(graph: nx.DiGraph, graph_data: GraphData) -> nx.DiGrap
     schema-invalid GEXF or duplicate GraphML keys depending on DB row order.
 
     Graph-level attributes are cut down to scalars: ``build_graph`` always stores the
-    near-copy links as a list on ``graph.graph["near_copies"]`` (empty when the option
-    is off), and ``write_graphml`` rejects any non-scalar data value. Only the copy is
+    near-copy and image-copy links as lists on ``graph.graph["near_copies"]`` /
+    ``["image_copies"]`` (empty when the option is off), and ``write_graphml`` rejects
+    any non-scalar data value. Only the copy is
     pruned — the caller's graph keeps them for the content measures and the audit CSV.
     """
     g = graph.copy()
@@ -367,9 +368,9 @@ def write_csv(
 
     nodes.csv mirrors channel_table.xlsx. A role measure requested with several community bases
     contributes one companion column group per instance, each carrying its parameter annotation.
-    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies
-    where the last three are the raw forward / mention / near-copy counts (weight_copies is 0 unless
-    near-copy edges were on).
+    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies,
+    weight_image_copies — the last four the raw forward / mention / near-copy / image-copy counts (the copy
+    columns are 0 unless near-copy or image-copy edges were on).
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -426,7 +427,15 @@ def write_csv(
     with open(os.path.join(output_dir, "edges.csv"), "w", newline="", encoding="utf-8") as fh:
         writer = _csv.writer(fh)
         writer.writerow(
-            ["source_label", "target_label", "weight", "weight_forwards", "weight_mentions", "weight_copies"]
+            [
+                "source_label",
+                "target_label",
+                "weight",
+                "weight_forwards",
+                "weight_mentions",
+                "weight_copies",
+                "weight_image_copies",
+            ]
         )
         for edge in edge_list:
             source_label = label_by_id.get(str(edge[0]), str(edge[0]))
@@ -435,7 +444,18 @@ def write_csv(
             weight_forwards = edge[3]
             weight_mentions = edge[4]
             weight_copies = edge[5] if len(edge) > 5 else 0.0
-            writer.writerow([source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies])
+            weight_image_copies = edge[6] if len(edge) > 6 else 0.0
+            writer.writerow(
+                [
+                    source_label,
+                    target_label,
+                    weight,
+                    weight_forwards,
+                    weight_mentions,
+                    weight_copies,
+                    weight_image_copies,
+                ]
+            )
 
 
 NEAR_COPIES_CSV = "near_copies.csv"
@@ -484,6 +504,55 @@ def write_near_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: st
                     link.similarity,
                     link.copy_tokens,
                     link.origin_tokens,
+                    link.cluster_size,
+                    int(link.is_self_copy),
+                ]
+            )
+    return path
+
+
+IMAGE_COPIES_CSV = "image_copies.csv"
+_IMAGE_COPY_COLUMNS = (
+    "copy_channel",
+    "copy_channel_id",
+    "copy_message_id",
+    "copy_date",
+    "origin_channel",
+    "origin_channel_id",
+    "origin_message_id",
+    "origin_date",
+    "lag_hours",
+    "distance",
+    "cluster_size",
+    "self_copy",
+)
+
+
+def write_image_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: str) -> str:
+    """Write the image-copy audit list (``data/image_copies.csv``): one row per copy → origin post link
+    ``build_graph`` detected (a post is identified by its first message), with the pHash distance of the
+    match (0 = same Telegram photo), publication lag and image-cluster size. Written whenever image-copy
+    edges are on, self-copies included and flagged. Returns the path.
+    """
+    label_by_pk = {str(node["id"]): node.get("label") or str(node["id"]) for node in graph_data["nodes"]}
+    os.makedirs(data_dir, exist_ok=True)
+    path = os.path.join(data_dir, IMAGE_COPIES_CSV)
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(_IMAGE_COPY_COLUMNS)
+        for link in graph.graph.get("image_copies") or []:
+            writer.writerow(
+                [
+                    label_by_pk.get(str(link.copy_channel_id), str(link.copy_channel_id)),
+                    link.copy_channel_id,
+                    link.copy_id,
+                    link.copy_date.isoformat(timespec="seconds"),
+                    label_by_pk.get(str(link.origin_channel_id), str(link.origin_channel_id)),
+                    link.origin_channel_id,
+                    link.origin_id,
+                    link.origin_date.isoformat(timespec="seconds"),
+                    round(link.lag_hours, 2),
+                    link.distance,
                     link.cluster_size,
                     int(link.is_self_copy),
                 ]
@@ -712,10 +781,12 @@ def write_summary_json(
     community_resolutions: dict[str, Any] | None = None,
     community_fits: dict[str, Any] | None = None,
     homophily: list[dict[str, Any]] | None = None,
+    image_copies: int | None = None,
 ) -> None:
     """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
 
-    ``near_copies`` — number of copy → origin links the graph was built with (``None`` = option off).
+    ``near_copies`` — number of copy → origin links the graph was built with (``None`` = option off);
+    ``image_copies`` the same for image copies.
     ``community_resolutions`` — the CPM resolution γ each CPM-family partition of the full-range
     graph was computed with, keyed by partition key: a float for a LEIDEN_CPM instance (its explicit
     γ, or the network density when the token omits it), ``{"<year>": γ}`` for a LEIDEN_TEMPORAL
@@ -746,6 +817,7 @@ def write_summary_json(
         "draw_dead_leaves",
         "environment_depth",
         "timeline_step",
+        "timeline_window",
         "startdate",
         "enddate",
         "fa2_iterations",
@@ -765,6 +837,8 @@ def write_summary_json(
         "near_copy_threshold",
         "near_copy_min_tokens",
         "near_copy_shingle_size",
+        "image_copy_edges",
+        "image_copy_distance",
         "channel_types",
         "channel_sources",
         "filter_labels",
@@ -795,6 +869,9 @@ def write_summary_json(
         "mrqap",
         "mrqap_permutations",
         "dyadic_export",
+        "event_impact",
+        "event_window_weeks",
+        "links",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -812,6 +889,7 @@ def write_summary_json(
         "nodes": nodes,
         "edges": edges,
         "near_copies": near_copies,
+        "image_copies": image_copies,
         "community_resolutions": community_resolutions or {},
         "community_fits": community_fits or {},
         "homophily": homophily or [],
@@ -915,6 +993,31 @@ def write_dominance_json(payload: dict, graph_dir: str) -> None:
     os.makedirs(data_dir, exist_ok=True)
     with open(os.path.join(data_dir, "dominance.json"), "w") as f:
         f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+def write_links_json(payload: dict, graph_dir: str) -> None:
+    """Write data/links.json from :func:`network.link_layer.compute_links`."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "links.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+def write_channel_sites_csv(payload: dict, output_dir: str) -> None:
+    """Write channel_sites.csv: one row per (channel, linked site) with the messages linking to it, plus
+    links_colinking.csv with the listed co-linking pairs."""
+    from network.link_layer import PAIR_COLUMNS, channel_site_rows, flat_rows
+
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "channel_sites.csv"), "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(["channel", "channel_id", "label", "site", "category", "messages"])
+        writer.writerows(channel_site_rows(payload))
+    headers, rows = flat_rows(PAIR_COLUMNS, payload.get("colinking", {}).get("pairs", []))
+    with open(os.path.join(output_dir, "links_colinking.csv"), "w", newline="", encoding="utf-8") as fh:
+        writer = _csv.writer(fh)
+        writer.writerow(headers)
+        writer.writerows(rows)
 
 
 def write_dominance_csv(payload: dict, output_dir: str) -> None:

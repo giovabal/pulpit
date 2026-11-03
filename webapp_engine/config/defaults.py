@@ -48,6 +48,12 @@ CRAWL_DEFAULTS: dict = {
         "in_degrees": False,
         "out_degrees": False,
     },
+    # Offline steps after the crawl: fingerprint the stored pictures (image copies) and rebuild the
+    # outbound-link domain index (Manage → Domains).
+    "index": {
+        "hash_images": False,
+        "domains": False,
+    },
     "environment": {
         # Crawl the out-of-scope channels the in-scope ones cite (forwards + t.me/
         # references), up to `depth` citation hops away, bounded to the in-scope
@@ -101,6 +107,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "timeline_window": 0,
         # Interrupted time series around the recorded events (events.html, data/event_impact.json).
         "event_impact": False,
+        # Outbound-link layer: the sites the channels link to, by domain category (links.html, data/links.json).
+        "links": False,
     },
     "edges": {
         "weight_strategy": "",
@@ -113,6 +121,10 @@ STRUCTURAL_DEFAULTS: dict = {
         "near_copy_threshold": 0.8,
         "near_copy_min_tokens": 8,
         "near_copy_shingle_size": 3,
+        # Image copies as edges: a picture post re-posting an earlier post's image (same Telegram photo, or
+        # pHash within image_copy_distance of 64 bits) without a forward header counts as a citation of it.
+        "image_copy_edges": False,
+        "image_copy_distance": 6,
     },
     "scope": {
         "include_lost": False,

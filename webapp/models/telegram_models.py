@@ -398,6 +398,11 @@ class Message(TelegramBaseModel):
     # raises DataError instead of truncating. The crawler slices to this length too.
     webpage_url = models.URLField(max_length=2048, default="", blank=True)
     webpage_type = models.CharField(max_length=255, default="", blank=True)
+    # The URLs behind the message's link entities — hidden links (MessageEntityTextUrl), auto-linked text
+    # (MessageEntityUrl) — and its inline URL buttons, in order, t.me included; the outbound-link layer reads
+    # them (network.links). ``None`` = not captured (crawled before the field existed; --refresh-messages-stats
+    # backfills it while the text is unchanged), ``[]`` = captured, no link.
+    link_urls = models.JSONField(null=True, blank=True)
     media_type = models.CharField(
         max_length=32, default="", blank=True
     )  # "photo", "video", "audio", "sticker", "document", "poll", "none", "gone" (no longer on Telegram), or ""
