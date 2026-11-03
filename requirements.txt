@@ -9,9 +9,9 @@
 # or system packages (Debian/Ubuntu: apt install python3-graph-tool, then create the venv with
 # --system-site-packages). See docs/community-detection.md.
 # graph-tool
-djangorestframework==3.18.1
+djangorestframework==3.18.3
 fa2==1.1.2
-django==6.1.1
+django==6.1.3
 django-admin-logs==1.5.0
 django-colorfield==0.14.0
 django-extensions==4.1
@@ -19,13 +19,13 @@ python-decouple==3.8
 tomlkit>=0.13
 rich>=13  # progress bars + summary tables for export_installation.py (imported optionally; plain fallback if absent)
 telethon==1.45.0
-pypalettes==0.2.1
+pypalettes==0.2.2
 colorcet==3.2.1
 leidenalg==0.12.0
 openpyxl==3.1.5
 umap-learn==0.5.12
-pandas==3.0.5
-networkx==3.6.1
+pandas==3.0.6
+networkx==3.7
 # numpy is otherwise a transitive dependency (pandas/scipy/networkx). It deliberately has no upper
 # bound: a --system-site-packages venv must keep the system numpy that graph-tool was compiled against
 # (1.x on Ubuntu 24.04, 2.x on 26.04), and a floor the system copy already meets lets pip leave it in
