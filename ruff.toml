@@ -56,6 +56,27 @@ skip-magic-trailing-comma = false
 line-ending = "lf"
 
 
+# Ruff's default conventional aliases, minus `datetime = "dt"` (added to the defaults in ruff 0.17): the
+# codebase imports the `datetime` module unaliased, and `dt` is used as a local name in places. Setting
+# `aliases` replaces the default table, so keep it in step with `ruff config lint.flake8-import-conventions.aliases`.
+[lint.flake8-import-conventions.aliases]
+altair = "alt"
+matplotlib = "mpl"
+"matplotlib.pyplot" = "plt"
+networkx = "nx"
+numpy = "np"
+"numpy.typing" = "npt"
+pandas = "pd"
+seaborn = "sns"
+tensorflow = "tf"
+tkinter = "tk"
+holoviews = "hv"
+panel = "pn"
+"plotly.express" = "px"
+polars = "pl"
+pyarrow = "pa"
+"xml.etree.ElementTree" = "ET"
+
 [lint.isort]
 combine-as-imports = true
 section-order = ["future", "standard-library", "django", "first-party", "local-folder", "third-party"]
