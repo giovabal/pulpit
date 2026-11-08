@@ -956,6 +956,24 @@ class ExportDetailViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["nodes"], 10)
 
+    def test_delete_from_analysis_page_passes_csrf(self):
+        # The Analysis page renders no {% csrf_token %} under WEB_ACCESS=ALL, so it must set the
+        # cookie itself — otherwise its Delete button's X-CSRFToken is empty and Django 403s.
+        client = self.client_class(enforce_csrf_checks=True)
+        page = client.get(reverse("analysis"))
+        self.assertIn("csrftoken", page.cookies)
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "exports" / "doomed"
+            p.mkdir(parents=True)
+            (p / "summary.json").write_text("{}")
+            with override_settings(BASE_DIR=Path(td)):
+                resp = client.delete(
+                    reverse("operations-export-detail", args=["doomed"]),
+                    HTTP_X_CSRFTOKEN=client.cookies["csrftoken"].value,
+                )
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(p.exists())
+
 
 # ---------------------------------------------------------------------------
 # runner/views.py — _build_args: crawl_channels

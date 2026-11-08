@@ -9,7 +9,9 @@ from django.conf import settings
 from django.db.models import Max
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from network import (
     community as net_community,
@@ -56,6 +58,9 @@ TASK_DEFINITIONS: dict[str, dict[str, str]] = {
 }
 
 
+# The page renders no {% csrf_token %} (the base template's logout form is absent under
+# WEB_ACCESS=ALL), so set the cookie explicitly: the Delete buttons send it as X-CSRFToken.
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class AnalysisPageView(View):
     def get(self, request: HttpRequest) -> HttpResponse:
         return render(request, "runner/analysis.html")
