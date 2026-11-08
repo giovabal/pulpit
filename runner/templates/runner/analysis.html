@@ -142,7 +142,8 @@
               method: 'DELETE',
               headers: { 'X-CSRFToken': getCsrfToken() },
             }).then(function(r) {
-              if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || r.status); });
+              // A non-JSON error body (e.g. Django's HTML 403 page) falls back to the status.
+              if (!r.ok) return r.json().catch(function() { return {}; }).then(function(d) { throw new Error(d.error || r.status); });
               tr.remove();
               if (!tbody.querySelectorAll('tr').length)
                 tbody.innerHTML = '<tr><td colspan="7" class="analysis-empty">No exports yet. Run <strong>Structural Analysis</strong> from Operations to create one.</td></tr>';
