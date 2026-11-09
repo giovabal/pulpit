@@ -40,8 +40,8 @@ in_degrees = true
 out_degrees = true
 
 [index]
-hash_images = false
-domains = false
+hash_images = true
+domains = true
 
 [environment]
 enabled = false
