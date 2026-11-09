@@ -1,4 +1,6 @@
 # Changelog
+## [0.30] - To be announced
+
 ## [0.29] - 2026-11-09
 *Methodology review of the measures and community detection, with homophily and significance. Bots detection. Emoji packs. Finer timelines and event tests. Image copies and outbound links.*
 
