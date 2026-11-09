@@ -1644,16 +1644,6 @@ body {
   color: var(--accent);
 }
 
-.msg-forwards-only-toggle {
-  display: flex;
-  align-items: center;
-  gap: .35rem;
-  font-size: .8125rem;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
 .search-summary {
   font-size: .8rem;
   color: var(--muted);
@@ -1664,19 +1654,109 @@ body {
   flex-shrink: 0;
 }
 
+/* The Options menu is a wide panel: one row of columns on a desktop screen,
+   wrapping to three, two, then one stacked column as the viewport narrows.
+   Nothing is applied until the Apply button submits the form. */
 .msg-options-menu {
-  min-width: 11rem;
-  padding: .625rem .75rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  padding: .75rem .875rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   background: var(--surface);
 }
 
+.msg-options-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .875rem 1.5rem;
+  max-height: min(65vh, 36rem);
+  overflow-y: auto;
+}
+
+.msg-options-col {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+  min-width: 0;
+}
+
+.msg-options-col+.msg-options-col {
+  padding-top: .875rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (min-width: 576px) {
+  .msg-options-body {
+    grid-template-columns: repeat(2, minmax(9rem, max-content));
+  }
+
+  .msg-options-col+.msg-options-col {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+@media (min-width: 992px) {
+  .msg-options-body {
+    grid-template-columns: repeat(3, minmax(9rem, max-content));
+  }
+}
+
+@media (min-width: 1200px) {
+  .msg-options-body {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(9rem, max-content);
+    column-gap: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .msg-options-col {
+    padding: 0 1.25rem;
+  }
+
+  .msg-options-col:first-child {
+    padding-left: 0;
+  }
+
+  .msg-options-col:last-child {
+    padding-right: 0;
+  }
+
+  .msg-options-col+.msg-options-col {
+    border-left: 1px solid var(--border);
+  }
+}
+
 .msg-options-section {
   display: flex;
   flex-direction: column;
   gap: .25rem;
+}
+
+.msg-options-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .75rem;
+  padding-top: .625rem;
+  border-top: 1px solid var(--border);
+}
+
+.msg-options-pending {
+  margin-right: auto;
+  font-size: .72rem;
+  color: var(--muted);
+  visibility: hidden;
+}
+
+.msg-options-menu.is-pending .msg-options-pending {
+  visibility: visible;
 }
 
 .msg-options-label {
@@ -1718,14 +1798,8 @@ body {
   flex-shrink: 0;
 }
 
-.msg-options-divider {
-  height: 1px;
-  background: var(--border);
-  margin: .5rem 0;
-}
-
 .msg-options-note {
-  max-width: 15rem;
+  max-width: 12rem;
   margin: 0;
   font-size: .72rem;
   line-height: 1.35;
@@ -1743,6 +1817,7 @@ body {
 }
 
 .msg-options-tags {
+  max-width: 16rem;
   display: flex;
   flex-direction: column;
   gap: .25rem;

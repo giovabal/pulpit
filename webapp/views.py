@@ -1016,10 +1016,16 @@ class ChannelDetailView(ListView):
         context_data["query"] = q
         tab = self.request.GET.get("tab", "messages")
         context_data["active_tab"] = tab
-        context_data["forwards_only"] = bool(self.request.GET.get("forwards_only"))
+        forwards_only = bool(self.request.GET.get("forwards_only"))
+        context_data["forwards_only"] = forwards_only
         self_ref = self.request.GET.get("self_ref", "include")
+        if self_ref not in ("include", "exclude", "only"):
+            self_ref = "include"
         context_data["self_ref"] = self_ref
         context_data.update(_message_options_context(self.request.GET, self.request.user))
+        # Both filters live in the Options menu, so they light its button up too.
+        if (tab == "received" and self_ref != "include") or (tab != "received" and forwards_only):
+            context_data["options_active"] = True
         # Extend original_query so pagination links preserve tab, self_ref, and forwards_only.
         extra = ""
         if tab == "received":
