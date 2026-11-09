@@ -6,8 +6,8 @@ authors:
   - family-names: Baldini
     given-names: Giovanni
     email: giovanni.baldini@gmail.com
-version: "0.28"
-date-released: "2026-10-09"
+version: "0.29"
+date-released: "2026-11-09"
 repository-code: "https://github.com/giovabal/pulpit"
 license: GPL-3.0-only
 abstract: >-
