@@ -7,148 +7,183 @@
             aria-expanded="false">
       <i class="bi bi-sliders me-1" aria-hidden="true"></i>Options
     </button>
-    <div class="dropdown-menu msg-options-menu">
+    <div class="dropdown-menu dropdown-menu-end msg-options-menu">
 
-      <div class="msg-options-section">
-        <div class="msg-options-label">Sort</div>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="date_desc" class="msg-opt-input"
-                 {% if sort == "date_desc" %}checked{% endif %}> Newest first
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="date_asc" class="msg-opt-input"
-                 {% if sort == "date_asc" %}checked{% endif %}> Oldest first
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="views_desc" class="msg-opt-input"
-                 {% if sort == "views_desc" %}checked{% endif %}> Most viewed
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="views_asc" class="msg-opt-input"
-                 {% if sort == "views_asc" %}checked{% endif %}> Least viewed
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="reactions_desc" class="msg-opt-input"
-                 {% if sort == "reactions_desc" %}checked{% endif %}> Most reactions
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="reactions_asc" class="msg-opt-input"
-                 {% if sort == "reactions_asc" %}checked{% endif %}> Fewest reactions
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="interest_desc" class="msg-opt-input"
-                 {% if sort == "interest_desc" %}checked{% endif %}> Most interesting
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="sort" value="interest_asc" class="msg-opt-input"
-                 {% if sort == "interest_asc" %}checked{% endif %}> Least interesting
-        </label>
-      </div>
+      <div class="msg-options-body">
 
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Date range</div>
-        <label class="msg-options-item">
-          <span class="msg-options-date-label">From</span>
-          <input type="date" name="date_from" value="{{ date_from }}" class="msg-opt-input form-control form-control-sm">
-        </label>
-        <label class="msg-options-item">
-          <span class="msg-options-date-label">To</span>
-          <input type="date" name="date_to" value="{{ date_to }}" class="msg-opt-input form-control form-control-sm">
-        </label>
-      </div>
-
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Content type</div>
-        {% for t in all_types %}
-        <label class="msg-options-item">
-          <input type="checkbox" name="type" value="{{ t }}" class="msg-opt-input"
-                 {% if t in selected_types %}checked{% endif %}> {{ t|capfirst }}
-        </label>
-        {% endfor %}
-      </div>
-
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Pinned</div>
-        <label class="msg-options-item">
-          <input type="checkbox" name="pinned" value="1" class="msg-opt-input"
-                 {% if pinned %}checked{% endif %}> Pinned only (current or past)
-        </label>
-      </div>
-
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Replies</div>
-        <label class="msg-options-item">
-          <input type="radio" name="replies" value="include" class="msg-opt-input"
-                 {% if replies == "include" %}checked{% endif %}> Include
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="replies" value="exclude" class="msg-opt-input"
-                 {% if replies == "exclude" %}checked{% endif %}> Exclude
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="replies" value="only" class="msg-opt-input"
-                 {% if replies == "only" %}checked{% endif %}> Only
-        </label>
-        <p class="msg-options-note">A reply is a message posted in answer to another one.</p>
-      </div>
-
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Shares</div>
-        <label class="msg-options-item">
-          <input type="checkbox" name="unique" value="1" class="msg-opt-input"
-                 {% if unique %}checked{% endif %}> Unique — one message per post
-        </label>
-        <p class="msg-options-note">Hides shares: a post shows as its original when listed, else as its earliest share.</p>
-      </div>
-
-      {% if CAN_VIEW_TAGS and all_tags %}
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Tags <span class="msg-options-hint">any of</span></div>
-        <div class="msg-options-tags">
-          <label class="msg-options-item">
-            <input type="checkbox" name="tag" value="any" class="msg-opt-input"
-                   {% if any_tag %}checked{% endif %}> Any tag
-          </label>
-          {% for tag in all_tags %}
-          <label class="msg-options-item">
-            <input type="checkbox" name="tag" value="{{ tag.pk }}" class="msg-opt-input"
-                   {% if tag.pk in selected_tag_ids %}checked{% endif %}>
-            <span class="tag-swatch" style="background: {{ tag.color }};" aria-hidden="true"></span>
-            {{ tag.name }} <span class="msg-options-count">{{ tag.message_count }}</span>
-          </label>
-          {% endfor %}
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Sort</div>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="date_desc" class="msg-opt-input" data-default
+                     {% if sort == "date_desc" %}checked{% endif %}> Newest first
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="date_asc" class="msg-opt-input"
+                     {% if sort == "date_asc" %}checked{% endif %}> Oldest first
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="views_desc" class="msg-opt-input"
+                     {% if sort == "views_desc" %}checked{% endif %}> Most viewed
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="views_asc" class="msg-opt-input"
+                     {% if sort == "views_asc" %}checked{% endif %}> Least viewed
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="reactions_desc" class="msg-opt-input"
+                     {% if sort == "reactions_desc" %}checked{% endif %}> Most reactions
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="reactions_asc" class="msg-opt-input"
+                     {% if sort == "reactions_asc" %}checked{% endif %}> Fewest reactions
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="interest_desc" class="msg-opt-input"
+                     {% if sort == "interest_desc" %}checked{% endif %}> Most interesting
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="sort" value="interest_asc" class="msg-opt-input"
+                     {% if sort == "interest_asc" %}checked{% endif %}> Least interesting
+            </label>
+          </div>
         </div>
+
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Date range</div>
+            <label class="msg-options-item">
+              <span class="msg-options-date-label">From</span>
+              <input type="date" name="date_from" value="{{ date_from }}" class="msg-opt-input form-control form-control-sm">
+            </label>
+            <label class="msg-options-item">
+              <span class="msg-options-date-label">To</span>
+              <input type="date" name="date_to" value="{{ date_to }}" class="msg-opt-input form-control form-control-sm">
+            </label>
+          </div>
+
+          <div class="msg-options-section">
+            <div class="msg-options-label">Pinned</div>
+            <label class="msg-options-item">
+              <input type="checkbox" name="pinned" value="1" class="msg-opt-input"
+                     {% if pinned %}checked{% endif %}> Pinned only (current or past)
+            </label>
+          </div>
+
+          <div class="msg-options-section">
+            <div class="msg-options-label">Shares</div>
+            <label class="msg-options-item">
+              <input type="checkbox" name="unique" value="1" class="msg-opt-input"
+                     {% if unique %}checked{% endif %}> Unique — one message per post
+            </label>
+            <p class="msg-options-note">Hides shares: a post shows as its original when listed, else as its earliest share.</p>
+          </div>
+        </div>
+
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Content type</div>
+            {% for t in all_types %}
+            <label class="msg-options-item">
+              <input type="checkbox" name="type" value="{{ t }}" class="msg-opt-input" data-default
+                     {% if t in selected_types %}checked{% endif %}> {{ t|capfirst }}
+            </label>
+            {% endfor %}
+          </div>
+
+          {% if channel_filters %}
+          {% if active_tab == "received" %}
+          <div class="msg-options-section">
+            <div class="msg-options-label">Self-references</div>
+            <label class="msg-options-item">
+              <input type="radio" name="self_ref" value="include" class="msg-opt-input" data-default
+                     {% if self_ref == "include" %}checked{% endif %}> Include
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="self_ref" value="exclude" class="msg-opt-input"
+                     {% if self_ref == "exclude" %}checked{% endif %}> Exclude
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="self_ref" value="only" class="msg-opt-input"
+                     {% if self_ref == "only" %}checked{% endif %}> Only
+            </label>
+            <p class="msg-options-note">A self-reference is the channel forwarding its own post.</p>
+          </div>
+          {% else %}
+          <div class="msg-options-section">
+            <div class="msg-options-label">Forwards</div>
+            <label class="msg-options-item">
+              <input type="checkbox" name="forwards_only" value="1" class="msg-opt-input"
+                     {% if forwards_only %}checked{% endif %}> Forwards only
+            </label>
+          </div>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Replies</div>
+            <label class="msg-options-item">
+              <input type="radio" name="replies" value="include" class="msg-opt-input" data-default
+                     {% if replies == "include" %}checked{% endif %}> Include
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="replies" value="exclude" class="msg-opt-input"
+                     {% if replies == "exclude" %}checked{% endif %}> Exclude
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="replies" value="only" class="msg-opt-input"
+                     {% if replies == "only" %}checked{% endif %}> Only
+            </label>
+            <p class="msg-options-note">A reply is a message posted in answer to another one.</p>
+          </div>
+
+          <div class="msg-options-section">
+            <div class="msg-options-label">Lost messages</div>
+            <label class="msg-options-item">
+              <input type="radio" name="lost" value="exclude" class="msg-opt-input" data-default
+                     {% if lost == "exclude" %}checked{% endif %}> Exclude
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="lost" value="include" class="msg-opt-input"
+                     {% if lost == "include" %}checked{% endif %}> Include
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="lost" value="only" class="msg-opt-input"
+                     {% if lost == "only" %}checked{% endif %}> Only
+            </label>
+          </div>
+        </div>
+
+        {% if CAN_VIEW_TAGS and all_tags %}
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Tags <span class="msg-options-hint">any of</span></div>
+            <div class="msg-options-tags">
+              <label class="msg-options-item">
+                <input type="checkbox" name="tag" value="any" class="msg-opt-input"
+                       {% if any_tag %}checked{% endif %}> Any tag
+              </label>
+              {% for tag in all_tags %}
+              <label class="msg-options-item">
+                <input type="checkbox" name="tag" value="{{ tag.pk }}" class="msg-opt-input"
+                       {% if tag.pk in selected_tag_ids %}checked{% endif %}>
+                <span class="tag-swatch" style="background: {{ tag.color }};" aria-hidden="true"></span>
+                {{ tag.name }} <span class="msg-options-count">{{ tag.message_count }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
       </div>
-      {% endif %}
 
-      <div class="msg-options-divider"></div>
-
-      <div class="msg-options-section">
-        <div class="msg-options-label">Lost messages</div>
-        <label class="msg-options-item">
-          <input type="radio" name="lost" value="exclude" class="msg-opt-input"
-                 {% if lost == "exclude" %}checked{% endif %}> Exclude
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="lost" value="include" class="msg-opt-input"
-                 {% if lost == "include" %}checked{% endif %}> Include
-        </label>
-        <label class="msg-options-item">
-          <input type="radio" name="lost" value="only" class="msg-opt-input"
-                 {% if lost == "only" %}checked{% endif %}> Only
-        </label>
+      <div class="msg-options-footer">
+        <span class="msg-options-pending" role="status">Changes not applied yet</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary msg-options-reset">Reset</button>
+        <button type="submit" class="btn btn-sm btn-primary">Apply</button>
       </div>
 
     </div>
@@ -157,8 +192,25 @@
 
 <script>
   (function () {
-    document.querySelectorAll('.msg-opt-input').forEach(function (inp) {
-      inp.addEventListener('change', function () { this.closest('form').submit(); });
+    // Options are applied with the Apply button (or the search box), not on
+    // every change: a change only flags the menu as pending. Reset restores
+    // the defaults (the inputs marked data-default) without submitting.
+    document.querySelectorAll('.msg-options-menu').forEach(function (menu) {
+      var inputs = menu.querySelectorAll('.msg-opt-input');
+      function markPending() { menu.classList.add('is-pending'); }
+      inputs.forEach(function (inp) {
+        inp.addEventListener('change', markPending);
+      });
+      menu.querySelector('.msg-options-reset').addEventListener('click', function () {
+        inputs.forEach(function (inp) {
+          if (inp.type === 'radio' || inp.type === 'checkbox') {
+            inp.checked = inp.hasAttribute('data-default');
+          } else {
+            inp.value = '';
+          }
+        });
+        markPending();
+      });
     });
   })();
 </script>

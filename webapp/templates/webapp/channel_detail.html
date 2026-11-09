@@ -553,19 +553,7 @@
       >
       <button type="submit" class="search-btn">Search</button>
     </div>
-    {% include "webapp/message_options.html" %}
-    {% if active_tab != "received" %}
-    <label class="msg-forwards-only-toggle">
-      <input type="checkbox" name="forwards_only" {% if forwards_only %}checked{% endif %} id="msg-forwards-only">
-      Forwards only
-    </label>
-    {% else %}
-    <select name="self_ref" class="form-select form-select-sm" style="width: auto;" id="msg-self-ref" aria-label="Self-reference filter">
-      <option value="include" {% if self_ref == "include" %}selected{% endif %}>Include self-references</option>
-      <option value="exclude" {% if self_ref == "exclude" %}selected{% endif %}>Do not include self-references</option>
-      <option value="only" {% if self_ref == "only" %}selected{% endif %}>Show only self-references</option>
-    </select>
-    {% endif %}
+    {% include "webapp/message_options.html" with channel_filters=True %}
   </form>
   {% if query %}
   <p class="search-summary">
@@ -624,12 +612,6 @@
   document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
     new bootstrap.Popover(el);
   });
-  (function () {
-    var fwdOnly = document.getElementById('msg-forwards-only');
-    var selfRef = document.getElementById('msg-self-ref');
-    if (fwdOnly) fwdOnly.addEventListener('change', function () { this.form.submit(); });
-    if (selfRef) selfRef.addEventListener('change', function () { this.form.submit(); });
-  })();
 </script>
 <script src="{% vstatic 'webapp/js/post_replies.js' %}"></script>
 <script src="{% vstatic 'webapp/js/post_lightbox.js' %}"></script>
