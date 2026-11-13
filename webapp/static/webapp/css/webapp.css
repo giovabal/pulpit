@@ -1825,6 +1825,16 @@ body {
   overflow-y: auto;
 }
 
+/* Sub-tags sit under their parent (depth from webapp.models.tag_models.TagTree). */
+.msg-options-tag {
+  padding-left: calc(var(--tag-depth, 0) * 1rem);
+}
+
+.msg-options-tag-exact {
+  margin-top: .35rem;
+  font-size: .75rem;
+}
+
 .msg-options-count {
   margin-left: auto;
   padding-left: .5rem;
@@ -2587,6 +2597,12 @@ body {
   color: #fff;
 }
 
+/* A sub-tag's chip names its ancestors first, a shade lighter: "Hand gestures › Nazi salute". */
+.post-tag-path {
+  font-weight: 400;
+  opacity: .78;
+}
+
 a.post-tag:hover {
   color: #1c1917;
   text-decoration: underline;
@@ -2648,6 +2664,21 @@ a.post-tag.is-dark:hover {
 
 .tag-combo-option.is-create {
   color: var(--accent);
+}
+
+/* With an empty field the list is the tag tree: sub-tags indented under their parent. */
+.tag-combo-option[data-depth] {
+  padding-left: calc(.65rem + var(--tag-depth, 0) * .9rem);
+}
+
+.tag-combo-path {
+  color: var(--muted);
+}
+
+.tag-combo-note {
+  margin-left: .35rem;
+  font-size: .7rem;
+  color: var(--muted);
 }
 
 .tag-combo-count {

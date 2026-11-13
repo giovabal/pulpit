@@ -25,7 +25,7 @@ from webapp.models import (
     SearchTerm,
     TaggedMessage,
 )
-from webapp.models.tag_models import message_origin, next_tag_color, with_message_counts
+from webapp.models.tag_models import TagTree, message_origin, next_tag_color, tags_in_tree_order
 
 from .serializers import (
     ChannelLabelSerializer,
@@ -431,10 +431,26 @@ class EventViewSet(viewsets.ModelViewSet):
 
 
 class MessageTagViewSet(viewsets.ModelViewSet):
+    """Manage → Tags. The list is the whole tree, depth-first (each tag followed by its sub-tags)."""
+
     serializer_class = MessageTagSerializer
 
     def get_queryset(self):
-        return with_message_counts(MessageTag.objects.all()).order_by("key")
+        return MessageTag.objects.order_by("key")
+
+    def list(self, request, *args, **kwargs):
+        tree = TagTree.load()
+        tags = tags_in_tree_order(tree=tree)
+        context = {**self.get_serializer_context(), "tag_tree": tree}
+        page = self.paginate_queryset(tags)
+        if page is not None:
+            return self.get_paginated_response(self.serializer_class(page, many=True, context=context).data)
+        return Response(self.serializer_class(tags, many=True, context=context).data)
+
+    def perform_destroy(self, instance):
+        if instance.children.exists():
+            raise ValidationError({"detail": f"“{instance.name}” has sub-tags: move or delete them first."})
+        instance.delete()
 
     @action(detail=False, methods=["get"], url_path="next-color")
     def next_color(self, request):
@@ -453,7 +469,10 @@ class MessageTagViewSet(viewsets.ModelViewSet):
             raise ValidationError({"into": "No such tag."})
         if target.pk == source.pk:
             raise ValidationError({"into": "Cannot merge a tag into itself."})
-        moved = source.merge_into(target)
+        try:
+            moved = source.merge_into(target)
+        except ValueError as e:
+            raise ValidationError({"into": str(e)}) from e
         target = self.get_queryset().get(pk=target.pk)
         return Response({"moved": moved, "tag": self.get_serializer(target).data})
 
@@ -515,9 +534,10 @@ class MessageTaggingViewSet(
             .values_list("tagging_id", "n")
         )
         out = {str(i): [] for i in ids}
+        context = {**self.get_serializer_context(), "tag_tree": TagTree.load()}
         for link in links:
             link.tagging.member_count = counts.get(link.tagging_id, 0)
-            out[str(link.message_id)].append(self.get_serializer(link.tagging).data)
+            out[str(link.message_id)].append(self.serializer_class(link.tagging, context=context).data)
         return Response(out)
 
 

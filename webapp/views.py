@@ -63,11 +63,10 @@ from .models import (
     MessageCustomReaction,
     MessageReaction,
     MessageReply,
-    MessageTag,
     ProfilePicture,
     TaggedMessage,
 )
-from .models.tag_models import tag_key, with_message_counts
+from .models.tag_models import TagTree, tags_in_tree_order
 from .utils.access import can_view_message_tags
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_day_month_year, fmt_ttl
@@ -239,6 +238,11 @@ def _selected_tags(params: Any, user: Any) -> tuple[bool, list[int]]:
     return _ANY_TAG in raw, sorted({int(v) for v in raw if v.isdigit()})
 
 
+def _exact_tags(params: Any, user: Any) -> bool:
+    """The Options menu's "not via sub-tags": dropdown tags match only posts carrying them directly."""
+    return can_view_message_tags(user) and bool(params.get("tag_exact"))
+
+
 def _tag_filter_active(params: Any, user: Any) -> bool:
     any_tag, tag_ids = _selected_tags(params, user)
     return any_tag or bool(tag_ids) or bool(_message_query(params, user)[1])
@@ -247,17 +251,28 @@ def _tag_filter_active(params: Any, user: Any) -> bool:
 def _apply_tag_filter(qs: QuerySet, params: Any, user: Any) -> QuerySet:
     """Dropdown tags match *any of* the selection; each ``tag:`` token must *also* match.
 
-    Reads the materialised ``TaggedMessage`` links — a share of a tagged post
-    carries the tag — so the test stays one primary-key probe per message.
+    A tag stands for its branch — itself and every sub-tag, to any depth
+    (``TagTree.branch``) — except that ``tag_exact`` keeps the dropdown tags to
+    posts carrying them directly: a parent tag not yet refined to a sub-tag. A
+    ``tag:`` token names tags by path (``TagTree.match``: ``tag:"nazi salute"``
+    wherever it sits, ``tag:"hand gestures/nazi salute"`` exactly). Reads the
+    materialised ``TaggedMessage`` links — a share of a tagged post carries the
+    tag — so the test stays one primary-key probe per message.
     """
     any_tag, tag_ids = _selected_tags(params, user)
+    names = _message_query(params, user)[1]
+    if not (any_tag or tag_ids or names):
+        return qs
     links = TaggedMessage.objects.filter(message=OuterRef("pk"))
+    tree = TagTree.load() if tag_ids or names else None
     if any_tag:
         qs = qs.filter(Exists(links))
     elif tag_ids:
-        qs = qs.filter(Exists(links.filter(tagging__tag_id__in=tag_ids)))
-    for name in _message_query(params, user)[1]:
-        qs = qs.filter(Exists(links.filter(tagging__tag__key=tag_key(name))))
+        wanted = set(tag_ids) if _exact_tags(params, user) else tree.branch(tag_ids)
+        qs = qs.filter(Exists(links.filter(tagging__tag_id__in=wanted)))
+    for name in names:
+        matched = tree.branch(tag.pk for tag in tree.match(name))
+        qs = qs.filter(Exists(links.filter(tagging__tag_id__in=matched)))
     return qs
 
 
@@ -375,6 +390,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
     replies = _reply_mode(params)
     unique = bool(params.get("unique"))
     any_tag, tag_ids = _selected_tags(params, user)
+    tag_exact = _exact_tags(params, user) and bool(tag_ids) and not any_tag
     options_active = (
         sort != _DEFAULT_SORT
         or date_from is not None
@@ -409,10 +425,12 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         extra["unique"] = "1"
     if any_tag or tag_ids:
         extra["tag"] = ([_ANY_TAG] if any_tag else []) + tag_ids
+    if tag_exact:
+        extra["tag_exact"] = "1"
     original_query = ("&" + urlencode(extra, doseq=True)) if extra else ""
 
-    tags_visible = can_view_message_tags(user)
-    all_tags = list(with_message_counts(MessageTag.objects.all())) if tags_visible else []
+    # Depth-first, so the Options menu can indent sub-tags under their parent.
+    all_tags = tags_in_tree_order() if can_view_message_tags(user) else []
 
     return {
         "sort": sort,
@@ -428,6 +446,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "any_tag": any_tag,
         "selected_tag_ids": tag_ids,
         "selected_tags": [tag for tag in all_tags if tag.pk in tag_ids],
+        "tag_exact": tag_exact,
+        "has_sub_tags": any(tag.has_children for tag in all_tags),
         "options_active": options_active,
         "original_query": original_query,
     }

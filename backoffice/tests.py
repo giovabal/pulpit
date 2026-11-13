@@ -1191,6 +1191,113 @@ class MessageTagSharesApiTests(_ApiTestCase):
         self.assertEqual(self.jget(f"{self.TAGGINGS}?message={self.original.pk}").json()["results"], [])
 
 
+@override_settings(WEB_ACCESS="ALL")
+class MessageTagTreeApiTests(_ApiTestCase):
+    """Nested tags through the API: paths on the fly, refining, moves, merges, deletes."""
+
+    TAGS = "/manage/api/message-tags/"
+    TAGGINGS = "/manage/api/message-taggings/"
+
+    def setUp(self):
+        from webapp.models import MessageTag
+
+        self.channel = make_channel(telegram_id=1, title="c")
+        self.m1 = Message.objects.create(telegram_id=1, channel=self.channel)
+        self.m2 = Message.objects.create(telegram_id=2, channel=self.channel)
+        self.gestures = MessageTag.objects.create(name="Hand gestures", color="#123456")
+        self.salute = MessageTag.objects.create(name="Nazi salute", parent=self.gestures, color="#123456")
+
+    def _tag(self, message, **body):
+        return self.jpost(self.TAGGINGS, {"message": message.pk, **body})
+
+    def test_tagging_by_path_creates_the_sub_tag_with_its_parents_colour(self):
+        resp = self._tag(self.m1, tag_name="hand gestures / Kühnen salute")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        tag = resp.json()["tag"]
+        self.assertEqual(
+            (tag["path"], tag["parent"], tag["color"]), ("Hand gestures › Kühnen salute", self.gestures.pk, "#123456")
+        )
+        resp = self._tag(self.m2, tag_name="Symbols/Runes")
+        self.assertEqual(resp.json()["tag"]["path"], "Symbols › Runes")
+
+    def test_a_bare_name_reuses_a_nested_tag(self):
+        resp = self._tag(self.m1, tag_name="nazi salute")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["tag"]["id"], self.salute.pk)
+
+    def test_an_ambiguous_name_or_a_slash_in_a_name_is_refused(self):
+        from webapp.models import MessageTag
+
+        MessageTag.objects.create(name="Other", parent=self.gestures)
+        flags = MessageTag.objects.create(name="Flags")
+        MessageTag.objects.create(name="Other", parent=flags)
+        resp = self._tag(self.m1, tag_name="other")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("full path", resp.json()["tag_name"][0])
+        self.assertEqual(self.jpost(self.TAGS, {"name": "a/b"}).status_code, 400)
+
+    def test_refining_keeps_the_tagging_and_names_what_it_replaced(self):
+        first = self._tag(self.m1, tag_id=self.gestures.pk).json()
+        resp = self._tag(self.m1, tag_id=self.salute.pk)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["id"], first["id"])
+        self.assertEqual(resp.json()["replaced"], ["Hand gestures"])
+        rows = self.jget(f"{self.TAGGINGS}?message={self.m1.pk}").json()["results"]
+        self.assertEqual([r["tag"]["path"] for r in rows], ["Hand gestures › Nazi salute"])
+
+    def test_an_implied_tag_is_refused(self):
+        self._tag(self.m1, tag_id=self.salute.pk)
+        resp = self._tag(self.m1, tag_name="Hand gestures")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("implies", resp.json()["tag"][0])
+
+    def test_list_is_depth_first_with_paths_and_branch_counts(self):
+        from webapp.models import MessageTag
+
+        MessageTag.objects.create(name="Alpha")
+        self._tag(self.m1, tag_id=self.gestures.pk)
+        self._tag(self.m2, tag_id=self.salute.pk)
+        rows = self.jget(self.TAGS).json()["results"]
+        self.assertEqual(
+            [(r["path"], r["depth"], r["own_count"], r["message_count"]) for r in rows],
+            [("Alpha", 0, 0, 0), ("Hand gestures", 0, 1, 2), ("Hand gestures › Nazi salute", 1, 1, 1)],
+        )
+        detail = self.jget(f"{self.TAGS}{self.salute.pk}/").json()
+        self.assertEqual(
+            (detail["path"], detail["depth"], detail["message_count"]), ("Hand gestures › Nazi salute", 1, 1)
+        )
+
+    def test_create_move_and_refuse_bad_moves(self):
+        resp = self.jpost(self.TAGS, {"name": "OK sign", "parent": self.gestures.pk})
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["color"], "#123456")
+        ok = resp.json()["id"]
+        resp = self.jpatch(f"{self.TAGS}{ok}/", {"parent": None})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual((resp.json()["path"], resp.json()["depth"]), ("OK sign", 0))
+        resp = self.jpatch(f"{self.TAGS}{self.gestures.pk}/", {"parent": self.salute.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("parent", resp.json())
+        resp = self.jpatch(f"{self.TAGS}{self.salute.pk}/", {"parent": None, "name": "hand GESTURES"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("top-level", resp.json()["name"][0])
+
+    def test_delete_and_merge_respect_the_tree(self):
+        resp = self.jdelete(f"{self.TAGS}{self.gestures.pk}/")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("sub-tags", resp.json()["detail"])
+        resp = self.jpost(f"{self.TAGS}{self.gestures.pk}/merge/", {"into": self.salute.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("own sub-tags", resp.json()["into"])
+        self.assertEqual(self.jdelete(f"{self.TAGS}{self.salute.pk}/").status_code, 204)
+        self.assertEqual(self.jdelete(f"{self.TAGS}{self.gestures.pk}/").status_code, 204)
+
+    def test_for_messages_chips_carry_the_path(self):
+        self._tag(self.m1, tag_id=self.salute.pk)
+        data = self.jget(f"{self.TAGGINGS}for-messages/?ids={self.m1.pk}").json()
+        self.assertEqual(data[str(self.m1.pk)][0]["tag"]["path"], "Hand gestures › Nazi salute")
+
+
 class MessageTagsPageTests(TestCase):
     @override_settings(WEB_ACCESS="ALL")
     def test_tags_page_renders(self):

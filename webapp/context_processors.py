@@ -1,6 +1,8 @@
 from django.conf import settings
+from django.utils.functional import SimpleLazyObject
 
 from webapp.models import Project
+from webapp.models.tag_models import TagTree
 from webapp.utils.access import can_edit_message_tags, can_view_message_tags
 
 
@@ -16,4 +18,7 @@ def web_access(request):
         # deployment, editable by whoever may use the backoffice (webapp.utils.access).
         "CAN_VIEW_TAGS": can_view_message_tags(request.user),
         "CAN_EDIT_TAGS": can_edit_message_tags(request.user),
+        # The tag hierarchy for chips' "Parent › " prefixes (templatetags/post_tags.py),
+        # loaded on first use.
+        "TAG_TREE": SimpleLazyObject(TagTree.load),
     }

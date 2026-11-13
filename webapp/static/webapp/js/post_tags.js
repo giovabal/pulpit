@@ -5,11 +5,17 @@
    editor talks to the backoffice API — /manage/api/message-taggings/ for one
    post's tags, /manage/api/message-tags/ for the shared tag list — and rebuilds
    chip rows with the same markup the template renders. The tag field is an
-   ARIA combobox: it lists the existing tags and filters them as you type; a
-   name matching an existing tag (ignoring case) reuses it, any other creates a
-   new tag (the server makes the final match, by webapp.models.tag_models.tag_key). A tag belongs to the post (its original and every share), so other
-   cards on the page may be the same post: after each change every chip row on
-   the page is refreshed in one call (message-taggings/for-messages/). */
+   ARIA combobox: it lists the existing tags — as a tree while the field is
+   empty — and filters them by path as you type ("salute", "gestures/nazi").
+   Tags nest: a name or path naming an existing tag (ignoring case) reuses it,
+   any other creates the missing part ("Hand gestures/Kühnen salute" adds a
+   sub-tag); the server makes the final match (webapp.models.tag_models.
+   plan_tag_path), and this file mirrors its TagTree.match. Adding a sub-tag of
+   a tag on the post refines that tagging; a tag implied by a sub-tag on the
+   post can't be added. A tag belongs to the post (its original and every
+   share), so other cards on the page may be the same post: after each change
+   every chip row on the page is refreshed in one call
+   (message-taggings/for-messages/). */
 (function() {
     'use strict';
 
@@ -18,8 +24,10 @@
     var MANAGE_URL = '/manage/tags/';
 
     var allTags = [];
+    var tagsById = {};
     var tagsPromise = null;
     var combos = [];
+    var PATH_SEPARATOR = ' › ';
 
     function errorText(data, r) {
         if (data && data.detail) return data.detail;
@@ -50,12 +58,65 @@
         return String(name || '').normalize('NFKC').trim().split(/\s+/).join(' ').toLowerCase();
     }
 
-    // The shared tag list behind every editor's combobox. Fetched once per page;
-    // refreshed after a tag is created on the fly.
+    // "Hand gestures / Nazi salute" or "Hand gestures › Nazi salute" → its names
+    // (split_tag_path on the server).
+    function splitPath(text) {
+        return String(text || '').split(/[/›]/).map(function(part) {
+            return part.trim().split(/\s+/).join(' ');
+        }).filter(Boolean);
+    }
+
+    function pathKeys(text) {
+        return splitPath(text).map(tagKey);
+    }
+
+    function endsWith(keys, tail) {
+        if (tail.length > keys.length) return false;
+        var offset = keys.length - tail.length;
+        return tail.every(function(key, i) { return keys[offset + i] === key; });
+    }
+
+    // The tags a typed path names (TagTree.match): the one reached from the top
+    // level, else every tag whose path ends with it.
+    function matchTags(text) {
+        var keys = pathKeys(text);
+        if (!keys.length) return [];
+        var full = keys.join('/');
+        var exact = allTags.filter(function(t) { return t.pathKey === full; });
+        if (exact.length) return exact;
+        return allTags.filter(function(t) { return endsWith(t.keys, keys); });
+    }
+
+    function ancestorIds(tag) {
+        var out = [];
+        var seen = {};
+        var parent = tag ? tagsById[tag.parent] : null;
+        while (parent && !seen[parent.id]) {
+            seen[parent.id] = true;
+            out.push(parent.id);
+            parent = tagsById[parent.parent];
+        }
+        return out;
+    }
+
+    // "Hand gestures › " for the sub-tag "Nazi salute" (the path minus the name).
+    function ancestry(tag) {
+        var path = tag.path || tag.name;
+        return path.length > tag.name.length ? path.slice(0, path.length - tag.name.length) : '';
+    }
+
+    // The shared tag list behind every editor's combobox, depth-first. Fetched once
+    // per page; refreshed after a tag is created on the fly.
     function loadTags(refresh) {
         if (!tagsPromise || refresh) {
             tagsPromise = api(API_TAGS + '?limit=1000').then(function(data) {
                 allTags = data.results;
+                tagsById = {};
+                allTags.forEach(function(t) {
+                    t.keys = pathKeys(t.path);
+                    t.pathKey = t.keys.join('/');
+                    tagsById[t.id] = t;
+                });
                 combos.forEach(function(combo) { combo.refresh(); });
             }).catch(function() { tagsPromise = null; });
         }
@@ -70,24 +131,26 @@
         return dot;
     }
 
-    /* The tag field: lists the existing tags (minus those already on the post),
-       filters them as you type, and offers to create a tag when the text matches
-       none. Picking an option fills the field; Enter on the option already in the
-       field (or with the list closed) submits the form. ``onState`` hears
-       'empty' | 'existing' | 'new' | 'present' (already on this post). */
+    /* The tag field: lists the existing tags (minus those on the post and those
+       a sub-tag on the post implies), filters them by path as you type, and offers
+       to create the tag when the text names none. Picking an option fills the
+       field with its path; Enter on the option already in the field (or with the
+       list closed) submits the form. ``onState`` hears 'empty' | 'existing' |
+       'refine' (replaces a broader tag on the post) | 'new' | 'present' (already
+       on the post) | 'implied' (a sub-tag on the post implies it) | 'ambiguous'. */
     function createTagCombo(postPk, onState) {
         var listId = 'ptc-' + postPk;
         var input = document.createElement('input');
         input.className = 'form-control form-control-sm';
-        input.maxLength = 64;
+        input.maxLength = 255;
         input.required = true;
         input.autocomplete = 'off';
-        input.placeholder = 'Tag — pick one or type a new name';
+        input.placeholder = 'Tag — pick one, or type a name or Parent/Sub-tag';
         input.setAttribute('role', 'combobox');
         input.setAttribute('aria-autocomplete', 'list');
         input.setAttribute('aria-expanded', 'false');
         input.setAttribute('aria-controls', listId);
-        input.setAttribute('aria-label', 'Tag: pick one or type a new name');
+        input.setAttribute('aria-label', 'Tag: pick one, or type a name or a Parent/Sub-tag path');
 
         var listbox = document.createElement('ul');
         listbox.className = 'tag-combo-list list-unstyled';
@@ -102,17 +165,30 @@
         var active = -1;
         var present = {};
 
-        function exactMatch() {
-            var key = tagKey(input.value);
-            if (!key) return null;
-            return allTags.find(function(t) { return tagKey(t.name) === key; }) || null;
+        // Tags a sub-tag on the post implies: they can't be added.
+        function implied() {
+            var out = {};
+            Object.keys(present).forEach(function(id) {
+                ancestorIds(tagsById[id]).forEach(function(a) { out[a] = true; });
+            });
+            return out;
+        }
+
+        // The tag on the post a pick would refine (one of its ancestors), if any.
+        function broaderOnPost(tag) {
+            var ids = ancestorIds(tag).filter(function(id) { return present[id]; });
+            return ids.length ? tagsById[ids[0]] : null;
         }
 
         function state() {
             if (!input.value.trim()) return 'empty';
-            var exact = exactMatch();
-            if (!exact) return 'new';
-            return present[tagKey(exact.name)] ? 'present' : 'existing';
+            var found = matchTags(input.value);
+            if (found.length > 1) return 'ambiguous';
+            if (!found.length) return 'new';
+            var tag = found[0];
+            if (present[tag.id]) return 'present';
+            if (implied()[tag.id]) return 'implied';
+            return broaderOnPost(tag) ? 'refine' : 'existing';
         }
 
         function info(text) {
@@ -122,36 +198,72 @@
             listbox.appendChild(li);
         }
 
+        function optionValue(option) {
+            return option.tag ? option.tag.path : option.name;
+        }
+
         function render() {
-            var query = tagKey(input.value);
-            var exact = exactMatch();
+            var keys = pathKeys(input.value);
+            var query = keys.join('/');
+            var found = matchTags(input.value);
+            var exact = found.length === 1 ? found[0] : null;
+            var blocked = implied();
+            Object.keys(present).forEach(function(id) { blocked[id] = true; });
             var matches = allTags.filter(function(t) {
-                var key = tagKey(t.name);
-                return !present[key] && (!query || key.indexOf(query) !== -1);
+                return !blocked[t.id] && (!query || t.pathKey.indexOf(query) !== -1);
             });
-            // Names starting with the query first, then the other matches (each alphabetical).
-            matches.sort(function(a, b) {
-                var pa = tagKey(a.name).indexOf(query) === 0 ? 0 : 1;
-                var pb = tagKey(b.name).indexOf(query) === 0 ? 0 : 1;
-                return pa - pb || a.name.localeCompare(b.name);
-            });
-            options = matches.map(function(t) { return { name: t.name, tag: t }; });
-            if (query && !exact) options.push({ name: input.value.trim(), tag: null });
+            if (query) {
+                // Names starting with the query first, then paths starting with it,
+                // then the other matches (each by path).
+                var rank = function(t) {
+                    if (keys.length === 1 && t.keys[t.keys.length - 1].indexOf(query) === 0) return 0;
+                    return t.pathKey.indexOf(query) === 0 ? 1 : 2;
+                };
+                matches.sort(function(a, b) { return rank(a) - rank(b) || a.pathKey.localeCompare(b.pathKey); });
+            }
+            options = matches.map(function(t) { return { name: t.path, tag: t }; });
+            if (query && !found.length) options.push({ name: splitPath(input.value).join(PATH_SEPARATOR), tag: null });
 
             listbox.innerHTML = '';
-            if (exact && present[tagKey(exact.name)]) info('“' + exact.name + '” is already on this post.');
+            if (exact && present[exact.id]) info('“' + exact.path + '” is already on this post.');
+            else if (exact && blocked[exact.id]) info('A sub-tag of “' + exact.path + '” is on this post, which implies it.');
+            else if (found.length > 1) info('Several tags are named “' + input.value.trim() + '” — pick one, or type its full path.');
+            var shown = {};
+            options.forEach(function(option) { if (option.tag) shown[option.tag.id] = true; });
             options.forEach(function(option, i) {
                 var li = document.createElement('li');
                 li.id = listId + '-' + i;
                 li.className = 'tag-combo-option' + (option.tag ? '' : ' is-create');
                 li.setAttribute('role', 'option');
                 if (option.tag) {
-                    li.appendChild(swatch(option.tag.color));
-                    li.appendChild(document.createTextNode(option.tag.name));
+                    var tag = option.tag;
+                    li.appendChild(swatch(tag.color));
+                    // As a tree (empty field) a sub-tag sits under its parent; a flat
+                    // filtered list, or a parent left out, names the ancestors instead.
+                    var asTree = !query && (!tag.parent || shown[tag.parent]);
+                    if (!query) {
+                        li.dataset.depth = tag.depth;
+                        li.style.setProperty('--tag-depth', asTree ? tag.depth : 0);
+                    }
+                    if (!asTree && ancestry(tag)) {
+                        var path = document.createElement('span');
+                        path.className = 'tag-combo-path';
+                        path.textContent = ancestry(tag);
+                        li.appendChild(path);
+                    }
+                    li.appendChild(document.createTextNode(tag.name));
+                    var broader = broaderOnPost(tag);
+                    if (broader) {
+                        var note = document.createElement('span');
+                        note.className = 'tag-combo-note';
+                        note.textContent = 'replaces “' + broader.name + '”';
+                        li.appendChild(note);
+                    }
                     var count = document.createElement('span');
                     count.className = 'tag-combo-count';
-                    count.textContent = option.tag.message_count;
-                    count.title = option.tag.message_count + ' message(s)';
+                    count.textContent = tag.message_count;
+                    count.title = tag.message_count + ' message(s)' +
+                        (tag.message_count !== tag.own_count ? ', ' + tag.own_count + ' without a sub-tag' : '');
                     li.appendChild(count);
                 } else {
                     li.innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
@@ -199,7 +311,7 @@
         }
 
         function pick(i) {
-            input.value = options[i].name;
+            input.value = optionValue(options[i]);
             close();
             onState(state());
         }
@@ -225,7 +337,7 @@
             } else if (e.key === 'Enter' && !listbox.hidden && active >= 0) {
                 // Enter on an option other than what the field holds picks it; on the
                 // one already typed it falls through and submits the form.
-                if (tagKey(options[active].name) !== tagKey(input.value)) {
+                if (pathKeys(optionValue(options[active])).join('/') !== pathKeys(input.value).join('/')) {
                     e.preventDefault();
                     pick(active);
                 } else {
@@ -240,11 +352,16 @@
         var combo = {
             input: input,
             listbox: listbox,
-            // The tags already on this post leave the list.
+            // The tags already on this post (and those they imply) leave the list.
             setPresent: function(taggings) {
                 present = {};
-                taggings.forEach(function(t) { present[tagKey(t.tag.name)] = true; });
+                taggings.forEach(function(t) { present[t.tag.id] = true; });
                 combo.refresh();
+            },
+            // The one existing tag the field names, if any: sent by id.
+            matched: function() {
+                var found = matchTags(input.value);
+                return found.length === 1 ? found[0] : null;
             },
             refresh: function() {
                 if (!listbox.hidden) render();
@@ -261,7 +378,8 @@
 
     function chipTitle(tagging) {
         var date = (tagging.tagged_at || '').slice(0, 10);
-        return (tagging.note ? tagging.note + ' — ' : '') +
+        return (ancestry(tagging.tag) ? tagging.tag.path + ' — ' : '') +
+            (tagging.note ? tagging.note + ' — ' : '') +
             'tagged' + (tagging.tagged_by ? ' by ' + tagging.tagged_by : '') + ' on ' + date;
     }
 
@@ -276,6 +394,13 @@
             icon.className = 'bi bi-sticky';
             icon.setAttribute('aria-hidden', 'true');
             a.appendChild(icon);
+        }
+        var prefix = ancestry(tagging.tag);
+        if (prefix) {
+            var path = document.createElement('span');
+            path.className = 'post-tag-path';
+            path.textContent = prefix;
+            a.appendChild(path);
         }
         a.appendChild(document.createTextNode(tagging.tag.name));
         return a;
@@ -324,10 +449,15 @@
         form.autocomplete = 'off';
         var addBtn = document.createElement('button');
         var combo = createTagCombo(postPk, function(state) {
-            // The button says whether Add reuses a tag or creates one.
-            addBtn.textContent = state === 'new' ? 'Create & add' : 'Add';
-            addBtn.disabled = state === 'present';
-            addBtn.title = state === 'present' ? 'This post already carries that tag' : '';
+            // The button says whether Add reuses a tag, creates one, or refines one.
+            addBtn.textContent = state === 'new' ? 'Create & add' : state === 'refine' ? 'Refine' : 'Add';
+            addBtn.disabled = state === 'present' || state === 'implied' || state === 'ambiguous';
+            addBtn.title = {
+                present: 'This post already carries that tag',
+                implied: 'A sub-tag of that tag is on this post, which implies it',
+                ambiguous: 'Several tags have that name: pick one, or type its full path',
+                refine: 'Replaces the broader tag on this post with this more specific one',
+            } [state] || '';
         });
         var nameIn = combo.input;
         var noteIn = document.createElement('input');
@@ -343,7 +473,7 @@
 
         var hint = document.createElement('p');
         hint.className = 'post-tags-hint';
-        hint.textContent = 'A tag goes on the whole post: its original and every share of it.';
+        hint.textContent = 'A tag goes on the whole post: its original and every share of it. Type Parent/Sub-tag to make a sub-tag.';
 
         var list = document.createElement('ul');
         list.className = 'post-tags-list list-unstyled';
@@ -391,7 +521,7 @@
                 note.className = 'form-control form-control-sm post-tags-note';
                 note.value = tagging.note || '';
                 note.placeholder = 'Note';
-                note.setAttribute('aria-label', 'Note for tag ' + tagging.tag.name);
+                note.setAttribute('aria-label', 'Note for tag ' + tagging.tag.path);
                 note.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
@@ -413,7 +543,7 @@
                 var remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'post-tags-remove';
-                remove.title = 'Remove tag ' + tagging.tag.name;
+                remove.title = 'Remove tag ' + tagging.tag.path;
                 remove.setAttribute('aria-label', remove.title);
                 remove.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
                 remove.addEventListener('click', function() {
@@ -421,7 +551,7 @@
                         .then(function() {
                             taggings = taggings.filter(function(t) { return t.id !== tagging.id; });
                             sync();
-                            say('Removed “' + tagging.tag.name + '”' + reachText(tagging, 'from') + '.');
+                            say('Removed “' + tagging.tag.path + '”' + reachText(tagging, 'from') + '.');
                             nameIn.focus();
                         })
                         .catch(function(e) { say(e.message, true); });
@@ -436,14 +566,23 @@
             var name = nameIn.value.trim();
             if (!name) return;
             addBtn.disabled = true;
-            api(API_TAGGINGS, 'POST', { message: Number(postPk), tag_name: name, note: noteIn.value.trim() })
+            var body = { message: Number(postPk), note: noteIn.value.trim() };
+            var known = combo.matched();
+            if (known) body.tag_id = known.id;
+            else body.tag_name = name;
+            api(API_TAGGINGS, 'POST', body)
                 .then(function(created) {
+                    // A refined tagging keeps its id: replace it rather than add a second chip.
+                    taggings = taggings.filter(function(t) { return t.id !== created.id; });
                     taggings.push(created);
-                    taggings.sort(function(a, b) { return a.tag.name.localeCompare(b.tag.name); });
+                    taggings.sort(function(a, b) { return a.tag.path.localeCompare(b.tag.path); });
                     sync();
                     form.reset();
                     combo.clear();
-                    say('Tagged “' + created.tag.name + '”' + reachText(created, 'on') + '.');
+                    var what = created.replaced && created.replaced.length ?
+                        'Refined “' + created.replaced.join('”, “') + '” to “' + created.tag.path + '”' :
+                        'Tagged “' + created.tag.path + '”';
+                    say(what + reachText(created, 'on') + '.');
                     loadTags(true);
                 })
                 .catch(function(err) { say(err.message, true); })

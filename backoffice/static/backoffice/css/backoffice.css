@@ -1166,3 +1166,32 @@ tr:hover .bo-detail-btn {
   display: inline-flex;
   align-items: center;
 }
+
+/* Manage → Tags: the tag tree, sub-tags indented under their parent (tags.js) */
+.bo-table td.bo-tag-name {
+  padding-left: calc(.75rem + var(--tag-depth, 0) * 1.25rem);
+}
+
+.bo-tag-branch,
+.bo-tag-direct {
+  color: var(--muted);
+}
+
+.bo-tag-direct {
+  font-size: .85em;
+}
+
+.bo-tag-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bo-tag-under {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: .85em;
+}
