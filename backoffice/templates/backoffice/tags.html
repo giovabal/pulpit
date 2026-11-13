@@ -17,9 +17,20 @@
     Tags never affect the analysis. New tags get the next free palette colour; change it here.
     Merge folds a tag's messages into another tag and deletes it.
   </p>
+  <p class="text-muted small">
+    Tags can nest: put a tag <em>under</em> another (<i class="bi bi-diagram-2" aria-hidden="true"></i> adds a
+    sub-tag, <i class="bi bi-pencil" aria-hidden="true"></i> moves a tag) to say which kind it is —
+    <em>Hand gestures › Nazi salute</em>. A sub-tag implies its parent: filtering by a tag also finds its sub-tags,
+    and the message count includes them; <em>direct</em> counts the posts carrying the broad tag itself, still waiting
+    for a more specific one. Adding a sub-tag to a post refines the broader tag already on it. A tag with no sub-tags
+    is a plain tag. From a post card, typing <code>Parent/Sub-tag</code> creates a sub-tag on the fly.
+  </p>
   <form class="bo-add-form d-none" id="tag-add-form" autocomplete="off">
     <input class="bo-input bo-input--color" type="color" name="color" value="#1f77b4" aria-label="Tag colour">
     <input class="bo-input" name="name" placeholder="Name" maxlength="64" required aria-label="Tag name">
+    <select class="bo-select bo-select--sm" name="parent" id="tag-add-parent" aria-label="Parent tag">
+      <option value="">Top level</option>
+    </select>
     <input class="bo-input bo-input--wide" name="description" placeholder="Description (optional)" aria-label="Tag description">
     <button type="submit" class="bo-btn">Save</button>
     <button type="button" class="bo-btn bo-btn--ghost" id="tag-add-cancel">Cancel</button>

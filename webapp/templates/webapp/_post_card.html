@@ -48,6 +48,7 @@ each album reaches this template; the head's `album_pictures` /
 sharing the same (channel_id, grouped_id).
 {% endcomment %}
 {% load custom_emoji %}
+{% load post_tags %}
 <article id="post-{{ post.pk }}" class="post-card{% if post.pinned %} is-pinned{% elif post.has_been_pinned %} was-pinned{% endif %}{% if post.forwarded_from and not received_view %} is-forwarded{% endif %}{% if post.is_lost %} is-lost{% endif %}">
   {% if show_channel_chip %}
   <div class="search-result-channel">
@@ -180,11 +181,11 @@ sharing the same (channel_id, grouped_id).
   {% if CAN_VIEW_TAGS %}
   {% with links=post.tag_links.all %}
   <div class="post-tags" id="pt-{{ post.pk }}" data-search-url="{% url 'message-search' %}"{% if not links %} hidden{% endif %}>
-    {% for link in links %}{% with tagging=link.tagging %}
+    {% for link in links %}{% with tagging=link.tagging %}{% with ancestry=tagging.tag|tag_ancestry:TAG_TREE %}
     <a class="post-tag{% if tagging.tag.is_color_dark %} is-dark{% endif %}" style="--tag-color: {{ tagging.tag.color }};"
        href="{% url 'message-search' %}?tag={{ tagging.tag.pk }}"
-       title="{% if tagging.note %}{{ tagging.note }} — {% endif %}tagged{% if tagging.tagged_by %} by {{ tagging.tagged_by.username }}{% endif %} on {{ tagging.tagged_at|date:'Y-m-d' }}">{% if tagging.note %}<i class="bi bi-sticky" aria-hidden="true"></i>{% endif %}{{ tagging.tag.name }}</a>
-    {% endwith %}{% endfor %}
+       title="{% if ancestry %}{{ ancestry }}{{ tagging.tag.name }} — {% endif %}{% if tagging.note %}{{ tagging.note }} — {% endif %}tagged{% if tagging.tagged_by %} by {{ tagging.tagged_by.username }}{% endif %} on {{ tagging.tagged_at|date:'Y-m-d' }}">{% if tagging.note %}<i class="bi bi-sticky" aria-hidden="true"></i>{% endif %}{% if ancestry %}<span class="post-tag-path">{{ ancestry }}</span>{% endif %}{{ tagging.tag.name }}</a>
+    {% endwith %}{% endwith %}{% endfor %}
   </div>
   {% endwith %}
   {% endif %}

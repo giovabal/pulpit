@@ -166,14 +166,21 @@
                        {% if any_tag %}checked{% endif %}> Any tag
               </label>
               {% for tag in all_tags %}
-              <label class="msg-options-item">
+              <label class="msg-options-item msg-options-tag" style="--tag-depth: {{ tag.depth }};"
+                     {% if tag.has_children %}title="{{ tag.tree_path }} and its sub-tags"{% elif tag.ancestry %}title="{{ tag.tree_path }}"{% endif %}>
                 <input type="checkbox" name="tag" value="{{ tag.pk }}" class="msg-opt-input"
                        {% if tag.pk in selected_tag_ids %}checked{% endif %}>
                 <span class="tag-swatch" style="background: {{ tag.color }};" aria-hidden="true"></span>
-                {{ tag.name }} <span class="msg-options-count">{{ tag.message_count }}</span>
+                {% if tag.ancestry %}<span class="visually-hidden">{{ tag.ancestry }}</span>{% endif %}{{ tag.name }} <span class="msg-options-count">{{ tag.message_count }}</span>
               </label>
               {% endfor %}
             </div>
+            {% if has_sub_tags %}
+            <label class="msg-options-item msg-options-tag-exact" title="A ticked tag matches only the posts carrying it directly, not those carrying one of its sub-tags — e.g. the posts still waiting for a more specific tag">
+              <input type="checkbox" name="tag_exact" value="1" class="msg-opt-input"
+                     {% if tag_exact %}checked{% endif %}> Not via a sub-tag
+            </label>
+            {% endif %}
           </div>
         </div>
         {% endif %}

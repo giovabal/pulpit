@@ -239,15 +239,19 @@ class MessageTaggingInline(admin.TabularInline):
 
 @admin.register(MessageTag)
 class MessageTagAdmin(admin.ModelAdmin):
-    list_display = ("name", "color", "message_count")
+    # Manage → Tags is the tree editor; here a tag's parent is a plain field
+    # (MessageTag.clean refuses a parent inside the tag's own branch).
+    list_display = ("name", "path", "color", "message_count")
     list_editable = ["color"]
+    list_select_related = ("parent__parent",)
     search_fields = ("name",)
+    fields = ("name", "parent", "color", "description")
     inlines = [MessageTaggingInline]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
         return super().get_queryset(request).annotate(_message_count=Count("taggings__members__message", distinct=True))
 
-    @admin.display(description="Messages", ordering="_message_count")
+    @admin.display(description="Messages (not counting sub-tags)", ordering="_message_count")
     def message_count(self, obj: MessageTag) -> int:
         return obj._message_count  # type: ignore[attr-defined]
 

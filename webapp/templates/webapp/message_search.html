@@ -26,7 +26,7 @@
     {% if page_obj.paginator.count %}{{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }}{% else %}No results{% endif %}
     {% if query %} for <strong>{{ query }}</strong>{% endif %}
     {% if any_tag %} with any tag{% elif selected_tags %} tagged
-      {% for tag in selected_tags %}<span class="post-tag{% if tag.is_color_dark %} is-dark{% endif %}" style="--tag-color: {{ tag.color }};">{{ tag.name }}</span>{% if not forloop.last %} or {% endif %}{% endfor %}
+      {% for tag in selected_tags %}<span class="post-tag{% if tag.is_color_dark %} is-dark{% endif %}" style="--tag-color: {{ tag.color }};">{% if tag.ancestry %}<span class="post-tag-path">{{ tag.ancestry }}</span>{% endif %}{{ tag.name }}</span>{% if not forloop.last %} or {% endif %}{% endfor %}{% if tag_exact %} (not via a sub-tag){% endif %}
     {% endif %}
   </p>
   {% endif %}

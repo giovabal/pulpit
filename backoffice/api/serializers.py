@@ -19,7 +19,17 @@ from webapp.models import (
     Project,
     SearchTerm,
 )
-from webapp.models.tag_models import message_origin, normalize_tag_name, tag_key, tag_post
+from webapp.models.tag_models import (
+    ImpliedTagError,
+    TagTree,
+    message_origin,
+    normalize_tag_name,
+    plan_tag_path,
+    sibling_clash,
+    tag_message_counts,
+    tag_name_error,
+    tag_post,
+)
 from webapp.templatetags.custom_emoji import emoji_html
 
 from rest_framework import serializers
@@ -477,51 +487,144 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 
-class MessageTagSerializer(serializers.ModelSerializer):
-    message_count = serializers.IntegerField(read_only=True)
+def _tag_tree(context: dict, tag) -> TagTree:
+    """The request's tag tree, loaded once per serialisation and again only for a tag it lacks."""
+    tree = context.get("tag_tree")
+    if tree is None or tag.pk not in tree.by_id:
+        tree = context["tag_tree"] = TagTree.load()
+    return tree
+
+
+class MessageTagRefSerializer(serializers.ModelSerializer):
+    """A tag as a chip shows it: colour, name and ``path`` (``"Hand gestures › Nazi salute"``)."""
+
     is_dark = serializers.BooleanField(source="is_color_dark", read_only=True)
+    path = serializers.SerializerMethodField()
 
     class Meta:
         model = MessageTag
-        fields = ["id", "name", "color", "description", "message_count", "is_dark"]
+        fields = ["id", "name", "path", "parent", "color", "is_dark"]
+        read_only_fields = fields
+
+    def get_path(self, obj):
+        return getattr(obj, "tree_path", None) or _tag_tree(self.context, obj).path(obj.pk)
+
+
+class MessageTagSerializer(MessageTagRefSerializer):
+    """A tag with its place in the tree and its counts.
+
+    ``parent`` moves the tag (``null`` = top level; a tag can't go under its own
+    branch). ``message_count`` counts the stored messages carrying the tag or a
+    sub-tag — what ``?tag=<id>`` lists — and ``own_count`` those carrying the tag
+    itself. A sub-tag created without a ``color`` takes its parent's.
+    """
+
+    parent = serializers.PrimaryKeyRelatedField(queryset=MessageTag.objects.all(), allow_null=True, required=False)
+    depth = serializers.SerializerMethodField()
+    message_count = serializers.SerializerMethodField()
+    own_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MessageTag
+        fields = [
+            "id",
+            "name",
+            "path",
+            "parent",
+            "depth",
+            "color",
+            "description",
+            "message_count",
+            "own_count",
+            "is_dark",
+        ]
+        read_only_fields = ["id", "path", "depth", "message_count", "own_count", "is_dark"]
+
+    def get_depth(self, obj):
+        depth = getattr(obj, "depth", None)
+        return len(_tag_tree(self.context, obj).ancestor_ids(obj.pk)) if depth is None else depth
+
+    def _counts(self, obj) -> tuple[int, int]:
+        if hasattr(obj, "message_count"):
+            return obj.own_count, obj.message_count
+        counts = self.context.get("tag_counts")
+        if counts is None or obj.pk not in counts:
+            counts = self.context["tag_counts"] = tag_message_counts(_tag_tree(self.context, obj))
+        return counts.get(obj.pk, (0, 0))
+
+    def get_message_count(self, obj):
+        return self._counts(obj)[1]
+
+    def get_own_count(self, obj):
+        return self._counts(obj)[0]
 
     def validate_name(self, value):
         name = normalize_tag_name(value)
-        if not name:
-            raise serializers.ValidationError("A tag needs a name.")
-        clash = MessageTag.objects.filter(key=tag_key(name))
-        if self.instance is not None:
-            clash = clash.exclude(pk=self.instance.pk)
-        if clash.exists():
-            raise serializers.ValidationError(f"A tag named “{clash.first().name}” already exists.")
+        error = tag_name_error(name)
+        if error:
+            raise serializers.ValidationError(error)
         return name
+
+    def validate(self, attrs):
+        instance = self.instance
+        name = attrs.get("name", instance.name if instance else "")
+        parent = attrs["parent"] if "parent" in attrs else (instance.parent if instance else None)
+        if instance is not None and parent is not None and parent.pk in TagTree.load().branch([instance.pk]):
+            raise serializers.ValidationError({"parent": "A tag can't go under itself or one of its sub-tags."})
+        clash = sibling_clash(name, parent, exclude_pk=instance.pk if instance else None)
+        if clash:
+            raise serializers.ValidationError({"name": clash})
+        return attrs
+
+    def create(self, validated_data):
+        parent = validated_data.get("parent")
+        if parent is not None and "color" not in validated_data:
+            validated_data["color"] = parent.color
+        return super().create(validated_data)
 
 
 class MessageTaggingSerializer(serializers.ModelSerializer):
     """A tag on a post — the original and every share of it.
 
     Create with ``message`` (the original or any share) plus either ``tag_id`` or
-    ``tag_name`` — a name that matches no tag (case-insensitively) creates it on
-    the fly with the next free palette colour. Only ``note`` changes on update;
-    the note belongs to the post, so every message carrying the tag shows it.
-    ``member_count`` is the number of stored messages carrying the tagging.
+    ``tag_name``. ``tag_name`` is a name or a path (``"Hand gestures/Kühnen
+    salute"``, resolved by ``plan_tag_path``): one naming an existing tag reuses
+    it (case-insensitively), and the missing part of any other is created on the
+    fly — a top-level tag with the next free palette colour, a sub-tag with its
+    parent's. Adding a sub-tag of a tag the post carries *refines* that tagging
+    (``replaced`` names the tags it replaced); adding a tag the post carries, or
+    one implied by a sub-tag it carries, is refused. Only ``note`` changes on
+    update; the note belongs to the post, so every message carrying the tag shows
+    it. ``member_count`` is the number of stored messages carrying the tagging.
     """
 
     message = serializers.PrimaryKeyRelatedField(
         queryset=Message.objects.select_related("channel", "forwarded_from"), required=False
     )
-    tag = MessageTagSerializer(read_only=True)
+    tag = MessageTagRefSerializer(read_only=True)
     tag_id = serializers.PrimaryKeyRelatedField(
         source="tag", queryset=MessageTag.objects.all(), write_only=True, required=False
     )
-    tag_name = serializers.CharField(write_only=True, required=False, max_length=64)
+    tag_name = serializers.CharField(write_only=True, required=False, max_length=255)
     tagged_by = serializers.CharField(source="tagged_by.username", read_only=True, default="")
     tagged_at = serializers.DateTimeField(read_only=True)
     member_count = serializers.SerializerMethodField()
+    replaced = serializers.SerializerMethodField()
 
     class Meta:
         model = MessageTagging
-        fields = ["id", "message", "tag", "tag_id", "tag_name", "note", "tagged_by", "tagged_at", "member_count"]
+        fields = [
+            "id",
+            "message",
+            "tag",
+            "tag_id",
+            "tag_name",
+            "note",
+            "tagged_by",
+            "tagged_at",
+            "member_count",
+            "replaced",
+        ]
         # The one-tagging-per-post rule is checked in validate(): DRF's generated
         # UniqueTogetherValidator would demand the origin fields from the client.
         validators = []
@@ -530,41 +633,57 @@ class MessageTaggingSerializer(serializers.ModelSerializer):
         count = getattr(obj, "member_count", None)
         return obj.members.count() if count is None else count
 
+    def get_replaced(self, obj):
+        replaced = getattr(obj, "replaced", None) or []
+        return [_tag_tree(self.context, tag).path(tag.pk) for tag in replaced]
+
     def validate(self, attrs):
         if self.instance is not None:
             return {"note": attrs.get("note", self.instance.note)}
         if "message" not in attrs:
             raise serializers.ValidationError({"message": "This field is required."})
-        name = normalize_tag_name(attrs.pop("tag_name", ""))
+        raw = attrs.pop("tag_name", "")
+        tree = TagTree.load()
         if "tag" not in attrs:
-            if not name:
+            if not normalize_tag_name(raw):
                 raise serializers.ValidationError({"tag_name": "Give a tag_id or a tag_name."})
-            attrs["tag"] = MessageTag.objects.filter(key=tag_key(name)).first() or MessageTag(name=name)
+            try:
+                plan = plan_tag_path(raw, tree)
+            except ValueError as e:
+                raise serializers.ValidationError({"tag_name": str(e)}) from e
+            if plan.tag is None:
+                attrs["tag_plan"] = plan
+                return attrs
+            attrs["tag"] = plan.tag
         tag = attrs["tag"]
         channel_tid, post_tid = message_origin(attrs["message"])
-        if (
-            tag.pk is not None
-            and MessageTagging.objects.filter(
-                tag=tag, origin_channel_tid=channel_tid, origin_post_tid=post_tid
-            ).exists()
-        ):
-            raise serializers.ValidationError(
-                {"tag": f"This post already carries “{tag.name}” — on this message, its original or a share."}
-            )
+        on_post = MessageTagging.objects.filter(origin_channel_tid=channel_tid, origin_post_tid=post_tid)
+        for tag_id in on_post.values_list("tag_id", flat=True):
+            if tag_id == tag.pk:
+                raise serializers.ValidationError(
+                    {
+                        "tag": f"This post already carries “{tree.path(tag.pk)}” — on this message, its original or a share."
+                    }
+                )
+            if tree.is_ancestor(tag.pk, tag_id):
+                raise serializers.ValidationError(
+                    {"tag": f"This post already carries “{tree.path(tag_id)}”, which implies “{tree.path(tag.pk)}”."}
+                )
         return attrs
 
     def create(self, validated_data):
-        tag = validated_data["tag"]
         user = self.context["request"].user
         with transaction.atomic():
-            if tag.pk is None:
-                tag.save()
-            return tag_post(
-                validated_data["message"],
-                tag,
-                note=validated_data.get("note", ""),
-                tagged_by=user if user.is_authenticated else None,
-            )
+            tag = validated_data.get("tag") or validated_data["tag_plan"].realise()
+            try:
+                return tag_post(
+                    validated_data["message"],
+                    tag,
+                    note=validated_data.get("note", ""),
+                    tagged_by=user if user.is_authenticated else None,
+                )
+            except ImpliedTagError as e:  # a sub-tag added since validate() looked
+                raise serializers.ValidationError({"tag": [str(e)]}) from e
 
     def update(self, instance, validated_data):
         instance.note = validated_data["note"]

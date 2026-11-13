@@ -2793,6 +2793,244 @@ class MessageTagFilterTests(TestCase):
         self.assertEqual(counts, {"Air": 2, "Key event": 2})
 
 
+class MessageTagTreeTests(TestCase):
+    """Nested tags: paths, branches, refining a post's tag, moves and merges keeping one tag per lineage."""
+
+    def setUp(self) -> None:
+        from webapp.models import MessageTag
+
+        self.channel = make_channel(telegram_id=1, title="c", label=make_label("Org"))
+        self.gestures = MessageTag.objects.create(name="Hand gestures")
+        self.salute = MessageTag.objects.create(name="Nazi salute", parent=self.gestures)
+        self.ok = MessageTag.objects.create(name="OK sign", parent=self.gestures)
+        self.flags = MessageTag.objects.create(name="Flags")
+        self.other_flag = MessageTag.objects.create(name="Other", parent=self.flags)
+        self.other_gesture = MessageTag.objects.create(name="Other", parent=self.gestures)
+
+    def _msg(self, telegram_id: int, text: str = "") -> Message:
+        return Message.objects.create(telegram_id=telegram_id, channel=self.channel, message=text)
+
+    def _tags_on(self, message: Message) -> set[str]:
+        from webapp.models import MessageTagging
+        from webapp.models.tag_models import message_origin
+
+        tid, post = message_origin(message)
+        return {t.tag.path for t in MessageTagging.objects.filter(origin_channel_tid=tid, origin_post_tid=post)}
+
+    def test_split_path_and_name_rules(self) -> None:
+        from webapp.models.tag_models import split_tag_path, tag_name_error
+
+        self.assertEqual(split_tag_path(" Hand  gestures / Nazi salute "), ["Hand gestures", "Nazi salute"])
+        self.assertEqual(split_tag_path("Hand gestures › OK sign/"), ["Hand gestures", "OK sign"])
+        self.assertIn("“/”", tag_name_error("a/b"))
+        self.assertIn("“/”", tag_name_error("a › b"))
+        self.assertEqual(tag_name_error("Nazi salute"), "")
+
+    def test_names_are_unique_among_siblings_only(self) -> None:
+        from webapp.models import MessageTag
+
+        self.assertEqual(self.other_gesture.path, "Hand gestures › Other")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MessageTag.objects.create(name="OTHER", parent=self.flags)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MessageTag.objects.create(name="flags")
+        MessageTag.objects.create(name="Other")  # a top-level "Other" is fine
+
+    def test_tree_paths_branches_and_depth_first_order(self) -> None:
+        from webapp.models.tag_models import TagTree
+
+        tree = TagTree.load()
+        self.assertEqual(tree.path(self.salute.pk), "Hand gestures › Nazi salute")
+        self.assertEqual(tree.ancestry(self.salute.pk), "Hand gestures › ")
+        self.assertEqual(tree.ancestry(self.gestures.pk), "")
+        self.assertEqual(
+            tree.branch([self.gestures.pk]), {self.gestures.pk, self.salute.pk, self.ok.pk, self.other_gesture.pk}
+        )
+        self.assertEqual(tree.branch([self.salute.pk, 99999]), {self.salute.pk})
+        order = [(tag.name, tag.depth) for tag in tree.depth_first()]
+        self.assertEqual(
+            order,
+            [("Flags", 0), ("Other", 1), ("Hand gestures", 0), ("Nazi salute", 1), ("OK sign", 1), ("Other", 1)],
+        )
+
+    def test_match_prefers_a_path_from_the_top_then_any_path_ending_with_it(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import TagTree
+
+        tree = TagTree.load()
+        self.assertEqual(tree.match("nazi SALUTE"), [self.salute])
+        self.assertEqual(tree.match("hand gestures/other"), [self.other_gesture])
+        self.assertEqual(tree.match("other"), [self.other_flag, self.other_gesture])
+        self.assertEqual(tree.match("nope"), [])
+        top_other = MessageTag.objects.create(name="Other")
+        self.assertEqual(TagTree.load().match("Other"), [top_other])
+
+    def test_plan_tag_path(self) -> None:
+        from webapp.models.tag_models import TagTree, plan_tag_path
+
+        tree = TagTree.load()
+        self.assertEqual(plan_tag_path("Nazi salute", tree).tag, self.salute)
+        plan = plan_tag_path("Hand gestures / Kühnen salute", tree)
+        self.assertEqual((plan.tag, plan.anchor, plan.create), (None, self.gestures, ["Kühnen salute"]))
+        created = plan.realise()
+        self.assertEqual((created.parent, created.color), (self.gestures, self.gestures.color))
+        plan = plan_tag_path("Symbols/Runes", tree)
+        self.assertEqual((plan.anchor, plan.create), (None, ["Symbols", "Runes"]))
+        self.assertEqual(plan.realise().path, "Symbols › Runes")
+        with self.assertRaisesRegex(ValueError, "could be"):
+            plan_tag_path("Other", tree)
+        with self.assertRaisesRegex(ValueError, "could be"):
+            plan_tag_path("Other/Deeper", tree)
+
+    def test_a_sub_tag_refines_the_broader_tag_on_the_post(self) -> None:
+        from django.contrib.auth.models import User
+
+        from webapp.models.tag_models import tag_post
+
+        msg = self._msg(1)
+        first = tag_post(msg, self.gestures, note="arm raised")
+        self.assertEqual(first.replaced, [])
+        refiner = User.objects.create_user("r@x.co")
+        refined = tag_post(msg, self.salute, note="clear", tagged_by=refiner)
+        self.assertEqual(refined.pk, first.pk)
+        self.assertEqual(refined.replaced, [self.gestures])
+        refined.refresh_from_db()
+        self.assertEqual((refined.tag, refined.note, refined.tagged_by), (self.salute, "arm raised; clear", refiner))
+        self.assertEqual(set(refined.members.values_list("message_id", flat=True)), {msg.pk})
+        self.assertEqual(self._tags_on(msg), {"Hand gestures › Nazi salute"})
+
+    def test_a_tag_implied_by_a_sub_tag_on_the_post_is_refused_and_siblings_combine(self) -> None:
+        from webapp.models.tag_models import ImpliedTagError, tag_post
+
+        msg = self._msg(1)
+        tag_post(msg, self.salute)
+        with self.assertRaises(ImpliedTagError):
+            tag_post(msg, self.gestures)
+        tag_post(msg, self.ok)
+        self.assertEqual(self._tags_on(msg), {"Hand gestures › Nazi salute", "Hand gestures › OK sign"})
+
+    def test_moving_a_tag_folds_the_now_implied_broader_tagging(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        gesture = MessageTag.objects.create(name="Gesture")
+        roman = MessageTag.objects.create(name="Roman")
+        msg = self._msg(1)
+        tag_post(msg, gesture, note="broad")
+        tag_post(msg, roman, note="narrow")
+        roman.parent = gesture
+        roman.save()
+        self.assertEqual(self._tags_on(msg), {"Gesture › Roman"})
+        self.assertEqual(roman.taggings.get().note, "narrow; broad")
+
+    def test_a_tag_cannot_move_into_its_own_branch(self) -> None:
+        self.gestures.parent = self.salute
+        with self.assertRaises(ValidationError):
+            self.gestures.full_clean()
+        with self.assertRaises(ValueError):
+            self.gestures.save()
+
+    def test_clean_reports_a_sibling_clash(self) -> None:
+        from webapp.models import MessageTag
+
+        clash = MessageTag(name="other", parent=self.flags)
+        with self.assertRaises(ValidationError) as ctx:
+            clash.full_clean()
+        self.assertIn("already has a sub-tag", str(ctx.exception))
+
+    def test_a_tag_with_sub_tags_is_protected_from_deletion(self) -> None:
+        from django.db.models import ProtectedError
+
+        with self.assertRaises(ProtectedError):
+            self.flags.delete()
+
+    def test_merge_moves_sub_tags_and_merges_same_name_ones(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        signs = MessageTag.objects.create(name="Signs")
+        signs_other = MessageTag.objects.create(name="Other", parent=signs)
+        horns = MessageTag.objects.create(name="Horns", parent=signs)
+        m1, m2 = self._msg(1), self._msg(2)
+        tag_post(m1, signs_other, note="from signs")
+        tag_post(m2, horns)
+        self.assertEqual(signs.merge_into(self.gestures), 2)
+        self.assertFalse(MessageTag.objects.filter(pk__in=[signs.pk, signs_other.pk]).exists())
+        horns.refresh_from_db()
+        self.assertEqual(horns.path, "Hand gestures › Horns")
+        self.assertEqual(self._tags_on(m1), {"Hand gestures › Other"})
+        self.assertEqual(self._tags_on(m2), {"Hand gestures › Horns"})
+
+    def test_merge_into_an_own_sub_tag_is_refused_but_into_the_parent_works(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        with self.assertRaisesRegex(ValueError, "own sub-tags"):
+            self.gestures.merge_into(self.salute)
+        msg = self._msg(1)
+        tag_post(msg, self.salute)
+        self.assertEqual(self.salute.merge_into(self.gestures), 0)  # the branch already held msg
+        self.assertEqual(self._tags_on(msg), {"Hand gestures"})
+
+    def test_merge_folds_a_post_left_with_a_tag_and_its_ancestor(self) -> None:
+        from webapp.models import MessageTag
+        from webapp.models.tag_models import tag_post
+
+        loose = MessageTag.objects.create(name="Gesture")
+        msg = self._msg(1)
+        tag_post(msg, loose)
+        tag_post(msg, self.salute)
+        loose.merge_into(self.gestures)
+        self.assertEqual(self._tags_on(msg), {"Hand gestures › Nazi salute"})
+
+    def test_counts_roll_up_the_branch(self) -> None:
+        from webapp.models.tag_models import tag_post, tags_in_tree_order
+
+        m1, m2, m3 = self._msg(1), self._msg(2), self._msg(3)
+        tag_post(m1, self.gestures)
+        tag_post(m2, self.salute)
+        tag_post(m3, self.salute)
+        tag_post(m3, self.ok)
+        counts = {t.tree_path: (t.own_count, t.message_count) for t in tags_in_tree_order()}
+        self.assertEqual(counts["Hand gestures"], (1, 3))
+        self.assertEqual(counts["Hand gestures › Nazi salute"], (2, 2))
+        self.assertEqual(counts["Flags"], (0, 0))
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_filters_take_the_branch_unless_exact(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.models.tag_models import tag_post
+        from webapp.views import _apply_message_options, _message_options_context
+
+        broad, salute, ok = self._msg(1, "a"), self._msg(2, "b"), self._msg(3, "c")
+        tag_post(broad, self.gestures)
+        tag_post(salute, self.salute)
+        tag_post(ok, self.ok)
+
+        def visible(query: str) -> set[int]:
+            qs = Message.objects.filter(channel=self.channel)
+            return set(_apply_message_options(qs, QueryDict(query)).values_list("id", flat=True))
+
+        self.assertEqual(visible(f"tag={self.gestures.pk}"), {broad.pk, salute.pk, ok.pk})
+        self.assertEqual(visible(f"tag={self.gestures.pk}&tag_exact=1"), {broad.pk})
+        self.assertEqual(visible(f"tag={self.salute.pk}"), {salute.pk})
+        self.assertEqual(visible("q=tag:%22nazi+salute%22"), {salute.pk})
+        self.assertEqual(visible("q=tag:%22hand+gestures/ok+sign%22"), {ok.pk})
+        self.assertEqual(visible("q=tag:%22hand+gestures%22"), {broad.pk, salute.pk, ok.pk})
+        ctx = _message_options_context(QueryDict(f"tag={self.gestures.pk}&tag_exact=1"))
+        self.assertTrue(ctx["tag_exact"] and ctx["has_sub_tags"])
+        self.assertIn("tag_exact=1", ctx["original_query"])
+        self.assertEqual([t.depth for t in ctx["all_tags"]][:2], [0, 1])
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_chips_name_the_ancestors(self) -> None:
+        from webapp.models.tag_models import tag_post
+
+        tag_post(self._msg(1, "salute post"), self.salute)
+        html = self.client.get(reverse("channel-detail", kwargs={"pk": self.channel.pk})).content.decode()
+        self.assertIn('<span class="post-tag-path">Hand gestures › </span>Nazi salute', html)
+
+
 class MessageTagPageTests(TestCase):
     def setUp(self) -> None:
         from webapp.models import MessageTag
@@ -2998,15 +3236,14 @@ class MessageTagPropagationTests(TestCase):
     def test_filter_and_counts_include_shares(self) -> None:
         from django.http import QueryDict
 
-        from webapp.models import MessageTag
-        from webapp.models.tag_models import tag_post, with_message_counts
+        from webapp.models.tag_models import TagTree, tag_message_counts, tag_post
         from webapp.views import _apply_message_options
 
         tag_post(self.share_c, self.tag)
         qs = Message.objects.all()
         visible = set(_apply_message_options(qs, QueryDict(f"tag={self.tag.pk}")).values_list("pk", flat=True))
         self.assertEqual(visible, {self.original.pk, self.share_b.pk, self.share_c.pk})
-        self.assertEqual(with_message_counts(MessageTag.objects.all()).get(pk=self.tag.pk).message_count, 3)
+        self.assertEqual(tag_message_counts(TagTree.load())[self.tag.pk], (3, 3))
 
     @override_settings(WEB_ACCESS="ALL")
     def test_chip_shows_on_a_share_of_the_tagged_post(self) -> None:
