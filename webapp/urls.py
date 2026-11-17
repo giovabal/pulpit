@@ -27,6 +27,9 @@ urlpatterns = [
         name="message-jump",
     ),
     path("search/", views.MessageSearchView.as_view(), name="message-search"),
+    path("audience/", views.AudienceView.as_view(), name="audience"),
+    path("audience/<slug:section>.csv", views.AudienceCSVView.as_view(), name="audience-csv"),
+    path("audience/<slug:section>/", views.AudienceView.as_view(), name="audience-section"),
     path("messages/highlights/", views.MessageHighlightsView.as_view(), name="message-highlights"),
     path("version/check/", views.VersionCheckView.as_view(), name="version-check"),
 ]

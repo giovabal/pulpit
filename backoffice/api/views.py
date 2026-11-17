@@ -576,6 +576,57 @@ class CustomEmojiPackViewSet(
         return self.get_paginated_response(data) if page is not None else Response(data)
 
 
+class CommenterViewSet(viewsets.GenericViewSet):
+    """Manage → Commenters: the user accounts behind the stored replies, read from the replies
+    (``webapp.commenters.commenter_rows``), most active first. Only the analyst's decision —
+    ``auto`` / ``exclude`` / ``keep`` — and note are editable, at ``PATCH <sender_id>/``.
+
+    ``?q=`` matches any name the account replied under, or its id; ``?status=excluded|flagged|reviewed``
+    keeps the accounts left out of the audience statistics, the automatically flagged ones, or the
+    ones with a decision or note.
+    """
+
+    lookup_value_regex = r"\d+"
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def list(self, request):
+        from webapp.commenters import account_replies, commenter_rows
+
+        sender_ids = None
+        q = request.query_params.get("q", "").strip()
+        if q:
+            match = Q(sender_name__icontains=q) | (Q(sender_id=int(q)) if q.isdigit() else Q(pk__in=[]))
+            sender_ids = set(account_replies().filter(match).values_list("sender_id", flat=True))
+        rows = commenter_rows(sender_ids)
+        status_filter = request.query_params.get("status", "")
+        if status_filter == "excluded":
+            rows = [r for r in rows if r["excluded"]]
+        elif status_filter == "flagged":
+            rows = [r for r in rows if r["reasons"]]
+        elif status_filter == "reviewed":
+            rows = [r for r in rows if r["decision"] != "auto" or r["note"]]
+        page = self.paginate_queryset(rows)
+        return self.get_paginated_response(page) if page is not None else Response(rows)
+
+    def partial_update(self, request, pk=None):
+        from webapp.cache import invalidate_home_summary_cache
+        from webapp.commenters import DECISION_VALUES, commenter_rows, set_review
+
+        decision = request.data.get("decision")
+        note = request.data.get("note")
+        if decision is not None and decision not in DECISION_VALUES:
+            raise ValidationError({"decision": f"Expected one of {', '.join(DECISION_VALUES)}."})
+        if note is not None and not isinstance(note, str):
+            raise ValidationError({"note": "Expected text."})
+        sender_id = int(pk)
+        rows = commenter_rows([sender_id])
+        if not rows:
+            return Response({"detail": "No stored reply from this account."}, status=status.HTTP_404_NOT_FOUND)
+        set_review(sender_id, decision=decision, note=note.strip() if note is not None else None)
+        invalidate_home_summary_cache()
+        return Response(commenter_rows([sender_id])[0])
+
+
 class DomainCategoryViewSet(viewsets.ModelViewSet):
     """Manage → Domains: the categories sites are filed under (full CRUD; deleting one uncategorises its
     sites). Unpaginated: a handful of rows, shown whole above the sites."""

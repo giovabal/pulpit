@@ -4,7 +4,8 @@ Home page ecosystem summary (two rows of cards):
   * Row 1 (4 cards): channels (with to_inspect count), messages (with replies),
     media (with per-type breakdown), total views (with subscriptions — the
     non-unique sum of subscriber counts — and unique commenters, the distinct
-    user accounts replying in the linked discussion groups).
+    user accounts replying in the linked discussion groups, bots and bulk
+    posters left out — see :mod:`webapp.commenters`).
   * Row 2 (3 cards): forwards sent and mentions sent across the in-target set,
     with self / in-target / out-of-target splits, plus the date range. The
     "received" counterparts are omitted: at the ecosystem level they are a
@@ -32,6 +33,7 @@ the same cache; an in-memory backend wouldn't survive the process boundary.
 from django.core.cache import cache
 from django.db.models import Count, F, Max, Min, Q, Sum
 
+from webapp.commenters import account_replies, audience_replies, excluded_sender_ids
 from webapp.models import Channel, Message, MessageReply
 from webapp.utils.dates import fmt_date
 
@@ -106,11 +108,12 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
     total_replies = replies.count()
     # Subscriber lists of broadcast channels are admin-only on Telegram, so the
     # sum above counts a person once per channel they follow. The distinct
-    # commenters are the one cross-channel identity Pulpit observes: Telethon's
-    # marked ``sender_id`` is positive for a user account and negative for a
-    # channel/group posting as itself (anonymous admins, channel personas), which
-    # are left out.
-    unique_commenters = replies.filter(sender_id__gt=0).values("sender_id").distinct().count()
+    # commenters are the one cross-channel identity Pulpit observes: user
+    # accounts only (channels posting as themselves are not commenters), without
+    # the Telegram bots and bulk posters webapp.commenters flags.
+    excluded = excluded_sender_ids()
+    unique_commenters = audience_replies(replies, excluded).values("sender_id").distinct().count()
+    left_out = account_replies(replies).filter(sender_id__in=list(excluded)).values("sender_id").distinct().count()
 
     # Row 2 — forwards sent. Only the "sent" side is shown on the home page:
     # across the whole in-target set, every in-target-to-in-target forward is a
@@ -195,6 +198,12 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
                         "discussion groups, each counted once however many channels they comment on. "
                         "Only the active minority who comment, so a floor on the distinct audience, "
                         "not an estimate of it."
+                        + (
+                            f" {left_out:,} {'account' if left_out == 1 else 'accounts'} flagged as Telegram "
+                            "bots or bulk posters (Manage → Commenters) left out."
+                            if left_out
+                            else ""
+                        )
                     ),
                 },
             ],

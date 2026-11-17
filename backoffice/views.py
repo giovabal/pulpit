@@ -76,6 +76,17 @@ class DomainsManageView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/domains.html"
 
 
+class CommentersManageView(StaffRequiredMixin, TemplateView):
+    template_name = "backoffice/commenters.html"
+
+    def get_context_data(self, **kwargs):
+        from webapp.commenters import BULK_THREAD_COMMENTS
+
+        ctx = super().get_context_data(**kwargs)
+        ctx["bulk_thread_comments"] = BULK_THREAD_COMMENTS
+        return ctx
+
+
 class VacanciesManageView(StaffRequiredMixin, TemplateView):
     template_name = "backoffice/vacancies.html"
 

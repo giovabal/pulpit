@@ -24,6 +24,7 @@ from crawler.reference_resolver import ReferenceResolver, message_references
 from webapp.models import (
     Channel,
     ChannelLabel,
+    ChannelSubscriberCount,
     Message,
     MessageCustomReaction,
     MessageReaction,
@@ -417,6 +418,7 @@ class ChannelCrawler:
                 "emoji_pack",
             ]
         )
+        ChannelSubscriberCount.record(channel, channel.participants_count)
 
     @staticmethod
     def _representative_channel_label(channel: Channel) -> "ChannelLabel | None":
@@ -1507,13 +1509,15 @@ class ChannelCrawler:
                     if isinstance(tg_reply, MessageService):
                         continue
                     sender_name = ""
+                    sender = tg_reply.sender
                     if getattr(tg_reply, "post_author", None):
                         sender_name = tg_reply.post_author
-                    elif tg_reply.sender:
-                        first = getattr(tg_reply.sender, "first_name", "") or ""
-                        last = getattr(tg_reply.sender, "last_name", "") or ""
-                        uname = getattr(tg_reply.sender, "username", "") or ""
-                        sender_name = f"{first} {last}".strip() or uname
+                    elif sender:
+                        first = getattr(sender, "first_name", "") or ""
+                        last = getattr(sender, "last_name", "") or ""
+                        uname = getattr(sender, "username", "") or ""
+                        # A channel or group commenting as itself has a title, not a name.
+                        sender_name = f"{first} {last}".strip() or getattr(sender, "title", "") or uname
                     to_upsert.append(
                         MessageReply(
                             parent_message_id=msg_pk,
@@ -1522,6 +1526,7 @@ class ChannelCrawler:
                             text=tg_reply.message or "",
                             sender_name=sender_name[:255],
                             sender_id=tg_reply.sender_id,
+                            sender_is_bot=bool(sender.bot) if isinstance(sender, User) else None,
                             views=getattr(tg_reply, "views", None),
                         )
                     )
@@ -1530,7 +1535,7 @@ class ChannelCrawler:
                         to_upsert,
                         update_conflicts=True,
                         unique_fields=["parent_message", "telegram_id"],
-                        update_fields=["date", "text", "sender_name", "sender_id", "views"],
+                        update_fields=["date", "text", "sender_name", "sender_id", "sender_is_bot", "views"],
                     )
                     total_upserted += len(to_upsert)
                 Message.objects.filter(pk=msg_pk).update(replies_fetched=True)

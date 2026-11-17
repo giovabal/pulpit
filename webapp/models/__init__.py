@@ -16,3 +16,5 @@ from .project_models import Project  # NOQA
 from .tag_models import MessageTag, MessageTagging, TaggedMessage  # NOQA
 from .emoji_models import CustomEmoji, CustomEmojiPack, MessageCustomEmoji, MessageCustomReaction  # NOQA
 from .link_models import Domain, DomainCategory  # NOQA
+from .commenter_models import CommenterReview  # NOQA
+from .subscriber_models import ChannelSubscriberCount  # NOQA

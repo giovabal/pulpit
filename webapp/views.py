@@ -46,7 +46,7 @@ from network.vacancy_analysis import (
     configured_max_candidates,
     orphaned_amplifier_pks,
 )
-from webapp import emoji_usage
+from webapp import audience, emoji_usage
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -140,6 +140,12 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 _LOST_MODES = ("exclude", "include", "only")
 # A reply is a message posted as an answer to another one (Telegram's reply_to header).
 _REPLY_MODES = ("include", "exclude", "only")
+# Engagement filters (?comments= / ?reactions=): any message, only those with some, only those with
+# none. Comments are Telegram's count of the replies in the channel's discussion group
+# (``Message.replies``; None = comments off or not captured, read as none), reactions the message's
+# total (``Message.total_reactions``). See ``_has_engagement`` for albums.
+_ENGAGEMENT_MODES = ("any", "with", "without")
+_ENGAGEMENT_FIELDS = {"comments": "replies", "reactions": "total_reactions"}
 
 _DEFAULT_SORT = "date_desc"
 # Accepted aliases for the bare asc/desc sort vocabulary in URLs.
@@ -333,6 +339,27 @@ def _reply_mode(params: Any) -> str:
     return replies if replies in _REPLY_MODES else "include"
 
 
+def _has_engagement(field: str) -> Q:
+    """The messages with a positive *field* — judging an album as one post.
+
+    Telegram attaches an album's comments and reactions to one of its messages (the first, which the
+    list shows), so the test reads the whole album: every message of it passes or fails together.
+    Testing each message alone would let ``_exclude_album_tails`` — which elects the head among the
+    messages left — put a comment-less sibling in the place of a filtered-out head under ``without``.
+    """
+    has_some = Q(**{f"{field}__gt": 0})
+    sibling = Message.objects.filter(channel_id=OuterRef("channel_id"), grouped_id=OuterRef("grouped_id")).filter(
+        has_some
+    )
+    return has_some | (Q(grouped_id__isnull=False) & Exists(sibling))
+
+
+def _engagement_mode(params: Any, key: str) -> str:
+    """``any`` / ``with`` / ``without`` for the ``comments`` or ``reactions`` option; ``any`` if unset or bogus."""
+    mode = params.get(key, "any")
+    return mode if mode in _ENGAGEMENT_MODES else "any"
+
+
 def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> QuerySet:
     text = _message_query(params, user)[0]
     if text:
@@ -369,6 +396,12 @@ def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> Query
         qs = qs.filter(reply_to_msg_id__isnull=True)
     elif replies == "only":
         qs = qs.filter(reply_to_msg_id__isnull=False)
+    for key, field in _ENGAGEMENT_FIELDS.items():
+        mode = _engagement_mode(params, key)
+        if mode == "with":
+            qs = qs.filter(_has_engagement(field))
+        elif mode == "without":
+            qs = qs.exclude(_has_engagement(field))
     qs = _exclude_album_tails(qs)
     if params.get("unique"):
         # Last, so the copies it chooses between are the ones the other options kept.
@@ -388,6 +421,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         lost = "exclude"
     pinned = bool(params.get("pinned"))
     replies = _reply_mode(params)
+    comments = _engagement_mode(params, "comments")
+    reactions = _engagement_mode(params, "reactions")
     unique = bool(params.get("unique"))
     any_tag, tag_ids = _selected_tags(params, user)
     tag_exact = _exact_tags(params, user) and bool(tag_ids) and not any_tag
@@ -399,6 +434,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         or lost != "exclude"
         or pinned
         or replies != "include"
+        or comments != "any"
+        or reactions != "any"
         or unique
         or any_tag
         or bool(tag_ids)
@@ -421,6 +458,10 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         extra["pinned"] = "1"
     if replies != "include":
         extra["replies"] = replies
+    if comments != "any":
+        extra["comments"] = comments
+    if reactions != "any":
+        extra["reactions"] = reactions
     if unique:
         extra["unique"] = "1"
     if any_tag or tag_ids:
@@ -441,6 +482,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "lost": lost,
         "pinned": pinned,
         "replies": replies,
+        "comments": comments,
+        "reactions": reactions,
         "unique": unique,
         "all_tags": all_tags,
         "any_tag": any_tag,
@@ -451,6 +494,16 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "options_active": options_active,
         "original_query": original_query,
     }
+
+
+def _container_groups() -> QuerySet[LabelGroup]:
+    """The container label groups with labels, for the ``?filter=`` scope menu (``_scope_filter.html``)."""
+    return (
+        LabelGroup.objects.filter(is_container=True, labels__isnull=False)
+        .prefetch_related("labels")
+        .distinct()
+        .order_by("name")
+    )
 
 
 class HomeView(ListView):
@@ -492,12 +545,7 @@ class HomeView(ListView):
         # restricts the summary cards, the chart panels, and the message list to the
         # channels holding that label or one of its child labels.
         voice = self.filter_voice
-        ctx["container_groups"] = (
-            LabelGroup.objects.filter(is_container=True, labels__isnull=False)
-            .prefetch_related("labels")
-            .distinct()
-            .order_by("name")
-        )
+        ctx["container_groups"] = _container_groups()
         ctx["filter_voice"] = voice
         filter_qs = f"?filter={voice.pk}" if voice is not None else ""
         if voice is not None:
@@ -1573,6 +1621,227 @@ class MessageJumpView(View):
 
         query = urlencode({"page": page, **extra_params})
         return HttpResponseRedirect(f"{channel_url}?{query}#post-{target.pk}")
+
+
+_AUDIENCE_SECTIONS = {slug: (title, compute) for slug, title, compute in audience.SECTIONS}
+# Diverging cells (shared commenters vs expected): |log2(ratio)| of 2 — four times or a quarter of
+# the expectation — reaches the strongest tint, capped so the cell's text stays legible.
+_HEAT_LOG2_FULL = 2.0
+_HEAT_MAX_PERCENT = 60
+# A pair whose shared and expected commenters are both below this stays untinted: a ratio of 1 to 0.2
+# is noise, not overlap.
+_HEAT_MIN_COUNT = 3
+# A cohort cell reaches the strongest tint when this share of the cohort comes back.
+_COHORT_FULL_SHARE = 0.5
+
+
+def _heat(ratio: float | None) -> dict[str, Any] | None:
+    """A diverging tint for an observed/expected *ratio*: side (``pos``/``neg``) and percent."""
+    if ratio is None or ratio <= 0:
+        return None
+    strength = min(abs(math.log2(ratio)) / _HEAT_LOG2_FULL, 1.0)
+    return {"side": "pos" if ratio >= 1 else "neg", "percent": round(strength * _HEAT_MAX_PERCENT)}
+
+
+def _audience_extras(section: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Section-specific context: the charts' JSON and the tints the tables draw."""
+    if section == "participation":
+        overall = data["overall"]
+        return {
+            "min_concentration_commenters": audience.MIN_CONCENTRATION_COMMENTERS,
+            "top1_share": overall["top_shares"][0.01],
+            "top10_share": overall["top_shares"][0.10],
+            "chart_data": {
+                "lorenz": data["lorenz"],
+                "gini": overall["gini"],
+                "bins": [
+                    {"label": b["label"], "accounts": b["accounts"], "reply_share": b["reply_share"]}
+                    for b in data["bins"]
+                ],
+            },
+        }
+    if section == "breadth":
+        return {
+            "chart_data": {
+                "breadth": [
+                    {"label": c["label"], "observed": c["observed"], "expected": c["expected"]}
+                    for c in data["channel_spread"]["classes"]
+                ]
+            }
+        }
+    if section == "overlap":
+        for row in data["channel_rows"]:
+            row["cells"] = [
+                None
+                if cell is None
+                else {
+                    **cell,
+                    "heat": _heat(cell["ratio"])
+                    if cell["shared"] and max(cell["shared"], cell["expected"]) >= _HEAT_MIN_COUNT
+                    else None,
+                }
+                for cell in row["cells"]
+            ]
+        return {}
+    if section == "retention" and data.get("accounts"):
+        for cohort in data["cohorts"]:
+            cohort["cells"] = [
+                None
+                if v is None
+                else {"value": v, "percent": round(min(v / _COHORT_FULL_SHARE, 1.0) * _HEAT_MAX_PERCENT)}
+                for v in cohort["cells"]
+            ]
+        return {
+            "chart_data": {
+                "monthly": [{"month": m["month"], "active": m["active"], "new": m["new"]} for m in data["monthly"]]
+            }
+        }
+    return {}
+
+
+class AudienceView(TemplateView):
+    """``/audience/`` and ``/audience/<section>/`` — the audience observed through the commenters
+    (``webapp.audience``, one section per page), scoped by ``?filter=<container label>`` like the
+    home page."""
+
+    template_name = "webapp/audience.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        ctx = super().get_context_data(**kwargs)
+        section = kwargs.get("section", "participation")
+        if section not in _AUDIENCE_SECTIONS:
+            raise Http404("No such Audience section.")
+        title, compute = _AUDIENCE_SECTIONS[section]
+        voice = Label.from_filter_param(self.request.GET.get("filter"))
+        data = compute(voice)
+        ctx.update(data)
+        ctx.update(
+            {
+                "section": section,
+                "section_title": title,
+                "section_template": f"webapp/audience/{section.replace('-', '_')}.html",
+                "sections": [(slug, name) for slug, (name, _fn) in _AUDIENCE_SECTIONS.items()],
+                "container_groups": _container_groups(),
+                "filter_voice": voice,
+                "filter_query": f"?filter={voice.pk}" if voice is not None else "",
+                "chart_data": None,
+                **_audience_extras(section, data),
+            }
+        )
+        return ctx
+
+
+def _num(value: float | None) -> str:
+    return "" if value is None else f"{value:.6g}"
+
+
+def _title(channel: Channel | None) -> str:
+    return channel.title if channel is not None else ""
+
+
+def _audience_csv(section: str, data: dict[str, Any]) -> tuple[tuple[str, ...], list[list[Any]]]:
+    """The columns and rows of an Audience section's CSV (its main table)."""
+    if section == "participation":
+        columns = (
+            *_CHANNEL_CSV_COLUMNS,
+            "subscribers",
+            "commenters",
+            "replies",
+            "replies_per_commenter",
+            "commenters_per_subscriber",
+            "one_time_share",
+            "top10_share",
+            "gini",
+            "effective_commenters",
+            "hyperactive_reply_share",
+        )
+        rows = [
+            [
+                row["channel_id"],
+                *_channel_csv_cells(row["channel"]),
+                "" if row["subscribers"] is None else row["subscribers"],
+                row["accounts"],
+                row["replies"],
+                _num(row["mean"]),
+                _num(row["commenter_rate"]),
+                _num(row["one_time_share"]),
+                _num(row["top10_share"]),
+                _num(row["gini"]),
+                _num(row["effective_number"]),
+                _num(row["hyperactive_reply_share"]),
+            ]
+            for row in data["channels"]
+        ]
+        return columns, rows
+    if section == "breadth":
+        columns = ("label_group", "label", "commenters", "replies", "commenting_elsewhere_share")
+        rows = [
+            [g["name"], lab["name"], lab["commenters"], lab["replies"], _num(lab["elsewhere_share"])]
+            for g in data["groups"]
+            for lab in g["labels"]
+        ]
+        return columns, rows
+    if section == "overlap":
+        columns = ("channel_a_id", "channel_a", "channel_b_id", "channel_b", "shared", "expected", "ratio", "p", "q")
+        rows = [
+            [
+                pr["a"],
+                _title(pr["channel_a"]),
+                pr["b"],
+                _title(pr["channel_b"]),
+                pr["shared"],
+                _num(pr["expected"]),
+                _num(pr["ratio"]),
+                _num(pr["p"]),
+                _num(pr["q"]),
+            ]
+            for pr in data["pairs"]
+        ]
+        return columns, rows
+    if section == "retention":
+        return ("month", "active_commenters", "new_commenters", "channels_with_comments"), [
+            [m["month"], m["active"], m["new"], m["channels"]] for m in data.get("monthly", [])
+        ]
+    if section == "channel-commenters":
+        columns = (
+            "commenting_channel_telegram_id",
+            "commenting_channel",
+            "commenting_in_target",
+            "channel_id",
+            "channel",
+            "comments",
+            "first",
+            "last",
+            "cited_either_way",
+        )
+        rows = [
+            [
+                r["sender_tid"],
+                _title(r["sender"]) or r["sender_name"],
+                int(r["sender_in_target"]),
+                r["channel"].pk if r["channel"] else "",
+                _title(r["channel"]),
+                r["comments"],
+                r["first"].isoformat() if r["first"] else "",
+                r["last"].isoformat() if r["last"] else "",
+                "" if r["cited"] is None else int(r["cited"]),
+            ]
+            for r in data["pairs"]
+        ]
+        return columns, rows
+    raise Http404("This section has no CSV.")
+
+
+class AudienceCSVView(View):
+    """``/audience/<section>.csv`` — an Audience section's main table, scoped like the page."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        section = kwargs["section"]
+        if section not in _AUDIENCE_SECTIONS:
+            raise Http404("No such Audience section.")
+        voice = Label.from_filter_param(request.GET.get("filter"))
+        columns, rows = _audience_csv(section, _AUDIENCE_SECTIONS[section][1](voice))
+        return _csv_response(f"{section}.csv", columns, rows)
 
 
 class VersionCheckView(View):

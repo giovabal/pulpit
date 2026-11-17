@@ -1,0 +1,62 @@
+{% extends "backoffice/base.html" %}
+{% load vstatic %}
+
+{% block bo_heading %}Commenters{% endblock bo_heading %}
+
+{% block bo_content %}
+<div class="bo-panel">
+  <div class="bo-section-header">
+    <h2 class="bo-section-title">Commenter accounts</h2>
+  </div>
+  <p class="text-muted small">
+    The user accounts that replied in the channels' discussion groups, read from every stored reply. Two kinds
+    of account would distort the audience figures, such as the home page's <em>unique commenters</em>, so
+    they are <strong>left out</strong> automatically: <strong>Telegram bots</strong>, as Telegram marks them,
+    and <strong>bulk posters</strong>, accounts with {{ bulk_thread_comments }} or more replies under a single
+    post, such as an archive dumped into one thread. Set <em>Exclude</em> to leave out an account the flags
+    miss, such as a channel admin, or <em>Keep</em> to override a flag. Changes save as you make them.
+    Telegram's bot flag is recorded as replies are fetched; for replies fetched earlier, run
+    <em>Refresh messages stats</em> with <em>Fetch replies</em>.
+  </p>
+  <div class="bo-toolbar">
+    <input class="bo-search" id="cm-search" type="search" placeholder="Search by name or account id…" autocomplete="off" aria-label="Search commenters by name or account id">
+    <select class="bo-select" id="cm-status" aria-label="Filter by status">
+      <option value="">All accounts</option>
+      <option value="excluded">Left out</option>
+      <option value="flagged">Flagged automatically</option>
+      <option value="reviewed">With a decision or note</option>
+    </select>
+    <span class="bo-count" id="cm-count"></span>
+    <div class="bo-pagination" id="cm-pagination-top"></div>
+  </div>
+  <div class="table-responsive">
+    <table class="bo-table" id="cm-table">
+      <caption class="sr-only">Commenter accounts</caption>
+      <thead>
+        <tr>
+          <th scope="col">Account</th>
+          <th class="bo-th--num" scope="col">Replies</th>
+          <th class="bo-th--num" scope="col">Posts</th>
+          <th class="bo-th--num" scope="col">Channels</th>
+          <th class="bo-th--num" scope="col"><abbr title="Most replies under a single post">Max / post</abbr></th>
+          <th class="bo-th--num" scope="col"><abbr title="Share of replies with no text (stickers, media)">No text</abbr></th>
+          <th scope="col">Active</th>
+          <th scope="col">Status</th>
+          <th scope="col">Decision</th>
+          <th scope="col">Note</th>
+        </tr>
+      </thead>
+      <tbody id="cm-tbody">
+        <tr><td colspan="10" class="bo-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="bo-pagination bo-pagination--bottom" id="cm-pagination-bottom"></div>
+</div>
+{% endblock bo_content %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% vstatic 'backoffice/js/crud.js' %}"></script>
+<script src="{% vstatic 'backoffice/js/commenters.js' %}"></script>
+{% endblock extra_scripts %}

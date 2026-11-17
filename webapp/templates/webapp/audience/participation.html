@@ -1,0 +1,145 @@
+{% load numbers %}
+<section aria-labelledby="participation-title">
+  <h2 class="audience-section-title" id="participation-title">Participation inequality</h2>
+  <p class="audience-lead">How unevenly the replies are spread over the accounts writing them: a comment section can look like a crowd while a few regulars write most of it.</p>
+
+  {% if overall.accounts %}
+  <div class="summary-grid">
+    <div class="summary-card">
+      <i class="bi bi-people sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Commenters</span>
+      <div class="sc-value-row"><span class="sc-value">{{ overall.accounts|thousands }}</span></div>
+      <span class="sc-secondary"><strong>{{ overall.replies|thousands }}</strong> replies</span>
+      <span class="sc-secondary"><strong>{{ overall.mean|decimal:1 }}</strong> per account, median <strong>{{ overall.median|decimal:0 }}</strong></span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-bar-chart-steps sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Most active 10%</span>
+      <div class="sc-value-row"><span class="sc-value">{{ top10_share|pct }}</span><span class="sc-note">of replies</span></div>
+      <span class="sc-secondary">most active 1%: <strong>{{ top1_share|pct }}</strong></span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-graph-up sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Gini coefficient</span>
+      <div class="sc-value-row"><span class="sc-value">{{ overall.gini|decimal:2 }}</span></div>
+      <span class="sc-secondary">0 = every account writes as much; 1 = one account writes everything</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-person-check sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Effective commenters</span>
+      <div class="sc-value-row"><span class="sc-value">{{ overall.effective_number|thousands }}</span></div>
+      <span class="sc-secondary">the replies are as concentrated as if this many accounts wrote equal shares</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-1-circle sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">One-time commenters</span>
+      <div class="sc-value-row"><span class="sc-value">{{ overall.one_time_share|pct }}</span><span class="sc-note">of accounts</span></div>
+      <span class="sc-secondary">writing <strong>{{ overall.one_time_reply_share|pct }}</strong> of replies</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-lightning-charge sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Hyperactive accounts</span>
+      <div class="sc-value-row"><span class="sc-value">{{ overall.hyperactive.accounts|thousands }}</span><span class="sc-note">{{ overall.hyperactive.account_share|pct:1 }} of accounts</span></div>
+      <span class="sc-secondary">writing <strong>{{ overall.hyperactive.reply_share|pct }}</strong> of replies</span>
+      <span class="sc-secondary"><strong>{{ overall.hyperactive.min_replies|thousands }}</strong> or more replies each</span>
+    </div>
+  </div>
+
+  <div class="audience-chart-grid">
+    <div class="stats-panel">
+      <div class="stats-toggle-wrap">
+        <h3 class="stats-toggle mb-0" id="lorenz-title"><i class="bi bi-graph-up" aria-hidden="true"></i> Lorenz curve</h3>
+      </div>
+      <div class="stats-panel-body">
+        <p class="audience-chart-note">Accounts from the least to the most active, against the share of replies they wrote together. The further the curve sags below the diagonal of perfect equality, the more concentrated the replies.</p>
+        <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas id="audience-lorenz" aria-labelledby="lorenz-title"></canvas></div>
+      </div>
+    </div>
+    <div class="stats-panel">
+      <div class="stats-toggle-wrap">
+        <h3 class="stats-toggle mb-0" id="activity-title"><i class="bi bi-bar-chart" aria-hidden="true"></i> Accounts by replies written</h3>
+      </div>
+      <div class="stats-panel-body">
+        <p class="audience-chart-note">How many accounts wrote 1, 2, 3–5, … replies. The table below gives each class's share of the replies.</p>
+        <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas id="audience-activity" aria-labelledby="activity-title"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <caption class="audience-caption">Accounts and replies by replies written per account</caption>
+      <thead>
+        <tr>
+          <th scope="col">Replies per account</th>
+          <th scope="col" class="text-end">Accounts</th>
+          <th scope="col" class="text-end">Share of accounts</th>
+          <th scope="col" class="text-end">Replies</th>
+          <th scope="col" class="text-end">Share of replies</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for bin in bins %}
+        <tr>
+          <th scope="row">{{ bin.label }}</th>
+          <td class="text-end">{{ bin.accounts|thousands }}</td>
+          <td class="text-end">{{ bin.account_share|pct:1 }}</td>
+          <td class="text-end">{{ bin.replies|thousands }}</td>
+          <td class="text-end">{{ bin.reply_share|pct:1 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="audience-subtitle audience-subtitle--spaced">By channel</h3>
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <caption class="audience-caption">
+        Participation per channel, most commenters first. The top-10% share, Gini and effective commenters
+        need at least {{ min_concentration_commenters }} commenters. <em>Hyperactive</em> counts the replies
+        written by the hyperactive accounts above, whose activity is measured across all these channels.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Channel</th>
+          <th scope="col" class="text-end"><abbr title="At the last crawl">Subscribers</abbr></th>
+          <th scope="col" class="text-end">Commenters</th>
+          <th scope="col" class="text-end"><abbr title="Commenters over the whole period per 100 subscribers at the last crawl. Commenters need not subscribe.">Per 100 subs.</abbr></th>
+          <th scope="col" class="text-end">Replies</th>
+          <th scope="col" class="text-end"><abbr title="Replies per commenter">Per commenter</abbr></th>
+          <th scope="col" class="text-end"><abbr title="Share of commenters who replied once">One-time</abbr></th>
+          <th scope="col" class="text-end"><abbr title="Share of the replies written by the channel's most active 10% of commenters">Top 10%</abbr></th>
+          <th scope="col" class="text-end">Gini</th>
+          <th scope="col" class="text-end"><abbr title="Effective number of commenters">Effective</abbr></th>
+          <th scope="col" class="text-end"><abbr title="Share of the channel's replies written by hyperactive accounts">Hyperactive</abbr></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in channels %}
+        <tr>
+          <th scope="row" class="audience-channel-cell">
+            {% if row.channel %}
+            {% if row.channel.current_label %}<span class="org-dot" style="background: {{ row.channel.current_label.color }};" aria-hidden="true"></span>{% endif %}
+            <a href="{{ row.channel.get_absolute_url }}">{{ row.channel.title }}</a>
+            {% else %}—{% endif %}
+          </th>
+          <td class="text-end">{{ row.subscribers|thousands }}</td>
+          <td class="text-end">{{ row.accounts|thousands }}</td>
+          <td class="text-end">{% if row.commenter_rate is not None %}{{ row.commenter_rate|pct:1|cut:"%" }}{% else %}—{% endif %}</td>
+          <td class="text-end">{{ row.replies|thousands }}</td>
+          <td class="text-end">{{ row.mean|decimal:1 }}</td>
+          <td class="text-end">{{ row.one_time_share|pct }}</td>
+          <td class="text-end">{{ row.top10_share|pct }}</td>
+          <td class="text-end">{{ row.gini|decimal:2 }}</td>
+          <td class="text-end">{{ row.effective_number|decimal:0 }}</td>
+          <td class="text-end">{{ row.hyperactive_reply_share|pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="channels-empty">No reply in scope yet. Replies are stored by <code>crawl_channels --fetch-replies</code> for channels with a discussion group.</div>
+  {% endif %}
+</section>

@@ -1442,6 +1442,80 @@ class ReplyMessageFilterTests(TestCase):
         self.assertContains(response, 'name="replies" value="only"')
 
 
+class EngagementMessageFilterTests(TestCase):
+    """``?comments=`` and ``?reactions=`` (any / with / without) filter on Telegram's comment count and
+    the reaction total, an album judged as one post."""
+
+    def setUp(self) -> None:
+        self.channel = make_channel(telegram_id=11, label=make_label(name="Org", is_in_target=True))
+        make = lambda tid, **kw: Message.objects.create(telegram_id=tid, channel=self.channel, **kw)  # noqa: E731
+        self.plain = make(1)  # comments off: replies None
+        self.no_comment = make(2, replies=0)
+        self.commented = make(3, replies=4)
+        self.reacted = make(4, replies=0, total_reactions=7)
+        self.both = make(5, replies=2, total_reactions=1)
+        # An album: Telegram puts its comments and reactions on the first message.
+        self.album_head = make(10, grouped_id=99, replies=3, total_reactions=5)
+        self.album_tail = make(11, grouped_id=99, replies=0, total_reactions=0)
+
+    def _visible(self, query: str) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        return set(_apply_message_options(qs, QueryDict(query)).values_list("id", flat=True))
+
+    def test_both_by_default(self) -> None:
+        everything = {m.id for m in (self.plain, self.no_comment, self.commented, self.reacted, self.both)}
+        everything.add(self.album_head.id)
+        self.assertEqual(self._visible(""), everything)
+        self.assertEqual(self._visible("comments=bogus&reactions=bogus"), everything)
+
+    def test_comments(self) -> None:
+        self.assertEqual(self._visible("comments=with"), {self.commented.id, self.both.id, self.album_head.id})
+        self.assertEqual(self._visible("comments=without"), {self.plain.id, self.no_comment.id, self.reacted.id})
+
+    def test_reactions(self) -> None:
+        self.assertEqual(self._visible("reactions=with"), {self.reacted.id, self.both.id, self.album_head.id})
+        self.assertEqual(self._visible("reactions=without"), {self.plain.id, self.no_comment.id, self.commented.id})
+
+    def test_combined(self) -> None:
+        self.assertEqual(self._visible("comments=with&reactions=without"), {self.commented.id})
+        self.assertEqual(self._visible("comments=without&reactions=with"), {self.reacted.id})
+
+    def test_an_album_is_judged_as_one_post(self) -> None:
+        # Without comments must not show the album through its comment-less second message.
+        self.assertNotIn(self.album_tail.id, self._visible("comments=without"))
+        self.assertNotIn(self.album_tail.id, self._visible("reactions=without"))
+        # ... and with the head lost, the album still counts as commented.
+        Message.objects.filter(pk=self.album_head.pk).update(is_lost=True)
+        self.assertIn(self.album_tail.id, self._visible("comments=with"))
+
+    def test_options_active_and_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict("comments=with&reactions=without"))
+        self.assertEqual((ctx["comments"], ctx["reactions"]), ("with", "without"))
+        self.assertTrue(ctx["options_active"])
+        self.assertIn("comments=with", ctx["original_query"])
+        self.assertIn("reactions=without", ctx["original_query"])
+        default = _message_options_context(QueryDict(""))
+        self.assertEqual((default["comments"], default["reactions"]), ("any", "any"))
+        self.assertFalse(default["options_active"])
+        self.assertNotIn("comments", default["original_query"])
+
+    def test_pages_render_and_filter(self) -> None:
+        response = self.client.get(reverse("message-search") + "?comments=with&reactions=with")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({m.id for m in response.context["object_list"]}, {self.both.id, self.album_head.id})
+        self.assertContains(response, 'name="comments" value="with"')
+        response = self.client.get(reverse("channel-detail", kwargs={"pk": self.channel.pk}) + "?comments=without")
+        self.assertEqual(response.status_code, 200)
+
+
 class ReplyTargetLinkTests(TestCase):
     """A reply links to its original — in Pulpit when crawled, always on Telegram."""
 

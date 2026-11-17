@@ -1,0 +1,116 @@
+{% load numbers %}
+<section aria-labelledby="overlap-title">
+  <h2 class="audience-section-title" id="overlap-title">Audience overlap</h2>
+  <p class="audience-lead">Which channels share commenters beyond chance: two big channels share many anyway, so each pair is tested against what the channels' sizes and their commenters' breadth predict.</p>
+
+  {% if channel_rows %}
+  <div class="summary-grid">
+    <div class="summary-card">
+      <i class="bi bi-link-45deg sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Pairs sharing more than chance</span>
+      <div class="sc-value-row"><span class="sc-value">{{ validated|thousands }}</span><span class="sc-note">of {{ tested|thousands }} channel pairs</span></div>
+      <span class="sc-secondary">q &lt; {{ q_threshold }} (Benjamini–Hochberg)</span>
+    </div>
+    {% if qap %}
+    <div class="summary-card">
+      <i class="bi bi-arrow-left-right sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Audience follows citations</span>
+      <div class="sc-value-row"><span class="sc-value">r = {{ qap.r|decimal:2 }}</span><span class="sc-note">QAP p = {{ qap.p|pval }}</span></div>
+      <span class="sc-secondary">shared commenters vs forwards + mentions, over {{ qap.pairs|thousands }} pairs ({{ qap.cited_pairs|thousands }} citing)</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive">
+    <table class="stats-table audience-table audience-matrix">
+      <caption class="audience-caption">
+        Shared commenters per pair of channels; the tint is the ratio to the expectation —
+        <span class="audience-key audience-key--pos">more than chance</span>, <span class="audience-key audience-key--neg">fewer</span>
+        — and ● marks a pair significant at q &lt; {{ q_threshold }}; pairs with fewer than 3 commenters shared and expected stay untinted. Hover a cell for the figures. Columns follow the rows' numbers.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Channel</th>
+          <th scope="col" class="text-end">Commenters</th>
+          <th scope="col" class="text-end"><abbr title="Share of its commenters who comment on no other channel in scope, and the share expected by chance">Exclusive</abbr></th>
+          {% for row in channel_rows %}<th scope="col" class="text-center">{{ row.index }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in channel_rows %}
+        <tr>
+          <th scope="row" class="audience-channel-cell"><span class="audience-index">{{ row.index }}</span> {% include "webapp/audience/_channel.html" with channel=row.channel %}</th>
+          <td class="text-end">{{ row.commenters|thousands }}</td>
+          <td class="text-end">{{ row.exclusive.observed|pct }} <span class="text-muted">/ {{ row.exclusive.expected|pct }}</span></td>
+          {% for cell in row.cells %}
+          {% if cell is None %}<td class="audience-cell audience-cell--self" aria-label="same channel"></td>
+          {% elif cell.shared %}<td class="audience-cell text-center{% if cell.heat %} audience-cell--{{ cell.heat.side }}{% endif %}"{% if cell.heat %} style="--heat: {{ cell.heat.percent }}%;"{% endif %}
+              title="{{ cell.shared }} shared, {{ cell.expected|decimal:1 }} expected, q = {{ cell.q|pval }}">{{ cell.shared }}{% if cell.significant %}<span class="audience-sig" aria-label="significant">●</span>{% endif %}</td>
+          {% else %}<td class="audience-cell text-center text-muted">·</td>{% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="audience-subtitle audience-subtitle--spaced">Pairs, most significant first</h3>
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <thead>
+        <tr>
+          <th scope="col">Channels</th>
+          <th scope="col" class="text-end">Shared</th>
+          <th scope="col" class="text-end">Expected</th>
+          <th scope="col" class="text-end">Ratio</th>
+          <th scope="col" class="text-end">q</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pr in pairs|slice:":30" %}
+        <tr>
+          <th scope="row" class="audience-channel-cell">{% include "webapp/audience/_channel.html" with channel=pr.channel_a %} · {% include "webapp/audience/_channel.html" with channel=pr.channel_b %}</th>
+          <td class="text-end">{{ pr.shared|thousands }}</td>
+          <td class="text-end">{{ pr.expected|decimal:1 }}</td>
+          <td class="text-end">{{ pr.ratio|decimal:2 }}</td>
+          <td class="text-end">{% if pr.significant %}<strong>{{ pr.q|pval }}</strong>{% else %}{{ pr.q|pval }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if pairs|length > 30 %}<p class="audience-caption">The 30 most significant of {{ pairs|length }} pairs with shared commenters; the CSV lists them all.</p>{% endif %}
+
+  {% for group in label_groups %}
+  <h3 class="audience-subtitle audience-subtitle--spaced">Between {{ group.name|lower }} labels</h3>
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <thead>
+        <tr>
+          <th scope="col">Labels</th>
+          <th scope="col" class="text-end">Shared</th>
+          <th scope="col" class="text-end">Expected</th>
+          <th scope="col" class="text-end">Ratio</th>
+          <th scope="col" class="text-end">q</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pr in group.pairs %}
+        <tr>
+          <th scope="row">{{ pr.name_a }} · {{ pr.name_b }}</th>
+          <td class="text-end">{{ pr.shared|thousands }}</td>
+          <td class="text-end">{{ pr.expected|decimal:1 }}</td>
+          <td class="text-end">{{ pr.ratio|decimal:2 }}</td>
+          <td class="text-end">{% if pr.significant %}<strong>{{ pr.q|pval }}</strong>{% else %}{{ pr.q|pval }}{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">No two labels share a commenter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="channels-empty">Fewer than two channels in scope have commenters.</div>
+  {% endif %}
+</section>

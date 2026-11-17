@@ -1,0 +1,122 @@
+{% load numbers %}
+<section aria-labelledby="breadth-title">
+  <h2 class="audience-section-title" id="breadth-title">Breadth</h2>
+  <p class="audience-lead">Over how many channels, and across how many labels, each commenter spreads — against what chance would give, since an account that writes more replies reaches more channels anyway.</p>
+
+  {% if accounts %}
+  <div class="summary-grid">
+    <div class="summary-card">
+      <i class="bi bi-diagram-3 sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">On more than one channel</span>
+      <div class="sc-value-row"><span class="sc-value">{{ multi_channel_share|pct }}</span><span class="sc-note">of {{ accounts|thousands }} commenters</span></div>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-bullseye sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Channels reached</span>
+      <div class="sc-value-row"><span class="sc-value">{{ channel_spread.observed_mean|decimal:2 }}</span><span class="sc-note">on average</span></div>
+      <span class="sc-secondary">chance would give <strong>{{ channel_spread.expected_mean|decimal:2 }}</strong> for the same replies (accounts with 2+ replies)</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-arrows-angle-contract sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Narrower than chance</span>
+      <div class="sc-value-row"><span class="sc-value">{{ channel_spread.below_share|pct }}</span><span class="sc-note">of accounts</span></div>
+      <span class="sc-secondary">reach fewer channels than their replies would by chance</span>
+    </div>
+  </div>
+
+  {% if channel_spread.classes %}
+  <div class="audience-chart-grid">
+    <div class="stats-panel">
+      <div class="stats-toggle-wrap">
+        <h3 class="stats-toggle mb-0" id="breadth-chart-title"><i class="bi bi-bar-chart" aria-hidden="true"></i> Channels reached, observed and by chance</h3>
+      </div>
+      <div class="stats-panel-body">
+        <p class="audience-chart-note">Mean channels reached by the accounts in each class of replies written, against the rarefaction expectation.</p>
+        <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas id="audience-breadth" aria-labelledby="breadth-chart-title"></canvas></div>
+      </div>
+    </div>
+    <div class="stats-panel">
+      <div class="stats-toggle-wrap">
+        <h3 class="stats-toggle mb-0"><i class="bi bi-table" aria-hidden="true"></i> Channels per commenter</h3>
+      </div>
+      <div class="stats-panel-body audience-panel-pad">
+        <div class="table-responsive">
+          <table class="stats-table audience-table">
+            <thead><tr><th scope="col">Channels</th><th scope="col" class="text-end">Accounts</th><th scope="col" class="text-end">Share</th></tr></thead>
+            <tbody>
+              {% for bin in channel_bins %}
+              <tr><th scope="row">{{ bin.label }}</th><td class="text-end">{{ bin.accounts|thousands }}</td><td class="text-end">{{ bin.share|pct:1 }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <caption class="audience-caption">Channels reached by replies written. <em>Below chance</em>: the share of the class's accounts reaching fewer channels than the expectation.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Replies per account</th>
+          <th scope="col" class="text-end">Accounts</th>
+          <th scope="col" class="text-end">Channels reached</th>
+          <th scope="col" class="text-end">By chance</th>
+          <th scope="col" class="text-end">Observed / chance</th>
+          <th scope="col" class="text-end">Below chance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in channel_spread.classes %}
+        <tr>
+          <th scope="row">{{ c.label }}</th>
+          <td class="text-end">{{ c.accounts|thousands }}</td>
+          <td class="text-end">{{ c.observed|decimal:2 }}</td>
+          <td class="text-end">{{ c.expected|decimal:2 }}</td>
+          <td class="text-end">{{ c.ratio|decimal:2 }}</td>
+          <td class="text-end">{{ c.below_share|pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% for group in groups %}
+  <h3 class="audience-subtitle audience-subtitle--spaced">Across {{ group.name|lower }} labels</h3>
+  <p class="audience-group-summary">
+    Of the {{ group.accounts|thousands }} commenters on channels with a {{ group.name|lower }} label,
+    <strong>{{ group.multi_label_share|pct:1 }}</strong> of those with 2+ replies comment under more than one label; their
+    effective number of labels averages <strong>{{ group.effective_mean|decimal:2 }}</strong>, and
+    <strong>{{ group.cross_share_mean|pct:1 }}</strong> of their replies fall outside their main label.
+    They reach <strong>{{ group.spread.ratio|decimal:2 }}</strong> times the labels chance would give.
+    {% if group.unlabelled_replies %}{{ group.unlabelled_replies|thousands }} replies on channels without a {{ group.name|lower }} label are left out.{% endif %}
+  </p>
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <thead>
+        <tr>
+          <th scope="col">{{ group.name }}</th>
+          <th scope="col" class="text-end">Commenters</th>
+          <th scope="col" class="text-end">Replies</th>
+          <th scope="col" class="text-end"><abbr title="Share of the label's commenters who also comment under another label of the group">Also elsewhere</abbr></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lab in group.labels %}
+        <tr>
+          <th scope="row">{% if lab.color %}<span class="org-dot" style="background: {{ lab.color }};" aria-hidden="true"></span>{% endif %}{{ lab.name }}</th>
+          <td class="text-end">{{ lab.commenters|thousands }}</td>
+          <td class="text-end">{{ lab.replies|thousands }}</td>
+          <td class="text-end">{{ lab.elsewhere_share|pct:1 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="channels-empty">No reply in scope yet.</div>
+  {% endif %}
+</section>
