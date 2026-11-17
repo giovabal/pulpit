@@ -57,13 +57,24 @@ def _elementary(lam: np.ndarray, kmax: int) -> np.ndarray:
     return e
 
 
-def _without_one(lam: np.ndarray, e: np.ndarray) -> np.ndarray:
-    """E[a, j] = e_j of *lam* without its a-th weight (e_j(λ) = e_j(λ₋ₐ) + λₐ e_{j−1}(λ₋ₐ))."""
-    out = np.zeros((len(lam), len(e)))
+def _without(lam: np.ndarray, kmax: int, skip: int | None = None) -> np.ndarray:
+    """E[b, j] = e_j of *lam* without its b-th weight — and without the *skip*-th too when given (row
+    ``skip`` then leaves out that one weight only).
+
+    Built by adding the weights one at a time to every row but their own: sums of positive terms only.
+    The shortcut e_j(λ₋ᵦ) = e_j(λ) − λᵦ e_{j−1}(λ₋ᵦ) subtracts numbers of the same size and loses every
+    digit once an account's degree reaches a few dozen.
+    """
+    n = len(lam)
+    out = np.zeros((n, kmax + 1))
     out[:, 0] = 1.0
-    for j in range(1, len(e)):
-        out[:, j] = e[j] - lam * out[:, j - 1]
-    return np.clip(out, 0.0, None)
+    rows = np.arange(n)
+    for x in range(n):
+        if x == skip:
+            continue
+        others = rows != x
+        out[others, 1:] = out[others, 1:] + lam[x] * out[others, :-1]
+    return out
 
 
 def fit_fixed_size_weights(unit_degrees: np.ndarray, account_degrees: Counter) -> np.ndarray:
@@ -73,7 +84,7 @@ def fit_fixed_size_weights(unit_degrees: np.ndarray, account_degrees: Counter) -
     lam = unit_degrees / unit_degrees.mean()
     for _ in range(FIT_MAX_ITERATIONS):
         e = _elementary(lam, kmax)
-        minus = _without_one(lam, e)
+        minus = _without(lam, kmax)
         expected = sum(n * lam * minus[:, k - 1] / e[k] for k, n in account_degrees.items())
         ratio = unit_degrees / np.where(expected > 0, expected, 1.0)
         lam = lam * ratio
@@ -116,17 +127,13 @@ def overlap_pairs(per_unit: dict[int, set[int]]) -> dict:
     lam = fit_fixed_size_weights(unit_degrees, account_degrees)
     kmax = max(account_degrees)
     e = _elementary(lam, kmax)
-    minus = _without_one(lam, e)
     pvals, rows = [], []
     for i in range(n):
+        both = _without(lam, kmax, skip=i)  # row j: e_m of λ without units i and j
         for j in range(i + 1, n):
-            # e_m of λ without both a and b, from e_m without a: E₋ₐ(m) = E₋ₐ₋ᵦ(m) + λᵦ E₋ₐ₋ᵦ(m−1).
-            both = np.zeros(kmax + 1)
-            both[0] = 1.0
-            for m in range(1, kmax + 1):
-                both[m] = max(minus[i, m] - lam[j] * both[m - 1], 0.0)
             terms = [
-                (count, lam[i] * lam[j] * both[k - 2] / e[k] if k >= 2 else 0.0) for k, count in account_degrees.items()
+                (count, lam[i] * lam[j] * both[j, k - 2] / e[k] if k >= 2 else 0.0)
+                for k, count in account_degrees.items()
             ]
             shared = len(per_unit[units[i]] & per_unit[units[j]])
             expected = sum(count * prob for count, prob in terms)

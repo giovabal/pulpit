@@ -16,7 +16,7 @@ from webapp.audience.breadth import hill_one, rarefaction
 from webapp.audience.channel_commenters import MARKED_CHANNEL_OFFSET, channel_telegram_id
 from webapp.audience.overlap import (
     _elementary,
-    _without_one,
+    _without,
     citation_counts,
     fit_fixed_size_weights,
     overlap_pairs,
@@ -328,7 +328,7 @@ class FixedSizeNullTests(TestCase):
         accounts = {1: 51, 2: 10, 3: 4}  # 51 + 2·10 + 3·4 = 83 = Σ degrees
         lam = fit_fixed_size_weights(degrees, accounts)
         e = _elementary(lam, 3)
-        minus = _without_one(lam, e)
+        minus = _without(lam, 3)
         expected = sum(n * lam * minus[:, k - 1] / e[k] for k, n in accounts.items())
         np.testing.assert_allclose(expected, degrees, rtol=1e-8)
 
@@ -358,6 +358,14 @@ class FixedSizeNullTests(TestCase):
             shared.append(pair)
         first = next(pr for pr in result["pairs"] if {pr["a"], pr["b"]} == {units[a], units[b]})
         self.assertAlmostEqual(first["expected"], np.mean(shared), delta=0.6)
+
+    def test_leave_out_polynomials_stay_exact_at_high_degree(self) -> None:
+        # 60 units of very unequal weight: the subtraction shortcut loses every digit here.
+        lam = np.array([10.0 ** (i % 7 - 3) for i in range(60)])
+        both = _without(lam, 40, skip=0)
+        direct = _elementary(np.delete(lam, [0, 5]), 40)
+        np.testing.assert_allclose(both[5], direct, rtol=1e-9)
+        np.testing.assert_allclose(both[0], _elementary(np.delete(lam, 0), 40), rtol=1e-9)
 
     def test_one_channel_commenters_never_create_overlap(self) -> None:
         per_unit = {1: {1, 2, 3, 4}, 2: {5, 6, 7, 8}}
