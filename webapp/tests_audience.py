@@ -1,5 +1,5 @@
 """The Audience page (webapp/audience/): participation inequality, breadth, audience overlap, retention and
-channels as commenters — their statistics, pages and CSVs — and the subscriber history."""
+channels as commenters — their statistics, pages and CSVs."""
 
 import csv
 import datetime
@@ -22,7 +22,7 @@ from webapp.audience.overlap import (
     overlap_pairs,
     qap_correlation,
 )
-from webapp.models import ChannelSubscriberCount, LabelGroup, LabelParent, Message, MessageReply
+from webapp.models import LabelGroup, LabelParent, Message, MessageReply
 from webapp.test_helpers import attribute, make_channel, make_label
 
 import numpy as np
@@ -456,19 +456,6 @@ class ChannelCommentersTests(_LabelledCorpus):
         Message.objects.create(channel=self.b, telegram_id=9, date=_at(D0), forwarded_from=self.a)
         data = audience.channel_commenters()
         self.assertIs(next(r for r in data["pairs"] if r["sender_tid"] == self.b.telegram_id)["cited"], True)
-
-
-# ── Subscriber history ───────────────────────────────────────────────────────
-
-
-class SubscriberHistoryTests(_LabelledCorpus):
-    def test_record_keeps_one_count_a_day(self) -> None:
-        ChannelSubscriberCount.record(self.b, 10)
-        ChannelSubscriberCount.record(self.b, 12)
-        ChannelSubscriberCount.record(self.b, None)
-        self.assertEqual(
-            list(ChannelSubscriberCount.objects.filter(channel=self.b).values_list("count", flat=True)), [12]
-        )
 
 
 # ── Pages and CSVs ───────────────────────────────────────────────────────────

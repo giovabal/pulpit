@@ -6,17 +6,20 @@
 
 {% block content %}
 <div class="channels-header">
-  <div class="d-flex align-items-baseline gap-2 flex-wrap">
-    <h1 class="h5 fw-semibold mb-0">Audience</h1>
+  {# One child, so the description sits under the title instead of beside it. #}
+  <div>
+    <div class="d-flex align-items-baseline gap-2 flex-wrap">
+      <h1 class="h5 fw-semibold mb-0">Audience</h1>
+    </div>
+    <p class="text-muted small mb-0 mt-1">
+      The <strong>commenters</strong> of in-target channels: the accounts replying in their discussion groups, to posts inside
+      the channels' in-target periods. Telegram shows a channel's subscribers only to its admins, so this is the part of the audience that can be followed person by person.
+      {{ channels_with_comments|thousands }} of the {{ scope_channels|thousands }} channels in scope have comments
+      ({{ channels_with_discussion|thousands }} have a discussion group): the figures describe their commenters, not the whole network's audience.
+      {% if left_out_accounts %}{{ left_out_accounts|thousands }} account{{ left_out_accounts|pluralize }} flagged as
+      Telegram bots or bulk posters {{ left_out_accounts|pluralize:"is,are" }} left out{% if WEB_ACCESS == "ALL" or request.user.is_staff %}; review them in <a href="{% url 'backoffice:commenters' %}">Manage → Commenters</a>{% endif %}.{% endif %}
+    </p>
   </div>
-  <p class="text-muted small mb-0 mt-1">
-    The <strong>commenters</strong> of in-target channels: the accounts replying in their discussion groups, to posts inside
-    the channels' in-target periods. Telegram shows a channel's subscribers only to its admins, so this is the part of the audience that can be followed person by person.
-    {{ channels_with_comments|thousands }} of the {{ scope_channels|thousands }} channels in scope have comments
-    ({{ channels_with_discussion|thousands }} have a discussion group): the figures describe their commenters, not the whole network's audience.
-    {% if left_out_accounts %}{{ left_out_accounts|thousands }} account{{ left_out_accounts|pluralize }} flagged as
-    Telegram bots or bulk posters {{ left_out_accounts|pluralize:"is,are" }} left out{% if WEB_ACCESS == "ALL" or request.user.is_staff %}; review them in <a href="{% url 'backoffice:commenters' %}">Manage → Commenters</a>{% endif %}.{% endif %}
-  </p>
 </div>
 
 {% include "webapp/_scope_filter.html" %}
