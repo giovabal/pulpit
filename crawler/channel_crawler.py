@@ -24,7 +24,6 @@ from crawler.reference_resolver import ReferenceResolver, message_references
 from webapp.models import (
     Channel,
     ChannelLabel,
-    ChannelSubscriberCount,
     Message,
     MessageCustomReaction,
     MessageReaction,
@@ -418,7 +417,6 @@ class ChannelCrawler:
                 "emoji_pack",
             ]
         )
-        ChannelSubscriberCount.record(channel, channel.participants_count)
 
     @staticmethod
     def _representative_channel_label(channel: Channel) -> "ChannelLabel | None":

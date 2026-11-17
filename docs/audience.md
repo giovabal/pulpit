@@ -79,12 +79,6 @@ The last is a channel-to-channel tie the citation network does not see, since th
 
 ---
 
-## Subscriber history
-
-`Channel.participants_count` is the count at the last crawl. From 0.30 on, every crawl that fetches a channel's details also keeps that day's count (one row per channel per day), so subscriber growth can be read later; the first point is the count stored before, dated by the channel's last update. No page reads the history yet.
-
----
-
 ## References
 
 - Benjamini, Y. & Hochberg, Y. (1995) "Controlling the false discovery rate." *Journal of the Royal Statistical Society B* 57(1):289–300.
