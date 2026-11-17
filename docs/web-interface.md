@@ -26,8 +26,8 @@ The landing page gives a project-level snapshot of the monitored corpus:
 ## Channel list — `/channels/`
 
 <figure>
-<img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel list">
-<figcaption><em>Channel list with label filter, sort controls, and group chips.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_11.jpg" alt="Channel list">
+<figcaption><em>Channel list: the channel cards, with the filter box.</em></figcaption>
 </figure>
 <br>
 
@@ -46,15 +46,14 @@ A channel shows its network position data once crawled while it has an in-target
 ## Channel detail — `/channel/<id>/`
 
 <figure>
-<img src="../webapp_engine/static/screenshot_11.jpg" alt="Channel detail page">
-<figcaption><em>Channel detail page: subscriber history, message volume chart, network stats card, and message list.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel detail page">
+<figcaption><em>Channel detail page: summary cards, reactions, and the messages and views per month charts with event lines.</em></figcaption>
 </figure>
 <br>
 
 Each channel has a dedicated detail page with:
 
-- **Subscriber history chart** — subscriber count over time with event annotations (vertical lines for any configured events whose date falls within the chart period)
-- **Message volume chart** — message activity over time, also annotated with events
+- **Message volume chart** — message activity over time, with event annotations (vertical lines for any configured events whose date falls within the chart period)
 - **Network stats card** — in-degree, out-degree, all computed measures for this channel from the latest export
 - **Vacancy Analysis card** — appears when the channel has a registered vacancy (see [Vacancy analysis](vacancy-analysis.md))
 - **Message list** — paginated list of crawled messages with timestamps and forward indicators. Each post card shows views, forwards, reactions, and the post date. When a message has been edited after original publication, a pencil icon and "Edited" label appear in the footer (exact edit timestamp on hover). When a channel has "Sign messages" enabled, the post author's name appears on the card below the message body. Clicking a picture opens it full size on a dark overlay, fitted to the screen; click the picture for actual pixels, and step through the other pictures of the same post with the ‹ › arrows, the arrow keys or a swipe (Esc or a click outside closes it). The bar at the bottom shows the picture's pixel size — the largest size Telegram stores, which is Telegram's own recompressed copy for anything posted as a photo; the uploader's original file is kept only when it was sent as a file (stored as *other media*).
@@ -69,8 +68,8 @@ Each channel has a dedicated detail page with:
 - **Custom emoji packs** — under the reactions, the packs the channel draws from in its own posts (forwards carry their source's emoji and are left out), with its most used emoji of each and how many times; in-target packs carry a ◎ mark, and each links to the pack's page.
 
 <figure>
-<img src="../webapp_engine/static/screenshot_12.jpg" alt="Channel detail showing vacancy analysis">
-<figcaption><em>Channel detail page: Vacancy Analysis card showing replacement candidates with scores.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_12.jpg" alt="Channel detail page: message list">
+<figcaption><em>Channel detail page: the Messages and Forwards received tabs, with the search box and Options menu.</em></figcaption>
 </figure>
 <br>
 
