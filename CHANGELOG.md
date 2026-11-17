@@ -4,6 +4,9 @@
 ### New features
 - **Message tags can nest.** A tag can now sit under another, to any depth — *Hand gestures › Nazi salute* — so a broad tag can say which kind it is, while a tag with no sub-tags stays a plain tag. Filtering by a tag also finds its sub-tags, and *Not via a sub-tag* lists the posts still waiting for a more specific one. Adding a sub-tag to a post refines the broader tag already on it. Typing `Parent/Sub-tag` on a post card creates a sub-tag on the fly, and **Manage → Tags** shows the tree, with sub-tags added, moved and merged there. See [Message tags § Sub-tags](docs/web-interface.md#message-tags).
 
+### Improvements
+- **The home page no longer calls summed subscriber counts "subscribers".** The figure under *Total views* now reads *subscriptions*: someone following several channels counts once per channel, and Telegram doesn't show who subscribes to a broadcast channel, so distinct subscribers can't be counted. A new *unique commenters* figure next to it counts the distinct accounts replying in the channels' discussion groups, each once. Tooltips explain both.
+
 ## [0.29] - 2026-11-09
 *Methodology review of the measures and community detection, with homophily and significance. Bots detection. Emoji packs. Finer timelines and event tests. Image copies and outbound links.*
 

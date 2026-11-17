@@ -2,7 +2,9 @@
 
 Home page ecosystem summary (two rows of cards):
   * Row 1 (4 cards): channels (with to_inspect count), messages (with replies),
-    media (with per-type breakdown), total views (with subscribers).
+    media (with per-type breakdown), total views (with subscriptions — the
+    non-unique sum of subscriber counts — and unique commenters, the distinct
+    user accounts replying in the linked discussion groups).
   * Row 2 (3 cards): forwards sent and mentions sent across the in-target set,
     with self / in-target / out-of-target splits, plus the date range. The
     "received" counterparts are omitted: at the ecosystem level they are a
@@ -33,11 +35,12 @@ from django.db.models import Count, F, Max, Min, Q, Sum
 from webapp.models import Channel, Message, MessageReply
 from webapp.utils.dates import fmt_date
 
-# Suffix bumped to :v3 when the card layout changed (the two "received" cards
-# were dropped and the date range moved to row 2); :v2 had marked the
-# list[dict] -> list[list[dict]] shape change. Old entries become orphans and
-# the FileBasedCache evicts them on its own schedule.
-HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v3"
+# Suffix bumped to :v4 when the views card gained "subscriptions" + "unique
+# commenters" (with tooltips); :v3 when the card layout changed (the two
+# "received" cards were dropped and the date range moved to row 2); :v2 had
+# marked the list[dict] -> list[list[dict]] shape change. Old entries become
+# orphans and the FileBasedCache evicts them on its own schedule.
+HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v4"
 HOME_SUMMARY_CACHE_TIMEOUT = 3600  # 1 hour
 
 
@@ -99,9 +102,15 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
     total_subscribers = (
         in_target_qs.filter(participants_count__isnull=False).aggregate(total=Sum("participants_count"))["total"] or 0
     )
-    total_replies = MessageReply.objects.filter(
-        parent_message__channel__in=in_target_pks, parent_message__is_lost=False
-    ).count()
+    replies = MessageReply.objects.filter(parent_message__channel__in=in_target_pks, parent_message__is_lost=False)
+    total_replies = replies.count()
+    # Subscriber lists of broadcast channels are admin-only on Telegram, so the
+    # sum above counts a person once per channel they follow. The distinct
+    # commenters are the one cross-channel identity Pulpit observes: Telethon's
+    # marked ``sender_id`` is positive for a user account and negative for a
+    # channel/group posting as itself (anonymous admins, channel personas), which
+    # are left out.
+    unique_commenters = replies.filter(sender_id__gt=0).values("sender_id").distinct().count()
 
     # Row 2 — forwards sent. Only the "sent" side is shown on the home page:
     # across the whole in-target set, every in-target-to-in-target forward is a
@@ -168,7 +177,27 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
             "icon": "bi-eye",
             "label": "Total views",
             "value": f"{total_views:,}",
-            "secondary": [{"value": f"{total_subscribers:,}", "label": "subscribers"}],
+            "secondary": [
+                {
+                    "value": f"{total_subscribers:,}",
+                    "label": "subscription" if total_subscribers == 1 else "subscriptions",
+                    "title": (
+                        "Sum of each channel's subscriber count at its last crawl. Someone following "
+                        "several channels is counted once per channel, so this is not a number of "
+                        "distinct people: Telegram shows a channel's subscriber list only to its admins."
+                    ),
+                },
+                {
+                    "value": f"{unique_commenters:,}",
+                    "label": "unique commenter" if unique_commenters == 1 else "unique commenters",
+                    "title": (
+                        "Distinct Telegram user accounts that replied in these channels' linked "
+                        "discussion groups, each counted once however many channels they comment on. "
+                        "Only the active minority who comment, so a floor on the distinct audience, "
+                        "not an estimate of it."
+                    ),
+                },
+            ],
         },
     ]
     row2 = [
