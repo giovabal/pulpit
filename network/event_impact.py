@@ -252,7 +252,7 @@ class _Records:
         self.week_index = {w: i for i, w in enumerate(self.weeks)}
 
 
-def _partition_groups() -> list[tuple[int, str, bool]]:
+def partition_groups() -> list[tuple[int, str, bool]]:
     from webapp.models import LabelGroup
 
     return list(
@@ -262,7 +262,7 @@ def _partition_groups() -> list[tuple[int, str, bool]]:
     )
 
 
-class _Membership:
+class LabelMembership:
     """Label held by a channel at a date, for one partition group (container groups via their children)."""
 
     def __init__(self, channel_ids: list[int], group_id: int, is_container: bool) -> None:
@@ -308,7 +308,7 @@ def _scope_test(event: dict[str, Any], channel_ids: list[int]):
     return test
 
 
-def _series(records: _Records, groups: list[tuple[int, str, _Membership]], keep=None) -> dict[str, np.ndarray]:
+def _series(records: _Records, groups: list[tuple[int, str, LabelMembership]], keep=None) -> dict[str, np.ndarray]:
     """The weekly metric arrays for the channels ``keep(channel, day)`` selects (all when ``None``)."""
     n = len(records.weeks)
     idx = records.week_index
@@ -529,7 +529,8 @@ def compute_event_impact(
         include_mentions=include_mentions,
     )
     groups = [
-        (gid, name, _Membership(records.observed, gid, is_container)) for gid, name, is_container in _partition_groups()
+        (gid, name, LabelMembership(records.observed, gid, is_container))
+        for gid, name, is_container in partition_groups()
     ]
     metrics = list(METRICS) + [
         (f"{CROSS_LABEL_PREFIX}{gid}", f"Cross-label citation share ({name})", "share") for gid, name, _m in groups

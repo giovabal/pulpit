@@ -1,0 +1,59 @@
+{% load numbers %}
+<section aria-labelledby="retention-title">
+  <h2 class="audience-section-title" id="retention-title">Retention</h2>
+  <p class="audience-lead">Whether the comment audience renews itself or rests on a core that ages: commenters per month, and how much of each quarter's newcomers comes back.</p>
+
+  {% if accounts %}
+  <div class="summary-grid">
+    <div class="summary-card">
+      <i class="bi bi-arrow-repeat sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Came back</span>
+      <div class="sc-value-row"><span class="sc-value">{{ returning_share|pct }}</span><span class="sc-note">of {{ accounts|thousands }} commenters</span></div>
+      <span class="sc-secondary">commented in more than one month</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-calendar-range sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Comments from</span>
+      <div class="sc-value-row"><span class="sc-value audience-dates">{{ first_day|date:"M Y" }} – {{ last_day|date:"M Y" }}</span></div>
+    </div>
+  </div>
+
+  <div class="stats-panel audience-wide-panel">
+    <div class="stats-toggle-wrap">
+      <h3 class="stats-toggle mb-0" id="monthly-title"><i class="bi bi-graph-up" aria-hidden="true"></i> Commenters per month</h3>
+    </div>
+    <div class="stats-panel-body">
+      <p class="audience-chart-note">Accounts active each month, and those commenting for the first time. Both follow the comment coverage too; the CSV adds the channels with comments each month.</p>
+      <div class="chart-canvas-wrap chart-canvas-wrap--sm"><canvas id="audience-monthly" aria-labelledby="monthly-title"></canvas></div>
+    </div>
+  </div>
+
+  <h3 class="audience-subtitle audience-subtitle--spaced">Cohorts</h3>
+  <div class="table-responsive">
+    <table class="stats-table audience-table audience-cohorts">
+      <caption class="audience-caption">Accounts by the quarter of their first reply, and the share of each cohort commenting again 1, 2, … quarters later. Darker = more of the cohort; blank = not over yet.</caption>
+      <thead>
+        <tr>
+          <th scope="col">First reply</th>
+          <th scope="col" class="text-end">Accounts</th>
+          {% for q in cohort_quarters %}<th scope="col" class="text-center">+{{ q }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for cohort in cohorts %}
+        <tr>
+          <th scope="row">{{ cohort.quarter }}</th>
+          <td class="text-end">{{ cohort.size|thousands }}</td>
+          {% for cell in cohort.cells %}
+          {% if cell is None %}<td class="audience-cell"></td>
+          {% else %}<td class="audience-cell audience-cell--seq text-center" style="--heat: {{ cell.percent }}%;">{{ cell.value|pct }}</td>{% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="channels-empty">No reply in scope yet.</div>
+  {% endif %}
+</section>

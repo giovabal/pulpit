@@ -987,6 +987,12 @@ tr:hover .bo-detail-btn {
   color: var(--success);
 }
 
+.bo-badge--danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
 .bo-labels-intro {
   max-width: 72ch;
 }

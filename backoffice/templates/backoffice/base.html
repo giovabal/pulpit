@@ -29,6 +29,10 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'domains' %} active{% endif %}">
       <i class="bi bi-globe2 me-1" aria-hidden="true"></i>Domains
     </a>
+    <a href="{% url 'backoffice:commenters' %}"
+       class="bo-subnav-link{% if request.resolver_match.url_name == 'commenters' %} active{% endif %}">
+      <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Commenters
+    </a>
     <a href="{% url 'backoffice:sources' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'sources' %} active{% endif %}">
       <i class="bi bi-collection me-1" aria-hidden="true"></i>Sources

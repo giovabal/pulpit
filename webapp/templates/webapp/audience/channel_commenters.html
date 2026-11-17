@@ -1,0 +1,59 @@
+{% load numbers %}
+<section aria-labelledby="channel-commenters-title">
+  <h2 class="audience-section-title" id="channel-commenters-title">Channels as commenters</h2>
+  <p class="audience-lead">Comments written by a channel under its own name. On another channel's posts, that is a channel-to-channel tie the citation network — built from forwards and mentions — does not see. Channels are public actors, so they are named here.</p>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <i class="bi bi-broadcast sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">On other channels' posts</span>
+      <div class="sc-value-row"><span class="sc-value">{{ kinds.other|thousands }}</span><span class="sc-note">comments</span></div>
+      <span class="sc-secondary">by <strong>{{ commenting_channels|thousands }}</strong> channels, over <strong>{{ pairs|length|thousands }}</strong> pairs</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-eye-slash sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">Ties the citations miss</span>
+      <div class="sc-value-row"><span class="sc-value">{{ uncited_pairs|thousands }}</span><span class="sc-note">pairs</span></div>
+      <span class="sc-secondary">neither forwards nor mentions the other</span>
+    </div>
+    <div class="summary-card">
+      <i class="bi bi-reply sc-icon" aria-hidden="true"></i>
+      <span class="sc-label">On their own posts</span>
+      <div class="sc-value-row"><span class="sc-value">{{ kinds.own|thousands }}</span><span class="sc-note">comments</span></div>
+      <span class="sc-secondary">plus <strong>{{ kinds.group|thousands }}</strong> by discussion groups' anonymous admins</span>
+    </div>
+  </div>
+
+  {% if pairs %}
+  <h3 class="audience-subtitle audience-subtitle--spaced">Channel → channel</h3>
+  <div class="table-responsive">
+    <table class="stats-table audience-table">
+      <thead>
+        <tr>
+          <th scope="col">Commenting channel</th>
+          <th scope="col">On the posts of</th>
+          <th scope="col" class="text-end">Comments</th>
+          <th scope="col">When</th>
+          <th scope="col"><abbr title="Whether the two channels forward or mention each other, either way, in any stored message">Also cited</abbr></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in pairs %}
+        <tr>
+          <th scope="row" class="audience-channel-cell">
+            {% if r.sender %}{% include "webapp/audience/_channel.html" with channel=r.sender %}{% if not r.sender_in_target %} <span class="audience-flag">not in target</span>{% endif %}
+            {% else %}{{ r.sender_name|default:"Unknown channel" }} <span class="text-muted small">(not crawled, id {{ r.sender_tid }})</span>{% endif %}
+          </th>
+          <td class="audience-channel-cell">{% include "webapp/audience/_channel.html" with channel=r.channel %}</td>
+          <td class="text-end">{{ r.comments|thousands }}</td>
+          <td class="audience-nowrap">{{ r.first|date:"M Y" }}{% if r.last|date:"Ym" != r.first|date:"Ym" %} – {{ r.last|date:"M Y" }}{% endif %}</td>
+          <td>{% if r.cited is None %}<span class="text-muted">—</span>{% elif r.cited %}yes{% else %}<strong>no</strong>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="channels-empty">No channel commented as itself on another channel's posts.</div>
+  {% endif %}
+</section>

@@ -1,0 +1,1 @@
+{% if channel %}{% if channel.current_label %}<span class="org-dot" style="background: {{ channel.current_label.color }};" aria-hidden="true"></span>{% endif %}<a href="{{ channel.get_absolute_url }}">{{ channel.title }}</a>{% else %}{{ fallback|default:"—" }}{% endif %}

@@ -87,4 +87,4 @@ The fixed rules — the site rule, the platform and Telegram hosts, the co-linki
 
 ---
 
-← [Image copies](image-copies.md) · [Workflow](workflow.md) →
+← [Image copies](image-copies.md) · [Audience](audience.md) →

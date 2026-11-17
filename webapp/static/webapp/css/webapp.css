@@ -34,6 +34,9 @@
   --chart-fill: rgba(67, 56, 202, .08);
   --chart-grid: #ece9e3;
   --chart-label: #78716c;
+  /* Diverging tints (more / fewer than expected), validated for CVD in both themes. */
+  --div-pos: #4338ca;
+  --div-neg: #c2410c;
   /* Semantic colours — danger / warning / success / info */
   --danger: #b91c1c;
   --danger-hover: #991b1b;
@@ -84,6 +87,8 @@
   --chart-fill: rgba(129, 140, 248, .14);
   --chart-grid: #2a2a31;
   --chart-label: #c7c1bb;
+  --div-pos: #6366f1;
+  --div-neg: #ea580c;
   /* semantic — lift backgrounds toward dark, keep accents readable */
   --danger: #f87171;
   --danger-hover: #fca5a5;
@@ -331,7 +336,6 @@ body {
   color: var(--accent);
   background: var(--accent-bg);
 }
-
 
 .org-dot {
   display: inline-block;
@@ -2565,7 +2569,6 @@ body {
   opacity: 1;
 }
 
-
 /* ---------- Message tags ---------- */
 /* Chip colours come from each tag (--tag-color, inline); the text flips to white
    on dark tag colours (.is-dark, from BaseColorModel.is_color_dark). */
@@ -2889,4 +2892,168 @@ html.lightbox-open {
   .lightbox-stage {
     padding: 3.5rem .5rem;
   }
+}
+
+/* ---------- Users page (/users/) ---------- */
+
+.audience-section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 .35rem;
+}
+
+.audience-lead {
+  max-width: 80ch;
+  margin: 0 0 1rem;
+  font-size: .875rem;
+}
+
+.audience-subtitle {
+  font-size: .95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.audience-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.audience-chart-grid .stats-panel {
+  width: 100%;
+  max-width: none;
+  margin-bottom: 0;
+}
+
+.audience-panel-pad {
+  padding: .75rem 1rem;
+}
+
+.audience-chart-note {
+  margin: .75rem 1rem 0;
+  color: var(--muted);
+  font-size: .8125rem;
+}
+
+.audience-table {
+  margin-bottom: 1.5rem;
+}
+
+.audience-table th[scope="row"] {
+  padding: .25rem .4rem;
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.audience-table td.text-end {
+  font-variant-numeric: tabular-nums;
+}
+
+/* .stats-table sets its last column in mono for single-value tables; here every number column
+   matches, so the last one keeps the table's own font. */
+.audience-table th:last-child,
+.audience-table td:last-child {
+  font-family: inherit;
+}
+
+.audience-table tr:last-child th {
+  border-bottom: none;
+}
+
+.audience-caption {
+  caption-side: bottom;
+  padding-top: .5rem;
+  color: var(--muted);
+  font-size: .8125rem;
+}
+
+.audience-channel-cell {
+  min-width: 12rem;
+}
+
+.audience-subtitle--spaced {
+  margin: 1.5rem 0 .5rem;
+}
+
+.audience-wide-panel {
+  max-width: none;
+}
+
+.audience-group-summary {
+  max-width: 90ch;
+  margin: 0 0 .5rem;
+  font-size: .8125rem;
+}
+
+.audience-nowrap {
+  white-space: nowrap;
+}
+
+.audience-index {
+  display: inline-block;
+  min-width: 1.5rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-flag {
+  display: inline-block;
+  padding: 0 .375rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: .6875rem;
+  font-weight: 600;
+}
+
+/* Heat cells: --heat (a percentage set inline) mixes the tint into the surface; the text keeps the
+   page's ink, and the strongest tint stays light enough for it. */
+.audience-cell {
+  min-width: 2.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-cell--pos {
+  background: color-mix(in srgb, var(--div-pos) var(--heat), transparent);
+}
+
+.audience-cell--neg {
+  background: color-mix(in srgb, var(--div-neg) var(--heat), transparent);
+}
+
+.audience-cell--seq {
+  background: color-mix(in srgb, var(--chart-line) var(--heat), transparent);
+}
+
+.audience-cell--self {
+  background: var(--hover);
+}
+
+.audience-sig {
+  margin-left: .125rem;
+  font-size: .625rem;
+  vertical-align: super;
+}
+
+.audience-key {
+  padding: 0 .25rem;
+  border-radius: 2px;
+}
+
+.audience-key--pos {
+  background: color-mix(in srgb, var(--div-pos) 40%, transparent);
+}
+
+.audience-key--neg {
+  background: color-mix(in srgb, var(--div-neg) 40%, transparent);
+}
+
+
+.audience-dates {
+  font-size: 1.1rem;
 }

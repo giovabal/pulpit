@@ -2234,6 +2234,16 @@ class ChannelCrawlerSetMoreDetailsTests(TestCase):
         self.crawler.set_more_channel_details(self.channel, tc)
         self.assertEqual(self.channel.participants_count, 1234)
 
+    def test_keeps_the_day_s_subscriber_count(self) -> None:
+        from webapp.models import ChannelSubscriberCount
+
+        for participants in (1234, 1300):  # two crawls the same day: the last one wins
+            self.api_client.client.return_value = self._make_full_channel_response(participants=participants)
+            self.crawler.set_more_channel_details(self.channel, MagicMock())
+        self.assertEqual(
+            list(ChannelSubscriberCount.objects.values_list("channel_id", "count")), [(self.channel.pk, 1300)]
+        )
+
     def test_sets_about(self) -> None:
         tc = MagicMock()
         self.api_client.client.return_value = self._make_full_channel_response(about="Great channel")

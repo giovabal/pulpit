@@ -50,6 +50,9 @@
               <a class="nav-link{% if url_name == 'channel-list' or url_name == 'channel-detail' or url_name == 'channel-vacancies' or url_name == 'emoji-packs' or url_name == 'emoji-pack-detail' or url_name == 'custom-emoji-list' or url_name == 'custom-emoji-detail' %} active{% endif %}" href="{% url 'channel-list' %}">Channels</a>
             </li>
             <li class="nav-item">
+              <a class="nav-link{% if url_name == 'audience' or url_name == 'audience-section' %} active{% endif %}" href="{% url 'audience' %}">Audience</a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link{% if url_name == 'operations' %} active{% endif %}" href="{% url 'operations' %}">Operations</a>
             </li>
             <li class="nav-item">

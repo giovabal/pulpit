@@ -43,6 +43,7 @@ Pulpit answers both structural and dynamical questions about a Telegram informat
 - Which channels repeatedly forward the same content within minutes of each other — moving in step rather than merely citing one another? *([Coordination Analysis](docs/coordination-analysis.md))*
 - Who re-posts whose pictures without forwarding them, and which channels photograph their own activity? *([Image copies](docs/image-copies.md))*
 - Where do the channels send their readers — donation pages, shops, mainstream or alternative platforms — and who shares that infrastructure? *([Outbound links](docs/outbound-links.md))*
+- Who comments on these channels — a crowd or a few regulars — and which channels share their commenters? *([Audience](docs/audience.md))*
 
 **About communities:**
 

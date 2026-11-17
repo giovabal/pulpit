@@ -853,6 +853,9 @@ class MessageReply(models.Model):
     text = models.TextField(blank=True)
     sender_name = models.CharField(max_length=255, blank=True)
     sender_id = models.BigIntegerField(null=True)
+    # Telegram's ``User.bot`` for the sender; None = not captured (a channel or group posting as
+    # itself, or a reply stored before 0.30 — ``--refresh-messages-stats --fetch-replies`` fills it).
+    sender_is_bot = models.BooleanField(null=True)
     views = models.PositiveBigIntegerField(null=True)
 
     class Meta:

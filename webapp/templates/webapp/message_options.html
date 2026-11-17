@@ -156,6 +156,41 @@
           </div>
         </div>
 
+        <div class="msg-options-col">
+          <div class="msg-options-section">
+            <div class="msg-options-label">Comments</div>
+            <label class="msg-options-item">
+              <input type="radio" name="comments" value="any" class="msg-opt-input" data-default
+                     {% if comments == "any" %}checked{% endif %}> Both
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="comments" value="with" class="msg-opt-input"
+                     {% if comments == "with" %}checked{% endif %}> With comments
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="comments" value="without" class="msg-opt-input"
+                     {% if comments == "without" %}checked{% endif %}> Without comments
+            </label>
+            <p class="msg-options-note">Comments are the replies in the channel's discussion group.</p>
+          </div>
+
+          <div class="msg-options-section">
+            <div class="msg-options-label">Reactions</div>
+            <label class="msg-options-item">
+              <input type="radio" name="reactions" value="any" class="msg-opt-input" data-default
+                     {% if reactions == "any" %}checked{% endif %}> Both
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="reactions" value="with" class="msg-opt-input"
+                     {% if reactions == "with" %}checked{% endif %}> With reactions
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="reactions" value="without" class="msg-opt-input"
+                     {% if reactions == "without" %}checked{% endif %}> Without reactions
+            </label>
+          </div>
+        </div>
+
         {% if CAN_VIEW_TAGS and all_tags %}
         <div class="msg-options-col">
           <div class="msg-options-section">
