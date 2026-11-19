@@ -9,7 +9,6 @@ from webapp.emoji_usage import pack_previews
 from webapp.models import (
     Channel,
     ChannelLabel,
-    ChannelSource,
     ChannelVacancy,
     CustomEmojiPack,
     Domain,
@@ -30,7 +29,6 @@ from webapp.models.tag_models import TagTree, message_origin, next_tag_color, ta
 from .serializers import (
     ChannelLabelSerializer,
     ChannelSerializer,
-    ChannelSourceSerializer,
     ChannelVacancySerializer,
     CustomEmojiPackSerializer,
     DomainCategorySerializer,
@@ -123,13 +121,6 @@ class LabelParentViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class ChannelSourceViewSet(viewsets.ModelViewSet):
-    serializer_class = ChannelSourceSerializer
-
-    def get_queryset(self):
-        return ChannelSource.objects.annotate(channel_count=Count("channels")).order_by("name")
-
-
 class ChannelViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -145,7 +136,6 @@ class ChannelViewSet(
     def get_queryset(self):
         qs = Channel.objects.prefetch_related(
             "channel_labels__label__group",
-            "sources",
             Prefetch(
                 "profilepicture_set",
                 queryset=ProfilePicture.objects.order_by("-date")[:1],
@@ -169,12 +159,6 @@ class ChannelViewSet(
             if not label_id.isdigit():
                 raise ValidationError({"label": "must be an integer"})
             qs = qs.filter(channel_labels__label_id=int(label_id)).distinct()
-
-        source_id = self.request.query_params.get("source", "").strip()
-        if source_id:
-            if not source_id.isdigit():
-                raise ValidationError({"source": "must be an integer"})
-            qs = qs.filter(sources__id=int(source_id)).distinct()
 
         status_filter = self.request.query_params.get("status", "").strip()
         if status_filter == "unassigned":
@@ -221,13 +205,6 @@ class ChannelViewSet(
         if not ids:
             return Response({"error": "No channel ids provided."}, status=status.HTTP_400_BAD_REQUEST)
         label_id = request.data.get("label_id")
-        add_source_ids = _validate_id_list(request.data.get("add_source_ids", []))
-        remove_source_ids = _validate_id_list(request.data.get("remove_source_ids", []))
-        if add_source_ids is None or remove_source_ids is None:
-            return Response(
-                {"error": "'add_source_ids' and 'remove_source_ids' must be lists of integers."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         start_raw = request.data.get("start") or None
         end_raw = request.data.get("end") or None
         try:
@@ -268,10 +245,8 @@ class ChannelViewSet(
                 )
 
         channels = Channel.objects.filter(pk__in=ids)
-        # Materialised once: the M2M add/remove below must only see ids that still
-        # match a Channel row — a stale selection (channel deleted between page load
-        # and submit) would otherwise violate the FK constraint and 500 the whole
-        # request, rolling back the attribution changes too.
+        # Only ids that still match a Channel row count (a stale selection may name a channel
+        # deleted between page load and submit).
         valid_ids = list(channels.values_list("pk", flat=True))
 
         with transaction.atomic():
@@ -287,15 +262,6 @@ class ChannelViewSet(
                 else:
                     # Explicit unassign: clear every label on the selected channels.
                     ChannelLabel.objects.filter(channel__in=channels).delete()
-            # Pass validated ids to ``add()``/``remove()`` so the M2M operation runs
-            # once per source, rather than re-evaluating the ``channels`` queryset for
-            # each ``*channels`` unpack (which would hit the DB N extra times).
-            if add_source_ids:
-                for src in ChannelSource.objects.filter(pk__in=add_source_ids):
-                    src.channels.add(*valid_ids)
-            if remove_source_ids:
-                for src in ChannelSource.objects.filter(pk__in=remove_source_ids):
-                    src.channels.remove(*valid_ids)
 
         return Response({"updated": len(valid_ids)})
 
@@ -305,9 +271,9 @@ class ChannelViewSet(
 
         This is the channel editor's single save endpoint. Replacing the label
         periods (delete old, recreate new) AND applying the scalar flags
-        (is_lost / is_private / to_inspect) and source memberships all happen
+        (is_lost / is_private / to_inspect) all happen
         inside one transaction, so a validation or DB error rolls *everything*
-        back. That avoids the split-save failure mode where the flags/sources were
+        back. That avoids the split-save failure mode where the flags were
         PATCHed separately and stayed committed while the labels failed (or the
         labelling was left half-written by POSTing each period on its own).
 
@@ -320,14 +286,12 @@ class ChannelViewSet(
             return Response({"error": "'periods' must be a list."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Editable channel fields the editor sends alongside the periods; absent keys are left alone.
-        field_data = {
-            k: request.data[k] for k in ("source_ids", "is_lost", "is_private", "to_inspect") if k in request.data
-        }
+        field_data = {k: request.data[k] for k in ("is_lost", "is_private", "to_inspect") if k in request.data}
 
         with transaction.atomic():
             if field_data:
-                # Reuse ChannelSerializer for validation (source_ids existence, field types) and its
-                # update() (which applies sources.set). raise_exception rolls back the whole save.
+                # Reuse ChannelSerializer for validation (field types); raise_exception rolls back
+                # the whole save.
                 ch_serializer = self.get_serializer(channel, data=field_data, partial=True)
                 ch_serializer.is_valid(raise_exception=True)
                 ch_serializer.save()

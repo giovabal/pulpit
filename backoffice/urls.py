@@ -13,7 +13,6 @@ from .views import (
     MessageTagsView,
     ProjectView,
     SearchTermsView,
-    SourcesView,
     UsersView,
     VacanciesManageView,
 )
@@ -29,7 +28,6 @@ urlpatterns = [
     path("emoji-packs/", EmojiPacksManageView.as_view(), name="custom-emoji-packs"),
     path("domains/", DomainsManageView.as_view(), name="domains"),
     path("commenters/", CommentersManageView.as_view(), name="commenters"),
-    path("sources/", SourcesView.as_view(), name="sources"),
     path("search-terms/", SearchTermsView.as_view(), name="search-terms"),
     path("events/", EventsView.as_view(), name="events"),
     path("users/", UsersView.as_view(), name="users"),

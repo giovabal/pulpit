@@ -369,7 +369,6 @@ class ResolvedOptions:
     include_lost: bool
     include_private: bool
     channel_types: list[str]
-    channel_sources: list[str]
     # Container-label ids limiting the whole analysis to the channels holding a
     # label assigned under at least one of them (empty = no filter).
     filter_labels: list[int]
@@ -1083,17 +1082,6 @@ class Command(BaseCommand):
                 "Available: CHANNEL (broadcast channels), GROUP (supergroups/gigagroups), "
                 "USER (user accounts and bots). Defaults to the DEFAULT_CHANNEL_TYPES setting "
                 "([scope].channel_types in configuration/.operations-crawl)."
-            ),
-        )
-        parser.add_argument(
-            "--channel-sources",
-            dest="channel_sources",
-            default=None,
-            metavar="SOURCES",
-            help=(
-                "Comma-separated list of ChannelSource keys. "
-                "When provided, only channels belonging to at least one of these sources are included in the graph. "
-                "Leave unset to include all in-target channels regardless of source membership."
             ),
         )
         parser.add_argument(
@@ -2072,7 +2060,6 @@ class Command(BaseCommand):
                 start_date=period.start,
                 end_date=period.end,
                 channel_types=opts.channel_types,
-                channel_sources=opts.channel_sources or None,
                 filter_labels=opts.filter_labels or None,
                 edge_weight_strategy=opts.edge_weight_strategy,
                 include_mentions=opts.include_mentions,
@@ -2209,7 +2196,6 @@ class Command(BaseCommand):
         do_3dgraph: bool,
         do_xlsx: bool,
         channel_types: list[str],
-        channel_sources: list[str],
         filter_labels: list[int],
         edge_weight_strategy: str,
         fa2_iterations: int,
@@ -2263,7 +2249,6 @@ class Command(BaseCommand):
                 start_date=start_date,
                 end_date=end_date,
                 channel_types=channel_types,
-                channel_sources=channel_sources or None,
                 filter_labels=filter_labels or None,
                 edge_weight_strategy=edge_weight_strategy,
                 include_mentions=options["include_mentions"],
@@ -2616,13 +2601,6 @@ class Command(BaseCommand):
         channel_types = (
             _parse_csv(channel_types_raw) if channel_types_raw is not None else list(settings.DEFAULT_CHANNEL_TYPES)
         )
-        channel_sources_raw = options["channel_sources"]
-        # Case-preserving (NOT _parse_csv): ChannelSource.key is a lowercase slug and
-        # sources__key__in matches case-sensitively — upper-casing would select zero
-        # channels for every source. crawl_channels parses this flag the same way.
-        channel_sources = (
-            [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
-        )
         try:
             filter_labels = Label.parse_filter_labels(options["filter_labels"])
         except ValueError as e:
@@ -2839,7 +2817,6 @@ class Command(BaseCommand):
             include_lost=_o("include_lost", False),
             include_private=_o("include_private", False),
             channel_types=channel_types,
-            channel_sources=channel_sources,
             filter_labels=filter_labels,
             environment_depth=environment_depth,
             edge_weight_strategy=edge_weight_strategy,
@@ -2932,7 +2909,6 @@ class Command(BaseCommand):
                 start_date=opts.start_date,
                 end_date=opts.end_date,
                 channel_types=opts.channel_types,
-                channel_sources=opts.channel_sources or None,
                 filter_labels=opts.filter_labels or None,
                 edge_weight_strategy=opts.edge_weight_strategy,
                 include_mentions=opts.include_mentions,
@@ -3586,7 +3562,6 @@ class Command(BaseCommand):
                         opts.do_3dgraph,
                         opts.do_xlsx,
                         opts.channel_types,
-                        opts.channel_sources,
                         opts.filter_labels,
                         opts.edge_weight_strategy,
                         opts.fa2_iterations,

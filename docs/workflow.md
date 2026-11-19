@@ -57,6 +57,17 @@ If you already know which channels you want, you don't have to rely on keyword s
 
 Each line is resolved on Telegram and the channel is added to the database. Channels that cannot be resolved (deleted, private, mistyped, or — for numeric IDs — never seen by your Telegram account before) are reported as **warnings** in the log; the rest of the run continues. To *only* add channels, set **Max search terms** to `0` and leave the search-term boxes empty.
 
+### Channels found in comments
+
+A channel sometimes comments under another channel's posts under its own name. Whenever the crawler fetches comments, each such channel it meets is added to the database. For comments stored before, run once:
+
+```sh
+python manage.py store_commenting_channels --dry-run   # list them; no Telegram call, nothing written
+python manage.py store_commenting_channels             # add them, each live, private or lost as Telegram says
+```
+
+A channel deleted since is still added, under the name it commented with, as *private*: Telegram gives the same answer for a deleted channel and for one closed to your account. That way the Audience page can link it and you can label it. The new channels are not crawled unless you label them in target, and a comment is not a citation, so they appear on a map only when in-target messages cite them.
+
 ---
 
 ## Step 3 — Organize your channels
@@ -95,14 +106,6 @@ Channels with no in-target label are left out of the analysis.
 **Inspect flag (optional, for discovery):** each channel has an **Inspect** checkbox that asks the crawler to fetch the channel's messages even when the channel has no in-target label. Inspected channels are *not* added to the analysis set — they remain out-of-target for measures, communities, and graph building — but their crawled messages are kept so you can discover new in-target candidates from the channels they forward and mention.
 
 Set it from the **Inspect** column in the Channels list (inline checkbox) or from the channel edit page. Use this to try out a channel for a while before deciding whether to give it an in-target label.
-
-**Channel sources (optional):** channel sources are a separate tagging axis — for example *activists*, *media*, *state-affiliated* — independent of your label groups. A channel can belong to any number of sources.
-
-To create sources go to **Manage → Sources** and click **Add**. To assign a channel to a source, open its edit page and pick from the **Sources** field.
-
-Sources act as a scope filter: when you select one or more sources in the Operations panel (Crawl Channels or Structural Analysis), only channels belonging to at least one of the selected sources are processed. Leaving all boxes unchecked means all in-target channels are included, as usual.
-
-Use sources when you want to run separate analyses on a subset of your corpus without changing any labels — for example, crawl only state-affiliated channels, or generate a graph limited to media outlets.
 
 ---
 
@@ -156,7 +159,7 @@ The options panel is organized into four independent groups — each is its own 
 **Limiting the scope:** you can restrict the crawl to a subset of channels in two ways:
 
 - **DB id filter** — enter specific channel IDs (e.g. `5, 10-20, 50`). Find a channel's ID in the Manage → Channels list.
-- **Channel sources** — tick one or more sources in the **Channel sources** fieldset. Only channels belonging to at least one selected source are crawled. Leave all unchecked to crawl all in-target channels.
+- **Scope filter** — tick one or more container labels (e.g. continents). Only channels holding a label under at least one of them are crawled. Leave all unchecked to crawl all in-target channels.
 
 **Media types:** the right-hand **Media types** fieldset controls which message attachments are downloaded. The five checkboxes apply to every operation that fetches messages from Telegram — *Get new messages*, *Fix message holes*, and *Fix missing media* — and are disabled when none of those is selected. Operations that touch media show a small sliders icon next to their label as a reminder.
 
@@ -215,7 +218,6 @@ The map can group and colour channels two complementary ways. Pick from either o
 | :----- | :----------- |
 | **Measures** | Which influence scores to compute for each channel. See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
-| **Channel sources** | Restrict the graph to channels belonging to at least one selected source. Leave all unchecked to include all in-target channels. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
 | **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned via a `t.me/` link. Useful for seeing what outside content your corpus amplifies. |
 | **Environment level** | An integer right after the map toggles in the Outputs fieldset (CLI: `--environment-depth N`). `0` = nothing changes, in-target channels only; `1` or more = the *environment* previously crawled by Crawl Channels' Environment pass enters the analysis, as far out as that many citation hops — its channels take part in full (edges, measures, communities, coordination, dominance) and every node carries an Environment depth (0 in target) the map can colour by. An environment channel's messages count only inside the environment window — the span of all in-target periods, from the earliest start to the latest end (an open-ended period leaves that side open; no in-target period, no environment messages) — the window the crawl stores them for, so messages a channel kept from a wider earlier crawl, or from being *To inspect*, stay out. Capped at the deepest level crawled so far, which the tooltip shows. |
@@ -317,6 +319,10 @@ python manage.py search_channels --extra-term "keyword"
 # Add specific channels by identifier (repeatable; unresolvable ones are logged as warnings)
 python manage.py search_channels --amount 0 --add-channel "https://t.me/channelname" --add-channel "@channelname" --add-channel 1234567890
 
+# Add the channels found commenting as themselves under stored posts (--dry-run lists them)
+python manage.py store_commenting_channels --dry-run
+python manage.py store_commenting_channels
+
 # Collect messages — the three independent groups
 python manage.py crawl_channels --get-channels-info --channel-types CHANNEL          # 1. update channel metadata only
 python manage.py crawl_channels --get-new-messages --channel-types CHANNEL           # 2. fetch new messages only
@@ -334,7 +340,6 @@ python manage.py crawl_channels --refresh-messages-stats
 python manage.py crawl_channels --refresh-messages-stats --refresh-from 2024-01-01 --refresh-to 2024-06-30
 python manage.py crawl_channels --refresh-messages-stats --refresh-limit 200
 python manage.py crawl_channels --ids "5, 10-20, 50"
-python manage.py crawl_channels --get-new-messages --channel-sources media,activists
 python manage.py crawl_channels --get-new-messages --filter-labels 36,38   # limit the crawl to channels under these container labels (ids from Manage → Labels)
 
 # Media downloads (tri-state: --download-X enables, --no-download-X disables for the run only)
@@ -375,7 +380,6 @@ python manage.py structural_analysis --community-strategies LEIDEN --community-b
 python manage.py structural_analysis --startdate 2023-01-01 --enddate 2023-12-31
 python manage.py structural_analysis --name my-export
 python manage.py structural_analysis --graph-2d --timeline-step year
-python manage.py structural_analysis --graph-2d --html --channel-sources media,activists
 python manage.py structural_analysis --graph-2d --html --filter-labels 36,38   # limit the whole analysis to channels under these container labels (e.g. continents; ids from Manage → Labels)
 python manage.py structural_analysis --graph-2d --html --environment-depth 1   # also include the environment channels one citation hop out (needs crawl_channels --environment); 0 = off
 

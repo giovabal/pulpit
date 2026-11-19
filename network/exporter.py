@@ -840,7 +840,6 @@ def write_summary_json(
         "image_copy_edges",
         "image_copy_distance",
         "channel_types",
-        "channel_sources",
         "filter_labels",
         "vacancy_measures",
         "vacancy_months_before",

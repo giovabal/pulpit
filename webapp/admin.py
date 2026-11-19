@@ -8,7 +8,6 @@ from django.utils.html import format_html
 from .models import (
     Channel,
     ChannelLabel,
-    ChannelSource,
     CustomEmoji,
     CustomEmojiPack,
     Label,
@@ -91,7 +90,6 @@ class ChannelAdmin(admin.ModelAdmin):
         "channel_labels__label__is_in_target",
         "broadcast",
         "channel_labels__label",
-        "sources",
         "environment_depth",
     )
     search_fields = ["username", "title", "about"]
@@ -179,20 +177,6 @@ class MessageAdmin(admin.ModelAdmin):
 class SearchTermAdmin(admin.ModelAdmin):
     list_display = ("word", "last_check")
     fieldsets = ((None, {"fields": ("word",)}),)
-
-
-@admin.register(ChannelSource)
-class ChannelSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "channel_count", "description")
-    search_fields = ("name",)
-    filter_horizontal = ("channels",)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[ChannelSource]:
-        return super().get_queryset(request).annotate(_channel_count=Count("channels"))
-
-    @admin.display(description="Channels")
-    def channel_count(self, obj: ChannelSource) -> int:
-        return obj._channel_count  # type: ignore[attr-defined]
 
 
 class LabelInline(admin.TabularInline):

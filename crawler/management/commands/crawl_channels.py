@@ -115,7 +115,6 @@ class CrawlOptions:
     # Scope
     ids_str: str | None
     channel_types: list[str]
-    channel_sources: list[str]
     # Container-label ids limiting the crawl to the channels holding a label
     # assigned under at least one of them (empty = no filter).
     filter_labels: list[int]
@@ -708,16 +707,6 @@ class Command(BaseCommand):
                 "Comma-separated list of Telegram entity types. "
                 "Available: CHANNEL, GROUP, USER. Defaults to the DEFAULT_CHANNEL_TYPES setting "
                 "([scope].channel_types in configuration/.operations-crawl)."
-            ),
-        )
-        parser.add_argument(
-            "--channel-sources",
-            dest="channel_sources",
-            default=None,
-            metavar="SOURCES",
-            help=(
-                "Comma-separated list of ChannelSource keys. "
-                "Only channels belonging to at least one of these sources are included."
             ),
         )
         parser.add_argument(
@@ -1466,10 +1455,6 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Invalid --channel-types value(s): {invalid_channel_types!r}. Choose from {sorted(VALID_CHANNEL_TYPES)}."
             )
-        channel_sources_raw = options.get("channel_sources")
-        channel_sources = (
-            [s.strip() for s in channel_sources_raw.split(",") if s.strip()] if channel_sources_raw else []
-        )
         try:
             filter_labels = Label.parse_filter_labels(options.get("filter_labels"))
         except ValueError as e:
@@ -1534,7 +1519,6 @@ class Command(BaseCommand):
             environment_download_other_media=_resolve_optional_bool(options.get("environment_download_other_media")),
             ids_str=options["ids"],
             channel_types=channel_types,
-            channel_sources=channel_sources,
             filter_labels=filter_labels,
             hash_images=_resolve_optional_bool(options.get("hash_images")),
             index_domains=_resolve_optional_bool(options.get("index_domains")),
@@ -1748,8 +1732,6 @@ class Command(BaseCommand):
         )
         if not opts.retry_lost_and_private:
             qs = qs.exclude(is_lost=True).exclude(is_private=True)
-        if opts.channel_sources:
-            qs = qs.filter(sources__key__in=opts.channel_sources).distinct()
         if opts.filter_labels:
             # Container-label scope: only channels holding a label assigned under the
             # selection (same children-only semantics as structural_analysis).
@@ -1907,7 +1889,6 @@ class Command(BaseCommand):
         out_degrees = opts.out_degrees
         ids_str = opts.ids_str
         channel_types = opts.channel_types
-        channel_sources = opts.channel_sources
 
         temp_root = settings.BASE_DIR / "tmp"
         temp_root.mkdir(exist_ok=True)
@@ -1956,8 +1937,6 @@ class Command(BaseCommand):
                             excluded_by_type = all_in_target_base.exclude(channel_type_filter(channel_types)).order_by(
                                 "-id"
                             )
-                            if channel_sources:
-                                excluded_by_type = excluded_by_type.filter(sources__key__in=channel_sources).distinct()
                             if opts.filter_labels:
                                 excluded_by_type = excluded_by_type.filter(
                                     Exists(
@@ -2262,7 +2241,7 @@ class Command(BaseCommand):
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
             # Global, not crawl-scoped: degrees are network-wide quantities, and an
-            # ever-in-target channel outside --channel-sources/--channel-types scope must
+            # ever-in-target channel outside --filter-labels/--channel-types scope must
             # never fall into cited_pks — the out-degrees pass would overwrite it with
             # out_degree=0. Lost messages are excluded throughout to match
             # Channel.refresh_degrees() and the graph builder.

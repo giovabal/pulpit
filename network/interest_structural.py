@@ -139,7 +139,7 @@ def compute_interest_structural(
         (``channel_cutoff_q(environment_depth=…)``), exactly like the forwards
         that build the graph's edges. Every other forward of an origin —
         from a channel outside the run's scope (``--filter-labels``,
-        ``--channel-types``, ``--channel-sources``, never labelled) or from
+        ``--channel-types``, never labelled) or from
         an analysed channel outside its in-target periods — counts as
         out-of-target.
     """

@@ -52,7 +52,6 @@ from webapp.paginator import DiggPaginator
 from .models import (
     Channel,
     ChannelLabel,
-    ChannelSource,
     ChannelVacancy,
     CustomEmoji,
     CustomEmojiPack,
@@ -621,7 +620,7 @@ class ChannelListView(ListView):
     def get_queryset(self) -> QuerySet[Channel]:
         return (
             Channel.objects.in_target()
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -630,7 +629,7 @@ class ChannelListView(ListView):
         ctx = super().get_context_data(**kwargs)
         _status_qs = (
             Channel.objects.filter(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -646,7 +645,7 @@ class ChannelListView(ListView):
         ctx["to_inspect_list"] = (
             Channel.objects.filter(to_inspect=True)
             .exclude(_in_target_attr_exists())
-            .prefetch_related(self._pic_prefetch, "sources", "channel_labels__label__group")
+            .prefetch_related(self._pic_prefetch, "channel_labels__label__group")
             .annotate(**_channel_message_stats())
             .order_by("title")
         )
@@ -658,9 +657,6 @@ class ChannelListView(ListView):
             Label.objects.filter(group__is_primary=True, is_in_target=True)
             .exclude(group__is_container=True)
             .order_by("name")
-        )
-        ctx["sources"] = (
-            ChannelSource.objects.filter(channels__in=Channel.objects.in_target()).distinct().order_by("name")
         )
         ctx["has_vacancies"] = ChannelVacancy.objects.exists()
         ctx["has_custom_emoji"] = MessageCustomEmoji.objects.exists()
@@ -1386,7 +1382,6 @@ class ChannelDetailView(ListView):
                 "top_reactions": top_reactions,
                 "total_reactions": f"{total_reactions:,}",
                 "emoji_packs": emoji_packs,
-                "channel_sources": list(ch.sources.order_by("name")),
                 "vacancy": vacancy,
                 "linked_channel": linked_channel,
                 "parent_channel": parent_channel,

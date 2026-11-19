@@ -5,7 +5,6 @@
     var API_CH = "/manage/api/channels/" + $root.dataset.channelPk + "/";
     var API_LABELS = "/manage/api/labels/?limit=500";
     var API_LABELGROUPS = "/manage/api/label-groups/?limit=500";
-    var API_SRC = "/manage/api/sources/?limit=500";
     var _picUrls = [];
     var _picIndex = 0;
     var _picModal = null;
@@ -99,7 +98,7 @@
         if (typeof bootstrap !== "undefined") _picModal = new bootstrap.Modal($picModalEl);
     }
 
-    function render(ch, labels, labelGroups, channelSources) {
+    function render(ch, labels, labelGroups) {
         $root.innerHTML = "";
 
         /* ── Back link + title ────────────────────────────────────── */
@@ -278,25 +277,6 @@
         });
         form.appendChild(fgLabels);
 
-        /* Sources */
-        var fgSrc = makeFieldGroup("Sources");
-        var srcWrap = document.createElement("div");
-        srcWrap.className = "bo-ch-update-sources";
-        channelSources.forEach(function(s) {
-            var lbl = document.createElement("label");
-            lbl.className = "bo-check-label";
-            var chk = document.createElement("input");
-            chk.type = "checkbox";
-            chk.value = s.id;
-            chk.name = "source_ids";
-            if ((ch.source_ids || []).indexOf(s.id) !== -1) chk.checked = true;
-            lbl.appendChild(chk);
-            lbl.appendChild(document.createTextNode(" " + s.name));
-            srcWrap.appendChild(lbl);
-        });
-        fgSrc.appendChild(srcWrap);
-        form.appendChild(fgSrc);
-
         /* Flags */
         var fgFlags = makeFieldGroup("Flags");
         var flagsWrap = document.createElement("div");
@@ -404,17 +384,15 @@
     }
 
     function saveChannel(ch, form) {
-        var sourceIds = Array.from(form.querySelectorAll("input[name=source_ids]:checked")).map(function(el) { return parseInt(el.value, 10); });
         var rows = collectLabels(form);
         var lerr = validateLabels(rows);
         if (lerr) { showToast(lerr, "error"); return; }
-        // Single atomic save: the flags, sources, and label periods are all replaced inside one
-        // server-side transaction, so a label failure can never leave the flags/sources committed
+        // Single atomic save: the flags and label periods are all replaced inside one
+        // server-side transaction, so a label failure can never leave the flags committed
         // while the toast says the save failed. On error apiFetch rejects and nothing is persisted.
         apiFetch("/manage/api/channels/" + ch.id + "/replace-labels/", {
                 method: "POST",
                 body: {
-                    source_ids: sourceIds,
                     is_lost: form.querySelector("input[name=is_lost]").checked,
                     is_private: form.querySelector("input[name=is_private]").checked,
                     to_inspect: form.querySelector("input[name=to_inspect]").checked,
@@ -436,13 +414,12 @@
         apiFetch(API_CH),
         apiFetch(API_LABELS),
         apiFetch(API_LABELGROUPS),
-        apiFetch(API_SRC),
     ]).then(function(res) {
         var ch = res[0];
         /* set modal title */
         var titleEl = document.getElementById("cu-pic-title");
         if (titleEl) titleEl.textContent = ch.title || ("Channel #" + ch.id);
-        render(ch, res[1].results, res[2].results, res[3].results);
+        render(ch, res[1].results, res[2].results);
     }).catch(function(e) {
         var p = document.createElement('p');
         p.className = 'bo-empty';

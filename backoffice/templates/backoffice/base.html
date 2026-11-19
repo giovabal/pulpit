@@ -33,10 +33,6 @@
        class="bo-subnav-link{% if request.resolver_match.url_name == 'commenters' %} active{% endif %}">
       <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Commenters
     </a>
-    <a href="{% url 'backoffice:sources' %}"
-       class="bo-subnav-link{% if request.resolver_match.url_name == 'sources' %} active{% endif %}">
-      <i class="bi bi-collection me-1" aria-hidden="true"></i>Sources
-    </a>
     <a href="{% url 'backoffice:search-terms' %}"
        class="bo-subnav-link{% if request.resolver_match.url_name == 'search-terms' %} active{% endif %}">
       <i class="bi bi-search me-1" aria-hidden="true"></i>Search Terms
