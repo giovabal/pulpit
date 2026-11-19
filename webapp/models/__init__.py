@@ -10,7 +10,6 @@ from .media_models import (  # NOQA
     MessageVideo,
     ProfilePicture,
 )
-from .source_models import ChannelSource  # NOQA
 from .vacancy_models import ChannelVacancy  # NOQA
 from .project_models import Project  # NOQA
 from .tag_models import MessageTag, MessageTagging, TaggedMessage  # NOQA

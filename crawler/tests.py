@@ -62,7 +62,6 @@ def _crawl_opts(**overrides) -> CrawlOptions:
         refresh_to=None,
         ids_str=None,
         channel_types=[],
-        channel_sources=[],
         filter_labels=[],
     )
     base.update(overrides)

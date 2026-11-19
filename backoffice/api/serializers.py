@@ -5,7 +5,6 @@ from events.models import Event, EventType
 from webapp.models import (
     Channel,
     ChannelLabel,
-    ChannelSource,
     ChannelVacancy,
     CustomEmojiPack,
     Domain,
@@ -206,15 +205,6 @@ class ChannelVacancySerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ChannelSourceSerializer(serializers.ModelSerializer):
-    channel_count = serializers.IntegerField(read_only=True)
-    key = serializers.SlugField(required=False, allow_blank=True, max_length=100)
-
-    class Meta:
-        model = ChannelSource
-        fields = ["id", "name", "key", "description", "note", "channel_count"]
-
-
 class ChannelLabelSerializer(serializers.ModelSerializer):
     channel_id = serializers.PrimaryKeyRelatedField(source="channel", queryset=Channel.objects.all())
     label_id = serializers.PrimaryKeyRelatedField(source="label", queryset=Label.objects.all())
@@ -277,12 +267,6 @@ class ChannelLabelSerializer(serializers.ModelSerializer):
 class ChannelSerializer(serializers.ModelSerializer):
     current_labels = serializers.SerializerMethodField()
     labels = ChannelLabelSerializer(many=True, read_only=True, source="channel_labels")
-    source_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        source="sources",
-        queryset=ChannelSource.objects.all(),
-        required=False,
-    )
     channel_type = serializers.CharField(read_only=True)
     profile_picture_url = serializers.SerializerMethodField()
     profile_picture_mime_type = serializers.SerializerMethodField()
@@ -337,7 +321,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "detail_url",
             "current_labels",
             "labels",
-            "source_ids",
             "participants_count",
             "in_degree",
             "out_degree",
@@ -392,13 +375,6 @@ class ChannelSerializer(serializers.ModelSerializer):
             "requests_pending",
             "theme_emoticon",
         ]
-
-    def update(self, instance, validated_data):
-        sources = validated_data.pop("sources", None)
-        instance = super().update(instance, validated_data)
-        if sources is not None:
-            instance.sources.set(sources)
-        return instance
 
 
 class SearchTermSerializer(serializers.ModelSerializer):

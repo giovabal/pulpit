@@ -6,7 +6,6 @@
 
     /* ── State ──────────────────────────────────────────────────────────── */
     var _labels = [];
-    var _sources = [];
     var _channels = [];
     var _total = 0;
     var _offset = 0;
@@ -20,7 +19,6 @@
     var $search = document.getElementById("ch-search");
     var $status = document.getElementById("ch-status");
     var $orgFilter = document.getElementById("ch-org-filter");
-    var $sourceFilter = document.getElementById("ch-source-filter");
     var $count = document.getElementById("ch-count");
     var $pagination = document.getElementById("ch-pagination");
     var $paginationBottom = document.getElementById("ch-pagination-bottom");
@@ -29,8 +27,6 @@
     var $bulkBar = document.getElementById("ch-bulk-bar");
     var $bulkCount = document.getElementById("ch-bulk-count");
     var $bulkOrg = document.getElementById("ch-bulk-org");
-    var $bulkAddSrc = document.getElementById("ch-bulk-add-source");
-    var $bulkRmSrc = document.getElementById("ch-bulk-rm-source");
 
     /* ── Query helpers ──────────────────────────────────────────────────── */
     function buildUrl(extraOffset) {
@@ -42,8 +38,6 @@
         if (st) params.set("status", st);
         var label = $orgFilter.value;
         if (label) params.set("label", label);
-        var src = $sourceFilter.value;
-        if (src) params.set("source", src);
         params.set("ordering", (_sortDir === "desc" ? "-" : "") + _sortField);
         return API_BASE + "channels/?" + params.toString();
     }
@@ -103,8 +97,6 @@
         if (st) p.set("status", st);
         var label = $orgFilter.value;
         if (label) p.set("label", label);
-        var src = $sourceFilter.value;
-        if (src) p.set("source", src);
         if (_sortField !== "id") p.set("sort", _sortField);
         if (_sortDir !== "desc") p.set("dir", _sortDir);
         var page = Math.floor(_offset / PAGE_SIZE) + 1;
@@ -118,7 +110,6 @@
         $search.value = p.get("search") || "";
         $status.value = p.get("status") || "";
         $orgFilter.value = p.get("label") || "";
-        $sourceFilter.value = p.get("source") || "";
         _sortField = p.get("sort") || "id";
         _sortDir = p.get("dir") || "desc";
         var page = parseInt(p.get("page") || "1", 10);
@@ -150,19 +141,12 @@
                 og.appendChild(new Option(l.name, l.id));
             });
         });
-        /* sources */
-        [$sourceFilter, $bulkAddSrc, $bulkRmSrc].forEach(function(sel) {
-            while (sel.options.length > (sel === $sourceFilter ? 1 : 0)) sel.remove(sel.options.length - 1);
-            _sources.forEach(function(s) {
-                sel.appendChild(new Option(s.name, s.id));
-            });
-        });
     }
 
     function renderTable(channels) {
         $tbody.innerHTML = "";
         if (!channels.length) {
-            $tbody.innerHTML = '<tr><td colspan="10" class="bo-empty">No channels found.</td></tr>';
+            $tbody.innerHTML = '<tr><td colspan="9" class="bo-empty">No channels found.</td></tr>';
             return;
         }
         var frag = document.createDocumentFragment();
@@ -245,11 +229,6 @@
             var tdInspect = document.createElement("td");
             renderInspectCell(tdInspect, ch);
             tr.appendChild(tdInspect);
-
-            /* sources */
-            var tdSrc = document.createElement("td");
-            renderSourceChips(tdSrc, ch);
-            tr.appendChild(tdSrc);
 
             /* subscribers */
             var tdSub = document.createElement("td");
@@ -338,93 +317,6 @@
         }
     }
 
-    function renderSourceChips(td, ch) {
-        td.innerHTML = "";
-        var wrap = document.createElement("div");
-        wrap.className = "bo-chips";
-        (ch.source_ids || []).forEach(function(sid) {
-            var src = _sources.find(function(s) { return s.id === sid; });
-            if (!src) return;
-            var chip = document.createElement("span");
-            chip.className = "bo-chip";
-            chip.style.background = "#6366f1"; /* default source color */
-            chip.textContent = src.name;
-
-            var rmBtn = document.createElement("button");
-            rmBtn.className = "bo-chip-remove";
-            rmBtn.innerHTML = "&times;";
-            rmBtn.title = "Remove from source";
-            rmBtn.addEventListener("click", function(e) {
-                e.stopPropagation();
-                removeSource(ch, sid, td);
-            });
-            chip.appendChild(rmBtn);
-            wrap.appendChild(chip);
-        });
-
-        /* + button */
-        var available = _sources.filter(function(s) { return !(ch.source_ids || []).includes(s.id); });
-        if (available.length) {
-            var addBtn = document.createElement("button");
-            addBtn.className = "bo-chip-add";
-            addBtn.innerHTML = "+";
-            addBtn.title = "Add to source";
-            addBtn.addEventListener("click", function(e) {
-                e.stopPropagation();
-                openSourceDropdown(addBtn, ch, td, available);
-            });
-            wrap.appendChild(addBtn);
-        }
-        td.appendChild(wrap);
-    }
-
-    function openSourceDropdown(anchor, ch, td, available) {
-        document.querySelectorAll(".bo-chip-dropdown").forEach(function(el) { el.remove(); });
-        var dropdown = document.createElement("div");
-        dropdown.className = "bo-chip-dropdown";
-        available.forEach(function(s) {
-            var btn = document.createElement("button");
-            btn.textContent = s.name;
-            btn.addEventListener("click", function() {
-                dropdown.remove();
-                addSource(ch, s.id, td);
-            });
-            dropdown.appendChild(btn);
-        });
-        anchor.parentNode.style.position = "relative";
-        anchor.parentNode.appendChild(dropdown);
-        document.addEventListener("click", function handler(e) {
-            if (!dropdown.contains(e.target)) {
-                dropdown.remove();
-                document.removeEventListener("click", handler);
-            }
-        });
-    }
-
-    function addSource(ch, sourceId, td) {
-        var newIds = (ch.source_ids || []).concat([sourceId]);
-        apiFetch(API_BASE + "channels/" + ch.id + "/", {
-            method: "PATCH",
-            body: { source_ids: newIds },
-        }).then(function(data) {
-            ch.source_ids = data.source_ids;
-            renderSourceChips(td, ch);
-            showToast("Source added.");
-        }).catch(function(err) { showToast("Error: " + err.message, "error"); });
-    }
-
-    function removeSource(ch, sourceId, td) {
-        var newIds = (ch.source_ids || []).filter(function(id) { return id !== sourceId; });
-        apiFetch(API_BASE + "channels/" + ch.id + "/", {
-            method: "PATCH",
-            body: { source_ids: newIds },
-        }).then(function(data) {
-            ch.source_ids = data.source_ids;
-            renderSourceChips(td, ch);
-            showToast("Source removed.");
-        }).catch(function(err) { showToast("Error: " + err.message, "error"); });
-    }
-
     /* ── Bulk actions ───────────────────────────────────────────────────── */
     function updateBulkBar() {
         var ids = selectedIds();
@@ -454,22 +346,6 @@
         }).catch(function(err) { showToast("Error: " + err.message, "error"); });
     }
 
-    function bulkApplySource(action) {
-        var ids = selectedIds();
-        if (!ids.length) return;
-        var sel = action === "add" ? $bulkAddSrc : $bulkRmSrc;
-        var sourceId = parseInt(sel.value, 10);
-        if (!sourceId) { showToast("Select a source first.", "error"); return; }
-        var key = action === "add" ? "add_source_ids" : "remove_source_ids";
-        var body = { ids: ids };
-        body[key] = [sourceId];
-        apiFetch(API_BASE + "channels/bulk-assign/", { method: "POST", body: body })
-            .then(function(data) {
-                showToast("Updated " + data.updated + " channels.");
-                loadChannels();
-            }).catch(function(err) { showToast("Error: " + err.message, "error"); });
-    }
-
     /* ── Pagination ─────────────────────────────────────────────────────── */
     function _goToPage(newOffset) {
         _offset = newOffset;
@@ -488,7 +364,7 @@
         // sort/filter/page controls (which have already mutated visible state).
         if (_loading) { _reloadQueued = { u: updateUrl }; return; }
         _loading = true;
-        $tbody.innerHTML = '<tr><td colspan="10" class="bo-empty">Loading…</td></tr>';
+        $tbody.innerHTML = '<tr><td colspan="9" class="bo-empty">Loading…</td></tr>';
         $selectAll.checked = false;
         $bulkBar.classList.add("d-none");
 
@@ -509,7 +385,7 @@
                 // innerHTML would turn that into an XSS via a crafted /manage/channels/ URL.
                 var tr = document.createElement("tr");
                 var td = document.createElement("td");
-                td.colSpan = 10;
+                td.colSpan = 9;
                 td.className = "bo-empty";
                 td.textContent = "Error loading channels: " + err.message;
                 tr.appendChild(td);
@@ -526,12 +402,8 @@
     }
 
     /* ── Init ───────────────────────────────────────────────────────────── */
-    Promise.all([
-        apiFetch(API_BASE + "labels/?limit=500"),
-        apiFetch(API_BASE + "sources/?limit=500"),
-    ]).then(function(results) {
-        _labels = results[0].results;
-        _sources = results[1].results;
+    apiFetch(API_BASE + "labels/?limit=500").then(function(data) {
+        _labels = data.results;
         renderFilters();
         _syncFormFromUrl();
         loadChannels("replace");
@@ -545,7 +417,7 @@
             loadChannels("push");
         }, 300);
     });
-    [$status, $orgFilter, $sourceFilter].forEach(function(el) {
+    [$status, $orgFilter].forEach(function(el) {
         el.addEventListener("change", function() {
             _offset = 0;
             loadChannels("push");
@@ -560,8 +432,6 @@
         updateBulkBar();
     });
     document.getElementById("ch-bulk-org-apply").addEventListener("click", bulkApplyLabel);
-    document.getElementById("ch-bulk-add-source-apply").addEventListener("click", function() { bulkApplySource("add"); });
-    document.getElementById("ch-bulk-rm-source-apply").addEventListener("click", function() { bulkApplySource("remove"); });
     Object.keys(_SORT_COLS).forEach(function(id) {
         var th = document.getElementById(id);
         if (th) th.addEventListener("click", function() { _onSortClick(_SORT_COLS[id]); });

@@ -812,12 +812,6 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
                     "Telegram entity types admitted as channels.",
                 ),
                 (
-                    "Channel sources",
-                    format_value(list(opts.channel_sources)) if opts.channel_sources else "— (all sources)",
-                    _code("--channel-sources"),
-                    "Only channels belonging to at least one of these sources enter the graph.",
-                ),
-                (
                     "Scope filter",
                     _filter_label_names(opts.filter_labels),
                     _code("--filter-labels"),

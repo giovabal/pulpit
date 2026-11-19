@@ -356,7 +356,6 @@ def build_graph(
     start_date: datetime.date | None = None,
     end_date: datetime.date | None = None,
     channel_types: list[str] | None = None,
-    channel_sources: list[str] | None = None,
     filter_labels: list[int] | None = None,
     edge_weight_strategy: str = "PARTIAL_REFERENCES",
     include_mentions: bool = True,
@@ -453,8 +452,6 @@ def build_graph(
             to_attr="_prefetched_profile_pics",
         ),
     )
-    if channel_sources:
-        channel_qs = channel_qs.filter(sources__key__in=channel_sources).distinct()
 
     # Resolve every partition group's window-label per node (feeds LABELGROUP<id> strategies); the
     # primary group additionally drives node colour and the "Label" export column (node attribute "organization").

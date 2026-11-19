@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from runner.views import UnsafeArgumentError, _build_args
-from webapp.models import ChannelSource, SearchTerm
+from webapp.models import SearchTerm
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -378,12 +378,6 @@ class OperationsViewTests(TestCase):
         self.assertContains(resp, 'max="3"')
         self.assertContains(resp, "Deepest level crawled so far: 3.")
 
-    def test_context_contains_channel_sources(self):
-        ChannelSource.objects.create(name="Alpha")
-        resp = self.client.get(reverse("operations"))
-        keys = [s["key"] for s in resp.context["channel_sources"]]
-        self.assertIn("alpha", keys)
-
     def test_context_contains_container_groups_with_labels_only(self):
         from webapp.models import Label, LabelGroup
 
@@ -496,7 +490,7 @@ class RunTaskViewTests(TestCase):
             ),
             ("search_channels", {"add_channels": "@fine\n--settings=evil"}),  # lines field
             ("compare_analysis", {"project_dir": "--settings=evil", "compare_target": "b"}),  # positional
-            ("crawl_channels", {"channel_sources": ["--settings=evil"]}),  # forged checkbox list
+            ("crawl_channels", {"filter_labels": ["--settings=evil"]}),  # forged checkbox list
         ]
         for task, data in cases:
             with (
@@ -1077,14 +1071,6 @@ class BuildArgsGetChannelsTests(TestCase):
         self.assertIn("CHANNEL", args[idx + 1])
         self.assertIn("GROUP", args[idx + 1])
 
-    def test_channel_sources_comma_joined(self):
-        post = FakePost({"channel_sources": ["SourceA", "SourceB"]})
-        args = _build_args("crawl_channels", post)
-        self.assertIn("--channel-sources", args)
-        val = args[args.index("--channel-sources") + 1]
-        self.assertIn("SourceA", val)
-        self.assertIn("SourceB", val)
-
     def test_filter_labels_comma_joined(self):
         # The Scope filter checkboxes (container labels) join into one --filter-labels value.
         post = FakePost({"filter_labels": ["3", "5"]})
@@ -1366,7 +1352,7 @@ class BuildArgsOptionInjectionTests(TestCase):
             ("structural_analysis", {"layouts_2d": ["--settings=evil"]}),  # csv_unique
             ("structural_analysis", {"label_groups": ["--settings=evil"]}),  # community_strategies
             ("structural_analysis", {"robustness_strategies": ["--settings=evil"]}),  # robustness_strategies
-            ("crawl_channels", {"channel_sources": ["--settings=evil"]}),  # csv (forged checkbox list)
+            ("crawl_channels", {"filter_labels": ["--settings=evil"]}),  # csv (forged checkbox list)
             ("search_channels", {"extra_terms": "--settings=evil"}),  # extra_terms
             ("search_channels", {"add_channels": "@fine\n--settings=evil"}),  # lines
             ("compare_analysis", {"project_dir": "--settings=evil"}),  # positional

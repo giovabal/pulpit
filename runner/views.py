@@ -21,7 +21,7 @@ from network import (
 )
 from network.tokens import split_tokens
 from runner import tasks
-from webapp.models import Channel, ChannelSource, ChannelVacancy, LabelGroup, SearchTerm
+from webapp.models import Channel, ChannelVacancy, LabelGroup, SearchTerm
 from webapp.utils import colors as palette_utils
 from webapp_engine.config import (
     CRAWL_DEFAULTS,
@@ -72,7 +72,6 @@ class OperationsView(View):
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
             task_info.append({**defn, "name": name, **status})
-        channel_sources = list(ChannelSource.objects.values("key", "name"))
         has_vacancies = ChannelVacancy.objects.exists()
         # Environment level field of the Structural Analysis form (Outputs): capped at the deepest
         # channel the crawler's environment pass has registered (0 when it never ran).
@@ -210,7 +209,6 @@ class OperationsView(View):
             {
                 "tasks": task_info,
                 "default_channel_types": set(settings.DEFAULT_CHANNEL_TYPES),
-                "channel_sources": channel_sources,
                 "container_groups": container_groups,
                 "has_vacancies": has_vacancies,
                 "environment_deepest": deepest_environment,
@@ -666,7 +664,6 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # Scope
         ("value", "ids", "--ids"),
         ("channel_types", "--channel-types"),
-        ("csv", "channel_sources", "--channel-sources"),
         ("csv", "filter_labels", "--filter-labels"),
     ],
     "search_channels": [
@@ -739,7 +736,6 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         # CPM resolution now rides inside the community-strategy tokens
         # (e.g. "LEIDEN_CPM(resolution=0.05)"), so it is not a separate CLI flag from the panel.
         ("channel_types", "--channel-types"),
-        ("csv", "channel_sources", "--channel-sources"),
         ("csv", "filter_labels", "--filter-labels"),
         ("value", "environment_depth", "--environment-depth"),
         ("bool_explicit", "include_lost", "--include-lost", "--no-include-lost"),

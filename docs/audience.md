@@ -75,7 +75,9 @@ A reply's date is its own; replies stored without one take their post's.
 
 A reply's sender can be a channel instead of a person: an admin posting under the channel's name. Telegram marks such senders with a negative id, which tells three cases apart: a channel answering under **its own posts**, a **discussion group's anonymous admins**, and a channel commenting on **another channel's posts**.
 
-The last is a channel-to-channel tie the citation network does not see, since that is built from forwards and mentions. The table lists each pair with its comments and dates, and *Also cited* says whether the two channels forward or mention each other, either way, in any stored message (blank when the commenting channel has not been crawled). Channels are public actors, so they are named.
+The last is a channel-to-channel tie the citation network does not see, since that is built from forwards and mentions. The table lists each pair with its comments and dates, and *Also cited* says whether the two channels forward or mention each other, either way, in any stored message (when the commenting channel has not been crawled, only the other channel's messages can show it). Channels are public actors, so they are named.
+
+Every channel commenting on another channel's posts gets a row in the channels list, even when it has since been deleted, so the table links it. See [Workflow § Channels found in comments](workflow.md#channels-found-in-comments).
 
 ---
 

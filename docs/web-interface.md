@@ -35,7 +35,6 @@ A paginated list of all channels in the database. Filters and controls:
 
 - **Search** — filter by channel name or username
 - **Label filter** — show only channels with a specific (primary-group, in-target) label
-- **Source filter** — show channels belonging to a specific ChannelSource
 - **Sort** — by name, tag name, first activity, last activity, followers (subscriber count), message count, or label
 - **Channel chips** — each card shows the channel's current label colour, subscriber count, message count, and group chips
 
@@ -188,7 +187,6 @@ Staff-only management interface for corpus administration. Accessible only to us
 Bulk management of the channel database:
 
 - **Assign label** — select multiple channels and replace their periods *within one label's group* with a single period under one label in one action
-- **Source chips** — add or remove ChannelSource memberships inline
 - **Edit individual** — click through to edit a channel's details, its **label periods** (label + optional start/end, non-overlapping within a partition group), `to_inspect` flag, and vacancy record
 - **Filter** — by label, group, in-target status, entity type; *User accounts* and *Bots* split the Telegram users that citations point to (a bot shows as type `bot`)
 
@@ -217,10 +215,6 @@ The web sites the in-target channels link to, and the categories they are filed 
 ### Commenters — `/manage/commenters/`
 
 The user accounts that replied in the channels' discussion groups — the commenters the [Audience](audience.md) page measures — most active first, read from every stored reply: replies, posts and channels commented on, the most replies under a single post, the share of replies with no text (stickers, media), and the first and last reply. Two kinds of account would distort the audience figures, so they are **left out** of them automatically: **Telegram bots**, as Telegram marks them, and **bulk posters**, with 100 or more replies under one post (no person wrote more than 40 under one post in the corpus this was written for; an archive dumped into one thread runs to thousands). Set the decision to *Exclude* to leave out an account the flags miss, such as a channel admin, or *Keep* to override a flag, and add a note; both save at once. Search by name or account id, or filter to the accounts left out, flagged, or reviewed. Telegram's bot flag is recorded as replies are fetched; for replies fetched before 0.30, run `crawl_channels --refresh-messages-stats --fetch-replies`. Channels and groups posting as themselves are never counted as commenters.
-
-### Sources — `/manage/sources/`
-
-ChannelSources are tags you apply to channels for flexible filtering. They are independent of labels — a channel can be in any number of sources, regardless of its label periods. Use sources to define subsets for targeted analysis (e.g. run an export with `--channel-sources activist,media` to analyse only those channels).
 
 ### Search terms — `/manage/search-terms/`
 

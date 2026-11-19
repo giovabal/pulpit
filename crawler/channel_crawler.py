@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from crawler import coverage
 from crawler.client import TelegramAPIClient
+from crawler.commenting_channels import store_reply_sender
 from crawler.custom_emoji import (
     custom_emoji_pks,
     pack_from_sticker_set,
@@ -35,7 +36,14 @@ from webapp.models.tag_models import link_stored_message
 
 from telethon import errors, functions
 from telethon.tl.functions.channels import GetChannelRecommendationsRequest, GetFullChannelRequest
-from telethon.tl.types import InputChannel, MessageService, PeerChannel, User
+from telethon.tl.types import (
+    Channel as TelegramChannel,
+    ChannelForbidden,
+    InputChannel,
+    MessageService,
+    PeerChannel,
+    User,
+)
 from telethon.utils import get_peer_id
 
 logger = logging.getLogger(__name__)
@@ -320,6 +328,9 @@ class ChannelCrawler:
         self.api_client = api_client
         self.media_handler = media_handler
         self.reference_resolver = reference_resolver
+        # Telegram ids of channels seen commenting as themselves this run, so one commenting
+        # under many posts costs a single store_reply_sender lookup.
+        self._commenting_senders_seen: set[int] = set()
 
     def set_more_channel_details(self, channel: Channel, telegram_channel: Any) -> None:
         if isinstance(telegram_channel, User):
@@ -1508,6 +1519,15 @@ class ChannelCrawler:
                         continue
                     sender_name = ""
                     sender = tg_reply.sender
+                    if (
+                        isinstance(sender, TelegramChannel | ChannelForbidden)
+                        and sender.id not in self._commenting_senders_seen
+                    ):
+                        # A channel commenting as itself: give it a row in the channels list
+                        # (crawler/commenting_channels.py) — no extra API call, the entity came
+                        # with the replies.
+                        self._commenting_senders_seen.add(sender.id)
+                        store_reply_sender(sender, channel)
                     if getattr(tg_reply, "post_author", None):
                         sender_name = tg_reply.post_author
                     elif sender:

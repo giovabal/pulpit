@@ -23,9 +23,6 @@
   <select class="bo-select" id="ch-org-filter" aria-label="Filter by label">
     <option value="">All labels</option>
   </select>
-  <select class="bo-select" id="ch-source-filter" aria-label="Filter by source">
-    <option value="">All sources</option>
-  </select>
   <span class="bo-count" id="ch-count"></span>
   <div class="bo-pagination" id="ch-pagination"></div>
 </div>
@@ -36,14 +33,6 @@
   <label class="bo-bulk-label" for="ch-bulk-org">Assign label</label>
   <select class="bo-select bo-select--sm" id="ch-bulk-org"></select>
   <button class="bo-btn bo-btn--sm" id="ch-bulk-org-apply">Apply</button>
-  <span class="bo-bulk-sep">|</span>
-  <label class="bo-bulk-label" for="ch-bulk-add-source">Add to source</label>
-  <select class="bo-select bo-select--sm" id="ch-bulk-add-source"></select>
-  <button class="bo-btn bo-btn--sm" id="ch-bulk-add-source-apply">Apply</button>
-  <span class="bo-bulk-sep">|</span>
-  <label class="bo-bulk-label" for="ch-bulk-rm-source">Remove from source</label>
-  <select class="bo-select bo-select--sm" id="ch-bulk-rm-source"></select>
-  <button class="bo-btn bo-btn--sm bo-btn--danger" id="ch-bulk-rm-source-apply">Apply</button>
 </div>
 
 <div class="table-responsive">
@@ -57,14 +46,13 @@
         <th scope="col">Type</th>
         <th scope="col">Labels</th>
         <th scope="col">Inspect</th>
-        <th scope="col">Sources</th>
         <th class="bo-th--num bo-th--sortable" scope="col" aria-sort="none" id="ch-th-subscribers"><button type="button" class="bo-th-sort-btn">Subscribers<span class="bo-sort-icon" aria-hidden="true"> ⇅</span></button></th>
         <th class="bo-th--num bo-th--sortable" scope="col" aria-sort="none" id="ch-th-indegree"><button type="button" class="bo-th-sort-btn">In-degree<span class="bo-sort-icon" aria-hidden="true"> ⇅</span></button></th>
         <th class="bo-th--sortable" scope="col" aria-sort="none" id="ch-th-first-seen"><button type="button" class="bo-th-sort-btn">First seen on<span class="bo-sort-icon" aria-hidden="true"> ⇅</span></button></th>
       </tr>
     </thead>
     <tbody id="ch-tbody">
-      <tr><td colspan="10" class="bo-empty">Loading…</td></tr>
+      <tr><td colspan="9" class="bo-empty">Loading…</td></tr>
     </tbody>
   </table>
 </div>

@@ -12,7 +12,6 @@ from .maintenance import (
 from .palettes import palette_colors
 from .views import (
     ChannelLabelViewSet,
-    ChannelSourceViewSet,
     ChannelVacancyViewSet,
     ChannelViewSet,
     CommenterViewSet,
@@ -39,7 +38,6 @@ router.register("channel-labels", ChannelLabelViewSet, basename="api-channel-lab
 router.register("label-groups", LabelGroupViewSet, basename="api-label-groups")
 router.register("labels", LabelViewSet, basename="api-labels")
 router.register("label-parents", LabelParentViewSet, basename="api-label-parents")
-router.register("sources", ChannelSourceViewSet, basename="api-sources")
 router.register("search-terms", SearchTermViewSet, basename="api-search-terms")
 router.register("event-types", EventTypeViewSet, basename="api-event-types")
 router.register("events", EventViewSet, basename="api-events")
