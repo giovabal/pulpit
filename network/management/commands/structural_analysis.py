@@ -2249,6 +2249,7 @@ class Command(BaseCommand):
         mrqap_permutations: int = mrqap.MRQAP_PERMUTATIONS_DEFAULT,
         do_dyadic_export: bool = False,
         do_links: bool = False,
+        do_audience: bool = False,
     ) -> dict | None:
         """Run the full export pipeline for one timeline period and write its ``data_<key>/`` files.
 
@@ -2361,6 +2362,16 @@ class Command(BaseCommand):
             )
             measures_labels += link_layer.inject_node_scores(graph_data, links_payload)
 
+        # The Audience sections over this period's observed in-target channels and its days; a period
+        # without a reply in scope gets no data_<key>/audience.json and no has_audience.
+        audience_period: audience_layer.AudienceExport | None = None
+        if do_audience:
+            audience_period = audience_layer.compute_audience(
+                graph, graph_data, start_date=start_date, end_date=end_date
+            )
+            if not audience_period.has_data:
+                audience_period = None
+
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         community_table_data = None
 
@@ -2460,6 +2471,8 @@ class Command(BaseCommand):
                 exporter.write_image_copies_csv(graph, graph_data, os.path.join(tmp_dir, "data"))
             if links_payload is not None:
                 exporter.write_links_json(links_payload, graph_dir=tmp_dir)
+            if audience_period is not None:
+                exporter.write_audience_json(audience_period.payload, graph_dir=tmp_dir)
             year_data_dst = os.path.join(root_target, f"data_{period.key}")
             if os.path.exists(year_data_dst):
                 shutil.rmtree(year_data_dst)
@@ -2530,6 +2543,7 @@ class Command(BaseCommand):
             "has_robustness": do_robustness and rob_payload is not None,
             "has_dominance": dominance_payload is not None,
             "has_links": links_payload is not None,
+            "has_audience": audience_period is not None,
             "has_coordination": has_coordination,
             "coordination_nodes": coordination_nodes,
             "coordination_ties": coordination_ties,
@@ -2543,6 +2557,7 @@ class Command(BaseCommand):
             "_xlsx_robustness_data": rob_payload if (do_xlsx and rob_payload is not None) else None,
             "_xlsx_dominance_data": dominance_payload if (do_xlsx and dominance_payload is not None) else None,
             "_xlsx_links_data": links_payload if (do_xlsx and links_payload is not None) else None,
+            "_xlsx_audience_data": audience_period if do_xlsx else None,
             "_label_mixing": (community_table_data or {}).get("label_mixing"),
             "_dyad_wave": dyads.wave_of(period.key, graph) if do_dyadic_export else None,
         }
@@ -3651,6 +3666,8 @@ class Command(BaseCommand):
                         mrqap_permutations=opts.mrqap_permutations,
                         do_dyadic_export=opts.do_dyadic_export,
                         do_links=opts.do_links,
+                        # A full range without a reply in scope has none in any period either.
+                        do_audience=audience_result is not None,
                     )
                     if entry is not None:
                         timeline_entries.append(entry)
@@ -3760,11 +3777,17 @@ class Command(BaseCommand):
                     year_data=links_periods,
                 )
             if audience_result is not None:
+                audience_periods = [
+                    (e["key"], e["_xlsx_audience_data"])
+                    for e in timeline_entries
+                    if e.get("_xlsx_audience_data") is not None
+                ] or None
                 self.stdout.write("- audience (xlsx)")
                 tables.write_audience_xlsx(
                     audience_result,
                     output_filename=os.path.join(root_target, "audience.xlsx"),
                     project_title=project_title,
+                    year_data=audience_periods,
                 )
 
         self.stdout.write("- index")

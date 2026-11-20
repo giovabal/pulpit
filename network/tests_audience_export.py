@@ -40,6 +40,8 @@ class AudienceExportTests(TestCase):
         self.post_b = Message.objects.create(telegram_id=1, channel=self.b, date=_day(2))
         self.late_b = Message.objects.create(telegram_id=2, channel=self.b, date=_day(2, month=9))
         Message.objects.create(telegram_id=2, channel=self.a, date=_day(3), forwarded_from=self.c)
+        # A September citation, so the third quarter has a graph (a period without a tie is not exported).
+        Message.objects.create(telegram_id=3, channel=self.a, date=_day(5, month=9), forwarded_from=self.b)
         self.post_c = Message.objects.create(telegram_id=1, channel=self.c, date=_day(4))
         self._ids = itertools.count(1)
 
@@ -111,6 +113,33 @@ class AudienceExportTests(TestCase):
         payload = json.loads((export / "data" / "audience.json").read_text())
         self.assertEqual(payload["participation"]["overall"]["replies"], 5)  # the September replies are out
         self.assertEqual(payload["end_date"], "2024-06-30")
+
+    def test_timeline_periods_get_their_own_audience(self) -> None:
+        self._comments()
+        export = self._run("--html", "--xlsx", "--timeline-step", "quarter")
+        timeline = json.loads((export / "data" / "timeline.json").read_text())
+        flags = {p["key"]: p["has_audience"] for p in timeline["periods"]}
+        self.assertEqual(flags, {"2024Q2": True, "2024Q3": True})
+        q2 = json.loads((export / "data_2024Q2" / "audience.json").read_text())
+        q3 = json.loads((export / "data_2024Q3" / "audience.json").read_text())
+        self.assertEqual(q2["participation"]["overall"]["replies"], 5)  # the May posts
+        self.assertEqual(q3["participation"]["overall"]["replies"], 2)  # the September post
+        self.assertEqual((q3["start_date"], q3["end_date"]), ("2024-07-01", "2024-09-30"))
+        wb = openpyxl.load_workbook(export / "audience.xlsx")
+        self.assertEqual([c.value for c in wb["Summary"][1]], ["Figure", "All", "2024Q2", "2024Q3"])
+        replies = next(row for row in wb["Summary"].iter_rows(min_row=2, values_only=True) if row[0] == "Replies")
+        self.assertEqual(replies[1:], (7, 5, 2))
+        for name in ("Participation All", "Participation 2024Q2", "Overlap pairs 2024Q3"):
+            self.assertIn(name, wb.sheetnames)
+
+    def test_a_period_without_replies_has_no_audience(self) -> None:
+        self.reply(self.post_a, _SENDERS[0], n=2)  # May only
+        export = self._run("--html", "--timeline-step", "quarter")
+        flags = {
+            p["key"]: p["has_audience"] for p in json.loads((export / "data" / "timeline.json").read_text())["periods"]
+        }
+        self.assertEqual(flags, {"2024Q2": True, "2024Q3": False})
+        self.assertFalse((export / "data_2024Q3" / "audience.json").exists())
 
     def test_no_audience_skips_it(self) -> None:
         self._comments()

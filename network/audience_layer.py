@@ -1,12 +1,16 @@
 """The Audience page in a ``structural_analysis`` export (``--audience``, on by default).
 
 The five sections of ``/audience/`` (:mod:`webapp.audience`: participation, breadth, audience overlap,
-retention, channels as commenters), computed once over the export's whole date range on its **own**
-scope instead of the page's: the graph's observed in-target channels — not the dead leaves nor the
+retention, channels as commenters), computed over the export's date range on its **own** scope instead
+of the page's: the graph's observed in-target channels — not the dead leaves nor the
 environment, so ``--channel-types``, ``--filter-labels`` and the lost / private switches apply as they
 did to the graph — and their posts inside their in-target periods and inside ``--startdate`` /
 ``--enddate``. Same commenters (Telegram bots and bulk posters left out, Manage → Commenters overrides
 as they stand at export time), same statistics, same tables.
+
+With a timeline (``--timeline-step``) each period is computed the same way on its own graph and days
+(``data_<key>/audience.json``, ``has_audience`` in ``timeline.json``, per-period workbook columns and sheets);
+a period without a reply in scope is left out.
 
 Outputs: ``data/audience.json`` (:func:`compute_audience`'s ``payload``, read by ``audience.html``), the
 section CSVs and the ``audience.xlsx`` sheets (:func:`csv_tables`, :func:`xlsx_sheets`, laid out by
@@ -279,19 +283,39 @@ def _summary_rows(payload: dict) -> list[list]:
     ]
 
 
-def xlsx_sheets(result: AudienceExport) -> list[tuple[str, list[str], list[list]]]:
+def xlsx_sheets(
+    result: AudienceExport, periods: "list[tuple[str, AudienceExport]] | None" = None
+) -> list[tuple[str, list[str], list[list]]]:
     """``[(sheet title, headers, rows)]`` for ``audience.xlsx``: a summary, each section's main table (as
-    the CSVs, numbers kept numeric) and the tables the page shows beside them."""
+    the CSVs, numbers kept numeric) and the tables the page shows beside them.
+
+    With *periods* ``[(period key, its result), …]`` (a timeline export; periods without a reply are left
+    out) the summary gets one column per period next to ``All``, and the per-channel participation and the
+    overlap pairs get ``… All`` plus one sheet per period."""
     from webapp.audience.tables import section_table
 
     payload = result.payload
-    sheets: list[tuple[str, list[str], list[list]]] = [("Summary", ["Figure", "Value"], _summary_rows(payload))]
+    periods = periods or []
+    summary = _summary_rows(payload)
+    if periods:
+        by_period = [_summary_rows(period.payload) for _key, period in periods]
+        sheets: list[tuple[str, list[str], list[list]]] = [
+            (
+                "Summary",
+                ["Figure", "All", *[key for key, _period in periods]],
+                [[label, value, *[rows[i][1] for rows in by_period]] for i, (label, value) in enumerate(summary)],
+            )
+        ]
+    else:
+        sheets = [("Summary", ["Figure", "Value"], summary)]
 
-    def _table(title: str, section: str) -> None:
-        columns, rows = section_table(section, result.sections[section], as_text=False)
-        sheets.append((title, list(columns), rows))
+    def _table(title: str, section: str, *, per_period: bool = False) -> None:
+        scopes = [("All", result), *periods] if per_period and periods else [("", result)]
+        for suffix, scoped in scopes:
+            columns, rows = section_table(section, scoped.sections[section], as_text=False)
+            sheets.append((f"{title} {suffix}".strip(), list(columns), rows))
 
-    _table("Participation", "participation")
+    _table("Participation", "participation", per_period=True)
     sheets.append(
         (
             "Activity",
@@ -314,7 +338,7 @@ def xlsx_sheets(result: AudienceExport) -> list[tuple[str, list[str], list[list]
             ],
         )
     )
-    _table("Overlap pairs", "overlap")
+    _table("Overlap pairs", "overlap", per_period=True)
     sheets.append(
         (
             "Overlap channels",

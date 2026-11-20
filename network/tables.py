@@ -1058,9 +1058,16 @@ def write_audience_html(output_filename: str, seo: bool = False, project_title: 
     )
 
 
-def write_audience_xlsx(result: "AudienceExport", output_filename: str, project_title: str = "") -> None:
+def write_audience_xlsx(
+    result: "AudienceExport",
+    output_filename: str,
+    project_title: str = "",
+    year_data: "list[tuple[str, AudienceExport]] | None" = None,
+) -> None:
     """The Audience sections as a workbook: a ``Summary`` sheet, each section's main table (the CSVs' layout)
-    and the tables the page shows beside them (:func:`network.audience_layer.xlsx_sheets`)."""
+    and the tables the page shows beside them; with *year_data* ``[(period key, result), …]`` the summary
+    gets a column per period and the participation and overlap-pair sheets one sheet per period
+    (:func:`network.audience_layer.xlsx_sheets`)."""
     from network.audience_layer import xlsx_sheets
 
     wb = openpyxl.Workbook()
@@ -1068,7 +1075,7 @@ def write_audience_xlsx(result: "AudienceExport", output_filename: str, project_
     if project_title:
         wb.properties.title = project_title
     wb.remove(wb.active)
-    for title, headers, rows in xlsx_sheets(result):
+    for title, headers, rows in xlsx_sheets(result, year_data):
         ws = wb.create_sheet(title=_safe_sheet_title(title))
         ws.append(headers)
         for cell in ws[1]:

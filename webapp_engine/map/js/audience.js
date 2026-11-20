@@ -10,10 +10,21 @@
 //
 // The tints are computed by the exporter (webapp/audience/tables.py) so the page and the export share
 // one rule; Chart.js comes from the CDN like events.html.
-import { escHtml, fetchJson } from './utils.js';
+//
+// Period switcher: same pattern as links.js — on a timeline export each period with comments has its own
+// data_<key>/audience.json (has_audience in timeline.json); "All" is the full range in data/.
+import { build_year_nav } from './year_nav.js';
+import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
+var _no_timeline = isCompareDataDir(_dd);
 var PAIR_LIMIT = 30;
+var _current = "all";
+var _cache = {};
+var _periods = [];
+var _events = [];
+var _loading = false;
+var _charts = [];
 
 function _isNil(v) {
     return v === null || v === undefined;
@@ -94,6 +105,11 @@ function _num(v, text) {
 
 function _chartBox(id, title) {
     return "<div><h4 class=\"h6 mb-1\" id=\"" + id + "-title\">" + escHtml(title) + "</h4><div class=\"audience-chart\"><canvas id=\"" + id + "\" aria-labelledby=\"" + id + "-title\"></canvas></div></div>";
+}
+
+// Every chart goes through here so a period switch can destroy the previous period's instances.
+function _chart(canvas, config) {
+    _charts.push(new Chart(canvas, config));
 }
 
 function _empty(text) {
@@ -193,7 +209,7 @@ function _lorenzChart(canvas, lorenz, gini) {
             summary: (_isNil(gini) ? "" : "Gini coefficient " + gini.toFixed(2) + ". ") + (tenth ? "The least active 90% of accounts wrote " + _pct(tenth.y) + " of the replies." : ""),
         });
     }
-    new Chart(canvas, {
+    _chart(canvas, {
         type: "scatter",
         data: {
             datasets: [
@@ -229,7 +245,7 @@ function _activityChart(canvas, bins) {
             summary: bins.map(function(b) { return b.label + ": " + fmtInt(b.accounts) + " accounts"; }).join("; "),
         });
     }
-    new Chart(canvas, {
+    _chart(canvas, {
         type: "bar",
         data: {
             labels: bins.map(function(b) { return b.label; }),
@@ -304,7 +320,7 @@ function _breadthChart(canvas, classes) {
             summary: classes.map(function(c) { return c.label + " replies: " + _dec(c.observed, 2) + " channels, " + _dec(c.expected, 2) + " by chance"; }).join("; "),
         });
     }
-    new Chart(canvas, {
+    _chart(canvas, {
         type: "bar",
         data: {
             labels: classes.map(function(c) { return c.label; }),
@@ -403,7 +419,8 @@ function _overlap(target, data) {
     }
     html.push("<h4 class=\"h5 mt-3\">Pairs, most significant first</h4>");
     html.push(_table("The " + Math.min(PAIR_LIMIT, data.pairs.length) + " most significant of " + fmtInt(data.pairs.length) + " pairs with shared commenters" +
-        (data.pairs.length > PAIR_LIMIT ? "; audience.xlsx and audience_overlap.csv list them all." : "."), PAIR_COLUMNS, _pairRows(data.pairs.slice(0, PAIR_LIMIT), chName("a"), chName("b"))));
+        (data.pairs.length > PAIR_LIMIT ? (_current === "all" ? "; audience.xlsx and audience_overlap.csv list them all." :
+            "; the period's Overlap pairs sheet of audience.xlsx lists them all.") : "."), PAIR_COLUMNS, _pairRows(data.pairs.slice(0, PAIR_LIMIT), chName("a"), chName("b"))));
 
     (data.label_groups || []).forEach(function(g) {
         html.push("<h4 class=\"h5 mt-3\">Between " + escHtml(g.name.toLowerCase()) + " labels</h4>");
@@ -448,7 +465,7 @@ function _monthlyChart(canvas, monthly) {
             summary: monthly.length + " months from " + monthly[0].month + " to " + monthly[monthly.length - 1].month + "; most active month " + peak.month + " with " + fmtInt(peak.active) + " commenters.",
         });
     }
-    new Chart(canvas, {
+    _chart(canvas, {
         type: "line",
         data: {
             labels: monthly.map(function(m) { return m.month; }),
@@ -519,7 +536,9 @@ function _preamble(payload) {
     target.appendChild(p);
 }
 
-fetchJson(_dd + "audience.json").then(function(payload) {
+function _render(payload) {
+    _charts.forEach(function(chart) { chart.destroy(); });
+    _charts = [];
     _preamble(payload);
     _participation(document.getElementById("au-participation"), payload.participation);
     _breadth(document.getElementById("au-breadth"), payload.breadth);
@@ -527,6 +546,40 @@ fetchJson(_dd + "audience.json").then(function(payload) {
     _retention(document.getElementById("au-retention"), payload.retention);
     _channelCommenters(document.getElementById("au-channel-commenters"), payload.channel_commenters);
     initSortableTables();
+}
+
+function _load(key) {
+    if (_cache[key]) return Promise.resolve(_cache[key]);
+    var dd = (key === "all") ? _dd : periodDataDir("data/", key);
+    return fetchJson(dd + "audience.json").then(function(payload) {
+        _cache[key] = payload;
+        return payload;
+    });
+}
+
+function _switch(key) {
+    if (key === _current || _loading) return;
+    _loading = true;
+    _load(key).then(function(payload) {
+        _current = key;
+        _render(payload);
+        build_year_nav(_periods, _current, _switch, _events);
+    }).catch(function() {
+        document.getElementById("au-preamble").textContent = "Failed to load the audience of " + key + ".";
+    }).finally(function() {
+        _loading = false;
+    });
+}
+
+Promise.all([
+    _load(_current),
+    fetchJsonOrNull(_dd + "timeline.json"),
+]).then(function(results) {
+    _render(results[0]);
+    var tl = readTimeline(_no_timeline ? null : results[1]);
+    _events = tl.events;
+    _periods = tl.periods.filter(function(p) { return p.has_audience; });
+    if (_periods.length) build_year_nav(_periods, _current, _switch, _events);
 }).catch(function(err) {
     console.error("audience: failed to load or render", err);
     var msg = "Failed to load audience.json.";
