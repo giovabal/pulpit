@@ -303,46 +303,6 @@ class Channel(TelegramBaseModel):
         self.username = self.username or ""
         super().save(*args, **kwargs)
 
-    def _set_degrees(self, in_degree: int, out_degree: int) -> None:
-        """Persist in_degree/out_degree to the DB and update the in-memory instance."""
-        Channel.objects.filter(pk=self.pk).update(in_degree=in_degree, out_degree=out_degree)
-        self.in_degree = in_degree
-        self.out_degree = out_degree
-
-    def refresh_degrees(self) -> None:
-        """Recompute and persist in_degree and out_degree from current message data.
-
-        Counts both forwarded-from citations and t.me/username reference citations,
-        matching the citation orientation of ``graph_builder._build_edge_list``:
-        edges run amplifier→source, so being cited is an *incoming* edge and is
-        stored in ``in_degree``; forwarding/mentioning others is an outgoing edge
-        and is stored in ``out_degree``.
-        """
-        from network.utils import channel_cutoff_q
-
-        cited_by = (
-            Message.objects.alive()
-            .filter(channel__in=Channel.objects.in_target())
-            .filter(Q(forwarded_from=self) | Q(references=self))
-            .filter(channel_cutoff_q())
-            .exclude(channel=self)
-            .distinct()
-            .count()
-        )
-        # Self-citations are excluded per *target* (forwarding or mentioning oneself is
-        # not an edge), without dropping a message that also cites another channel —
-        # matching the pair-level exclusion of the crawl_channels bulk degrees writer.
-        others = Channel.objects.in_target().exclude(pk=self.pk)
-        cites = (
-            Message.objects.alive()
-            .filter(channel=self)
-            .filter(Q(forwarded_from__in=others) | Q(references__in=others))
-            .filter(channel_cutoff_q())
-            .distinct()
-            .count()
-        )
-        self._set_degrees(cited_by, cites)
-
 
 class Message(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (

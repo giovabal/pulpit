@@ -384,11 +384,6 @@ class ChannelGetAbsoluteUrlTests(TestCase):
 
 
 class ChannelSaveTests(TestCase):
-    def setUp(self) -> None:
-        self.org = make_label(name="Org", is_in_target=True)
-        self.ch1 = make_channel(telegram_id=1, title="Source", label=self.org)
-        self.ch2 = make_channel(telegram_id=2, title="Target", label=self.org)
-
     def test_none_username_converted_to_empty_string(self) -> None:
         ch = Channel(telegram_id=99, title="X", username=None)
         ch.save()
@@ -397,55 +392,6 @@ class ChannelSaveTests(TestCase):
     def test_existing_username_preserved(self) -> None:
         ch = make_channel(telegram_id=100, username="handle")
         self.assertEqual(ch.username, "handle")
-
-    def test_in_degree_counts_forwards_from_in_target_channels(self) -> None:
-        Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=self.ch1)
-        self.ch1.refresh_degrees()
-        self.ch1.refresh_from_db()
-        self.assertEqual(self.ch1.in_degree, 1)
-
-    def test_in_degree_excludes_self_forwards(self) -> None:
-        Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch1)
-        self.ch1.refresh_degrees()
-        self.ch1.refresh_from_db()
-        self.assertEqual(self.ch1.in_degree, 0)
-
-    def test_in_degree_excludes_out_of_target_org(self) -> None:
-        boring = make_label(name="Boring", is_in_target=False)
-        boring_ch = make_channel(telegram_id=50, label=boring)
-        Message.objects.create(telegram_id=10, channel=boring_ch, forwarded_from=self.ch1)
-        self.ch1.refresh_degrees()
-        self.ch1.refresh_from_db()
-        self.assertEqual(self.ch1.in_degree, 0)
-
-    def test_out_degree_counts_forwards_to_in_target_channels(self) -> None:
-        Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch2)
-        self.ch1.refresh_degrees()
-        self.ch1.refresh_from_db()
-        self.assertEqual(self.ch1.out_degree, 1)
-
-    def test_out_degree_excludes_self_forwards(self) -> None:
-        Message.objects.create(telegram_id=10, channel=self.ch1, forwarded_from=self.ch1)
-        self.ch1.refresh_degrees()
-        self.ch1.refresh_from_db()
-        self.assertEqual(self.ch1.out_degree, 0)
-
-    def test_instance_fields_synced_after_refresh_degrees(self) -> None:
-        Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=self.ch1)
-        self.ch1.refresh_degrees()
-        self.assertEqual(self.ch1.in_degree, 1)
-
-    def test_refresh_degrees_uses_update_not_full_save(self) -> None:
-        """Degree recalculation must use queryset.update(), not a full model save."""
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
-        with CaptureQueriesContext(connection) as ctx:
-            self.ch1.refresh_degrees()
-        sql_upper = [q["sql"].upper() for q in ctx.captured_queries]
-        update_count = sum(1 for s in sql_upper if s.startswith("UPDATE"))
-        # Exactly one UPDATE from queryset.update() — no full model save
-        self.assertEqual(update_count, 1)
 
 
 class ChannelActivityPeriodTests(TestCase):
