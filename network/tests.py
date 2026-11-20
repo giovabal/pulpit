@@ -3732,9 +3732,15 @@ class ParametersDocumentTests(TestCase):
                 "dominance",
                 "vacancy",
                 "interest",
+                "audience",  # on unless --no-audience
             },
         )
-        self.assertEqual(active_scopes(self._resolve("--measures", "PAGERANK")), {"graph", "measure:PAGERANK"})
+        self.assertEqual(
+            active_scopes(self._resolve("--measures", "PAGERANK")), {"graph", "measure:PAGERANK", "audience"}
+        )
+        self.assertEqual(
+            active_scopes(self._resolve("--measures", "PAGERANK", "--no-audience")), {"graph", "measure:PAGERANK"}
+        )
 
     def test_extra_layouts_are_active_only_with_their_map(self) -> None:
         from network.parameters import active_scopes
@@ -3773,6 +3779,7 @@ class ParametersDocumentTests(TestCase):
             "timeline",
             "robustness",
             "robustness_replay",
+            "audience",  # on unless --no-audience
         }
         self.assertEqual(active_scopes(opts), expected)
         # No coordination tie survived → the coordination maps were never laid out.

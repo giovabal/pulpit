@@ -600,6 +600,11 @@ class RunTaskViewTests(TestCase):
         self.assertIn("--links", args)
         self.assertIn("--no-links", _build_args("structural_analysis", FakePost()))
 
+    def test_structural_audience_flag(self):
+        self.assertIn("--audience", _build_args("structural_analysis", FakePost({"audience": "on"})))
+        # An unchecked box must beat the on-by-default option.
+        self.assertIn("--no-audience", _build_args("structural_analysis", FakePost()))
+
     def test_run_rejects_structural_environment_level_deeper_than_crawled(self):
         from webapp.models import Channel
 

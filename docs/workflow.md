@@ -283,6 +283,8 @@ Enable with the two **Coordination map** toggles on the second row of the Output
 
 Two modalities beyond the text and the forwards. **Image copies** (Edge weights → *Include image copies as edges*, CLI `--image-copy-edges`) read a picture post that re-uploads an earlier post's image — the same Telegram photo, or a perceptual hash within *Image-copy distance ≤* bits (`--image-copy-distance`, default 6) — as a citation of the earliest post showing it, one per post (an album counts once). Hash the stored pictures first (crawl option *Hash stored images*). The **Visual originality** measure (`VISUALORIGINALITY`) gives each channel's share of picture posts whose images are its own. See [Image copies](image-copies.md).
 
+**Audience** (Outputs → *Audience*, on by default; CLI `--no-audience` to skip it) puts the [Audience](audience.md) page's five sections — participation inequality, breadth, audience overlap, retention, channels as commenters — into the export, over the commenters of the graph's observed in-target channels and the export's dates (`audience.html`, `audience.xlsx`, `audience_<section>.csv`, `data/audience.json`). It needs replies stored by *Fetch replies* and is skipped when there are none.
+
 **Outbound links** (Outputs → *Outbound links*, CLI `--links`) read the web links of the channels' messages — text URLs, hidden links, buttons and previews; t.me excluded — against the domain categories of *Manage → Domains* (a starter list is provided: mainstream and alternative platforms, crowdfunding, shops, …). They give per-channel link measures (linking posts, distinct sites, platform diversity, monetisation / mainstream / alternative shares), a sites table, a label × category matrix and statistically validated co-linking pairs (`links.html`, `links.xlsx`, `channel_sites.csv`). See [Outbound links](outbound-links.md).
 
 ### Interesting messages
@@ -419,6 +421,9 @@ python manage.py structural_analysis --coordination-2d --coordination-min-events
 python manage.py hash_media
 python manage.py structural_analysis --image-copy-edges --measures VISUALORIGINALITY,PAGERANK --csv
 python manage.py structural_analysis --image-copy-edges --image-copy-distance 0   # the same Telegram photo only
+
+# The Audience sections ride along with every export (skipped without replies); --no-audience leaves them out
+python manage.py structural_analysis --html --xlsx --csv --startdate 2024-01-01
 
 # Outbound links (rebuild the domain index of Manage → Domains, then the link layer)
 python manage.py index_domains

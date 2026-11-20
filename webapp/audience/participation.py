@@ -25,10 +25,10 @@ from collections.abc import Sequence
 
 from django.db.models import Count
 
+from network.parameters import FixedParameter
 from webapp.commenters import excluded_sender_ids
-from webapp.models import Label
 
-from .scope import coverage, scope_channels, scope_replies
+from .scope import Scope, coverage, scope_channels, scope_replies
 
 import numpy as np
 
@@ -42,6 +42,42 @@ LORENZ_POINTS = 200
 ADJBOX_COEF = 1.5
 ADJBOX_A = -4.0
 ADJBOX_B = 3.0
+
+_SOURCE = "webapp/audience/participation.py"
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Participation: minimum commenters per channel",
+        value=MIN_CONCENTRATION_COMMENTERS,
+        scope="audience",
+        affects="A channel's top-10% share, Gini and effective commenters are reported only from this many "
+        "commenters (blank below).",
+        source=f"{_SOURCE}: MIN_CONCENTRATION_COMMENTERS",
+    ),
+    FixedParameter(
+        name="Participation: top shares",
+        value=", ".join(f"{p:.0%}" for p in TOP_SHARES),
+        scope="audience",
+        affects="The most-active shares reported: replies written by the ⌈p·n⌉ most active accounts.",
+        source=f"{_SOURCE}: TOP_SHARES",
+    ),
+    FixedParameter(
+        name="Hyperactive accounts: adjusted-boxplot fence",
+        value=f"Q3 + {ADJBOX_COEF:g}·e^({ADJBOX_B:g}·MC)·IQR for MC ≥ 0, Q3 + {ADJBOX_COEF:g}·e^({-ADJBOX_A:g}·MC)·IQR "
+        "below",
+        scope="audience",
+        affects="Replies per account above which an account is hyperactive (MC = medcouple of the replies per "
+        "account, over the whole scope).",
+        source=f"{_SOURCE}: ADJBOX_COEF, ADJBOX_A, ADJBOX_B",
+        note="Hubert & Vandervieren (2008); Brys, Hubert & Struyf (2004); as used by Papakyriakopoulos et al. (2019).",
+    ),
+    FixedParameter(
+        name="Participation: activity classes",
+        value=", ".join(str(lo) if lo == hi else (f"{lo}–{hi}" if hi else f"{lo}+") for lo, hi in ACTIVITY_BINS),
+        scope="audience",
+        affects="The replies-per-account classes of the accounts-by-activity table and chart.",
+        source=f"{_SOURCE}: ACTIVITY_BINS",
+    ),
+)
 
 
 # ── Concentration measures ───────────────────────────────────────────────────
@@ -179,10 +215,10 @@ def activity_bins(counts: Sequence[int]) -> list[dict]:
 # ── The page ─────────────────────────────────────────────────────────────────
 
 
-def participation(voice: Label | None = None) -> dict:
+def participation(scope: Scope | None = None) -> dict:
     """Everything the Audience page's participation-inequality section shows, for one scope."""
     excluded = excluded_sender_ids()
-    replies = scope_replies(voice, excluded)
+    replies = scope_replies(scope, excluded)
     per_channel: dict[int, dict[int, int]] = defaultdict(dict)
     per_account: dict[int, int] = defaultdict(int)
     for row in replies.values("parent_message__channel", "sender_id").annotate(n=Count("id")):
@@ -205,7 +241,7 @@ def participation(voice: Label | None = None) -> dict:
         "min_replies": math.floor(fences["upper"]) + 1 if fences is not None else None,
     }
 
-    channel_qs = scope_channels(voice)
+    channel_qs = scope_channels(scope)
     channels = {c.pk: c for c in channel_qs.filter(pk__in=list(per_channel))}
     channel_rows = []
     for channel_id, accounts in per_channel.items():
@@ -241,5 +277,5 @@ def participation(voice: Label | None = None) -> dict:
         "bins": activity_bins(counts),
         "lorenz": lorenz_points(counts),
         "channels": channel_rows,
-        **coverage(voice),
+        **coverage(scope),
     }

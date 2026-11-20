@@ -47,6 +47,7 @@ from network.vacancy_analysis import (
     orphaned_amplifier_pks,
 )
 from webapp import audience, emoji_usage
+from webapp.audience import tables as audience_tables
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -67,6 +68,7 @@ from .models import (
 )
 from .models.tag_models import TagTree, tags_in_tree_order
 from .utils.access import can_view_message_tags
+from .utils.channel_csv import CHANNEL_CSV_COLUMNS, channel_csv_cells
 from .utils.channel_types import channel_type_filter
 from .utils.dates import fmt_date, fmt_day_month_year, fmt_ttl
 from .utils.emoji import emoji_present
@@ -690,13 +692,6 @@ def _iso_day(value: Any) -> str:
     return timezone.localdate(value).isoformat() if value else ""
 
 
-def _channel_csv_cells(channel: Channel | None) -> list[Any]:
-    label = channel.current_label if channel is not None else None
-    if channel is None:
-        return ["", "", "", ""]
-    return [channel.telegram_id, channel.username, channel.title, label.name if label else ""]
-
-
 def _pack_csv_cells(pack: CustomEmojiPack | None) -> list[Any]:
     if pack is None:
         return ["", "", "", "", "", ""]
@@ -716,7 +711,6 @@ def _usage_csv_cells(row: dict[str, Any]) -> list[Any]:
     ]
 
 
-_CHANNEL_CSV_COLUMNS = ("channel_id", "channel_telegram_id", "channel_username", "channel_title", "label")
 _PACK_CSV_COLUMNS = (
     "pack_id",
     "pack_telegram_id",
@@ -735,10 +729,10 @@ _USAGE_CSV_COLUMNS = (
     "last_used",
 )
 #: Columns of the channel × pack usage CSV (``EmojiPackUsageCSVView``).
-EMOJI_PACK_CSV_COLUMNS = (*_CHANNEL_CSV_COLUMNS, *_PACK_CSV_COLUMNS, *_USAGE_CSV_COLUMNS)
+EMOJI_PACK_CSV_COLUMNS = (*CHANNEL_CSV_COLUMNS, *_PACK_CSV_COLUMNS, *_USAGE_CSV_COLUMNS)
 #: Columns of the channel × emoji usage CSV (``CustomEmojiUsageCSVView``).
 CUSTOM_EMOJI_CSV_COLUMNS = (
-    *_CHANNEL_CSV_COLUMNS,
+    *CHANNEL_CSV_COLUMNS,
     "emoji_id",
     "emoji_telegram_id",
     "emoji_alt",
@@ -823,7 +817,7 @@ class EmojiPackUsageCSVView(View):
             [
                 [
                     row["channel_id"],
-                    *_channel_csv_cells(row["channel"]),
+                    *channel_csv_cells(row["channel"]),
                     *_pack_csv_cells(row["pack"]),
                     *_usage_csv_cells(row),
                 ]
@@ -925,7 +919,7 @@ class CustomEmojiUsageCSVView(View):
             [
                 [
                     row["channel_id"],
-                    *_channel_csv_cells(row["channel"]),
+                    *channel_csv_cells(row["channel"]),
                     row["emoji_id"],
                     row["emoji"].telegram_id if row["emoji"] else "",
                     row["emoji"].alt if row["emoji"] else "",
@@ -1619,23 +1613,6 @@ class MessageJumpView(View):
 
 
 _AUDIENCE_SECTIONS = {slug: (title, compute) for slug, title, compute in audience.SECTIONS}
-# Diverging cells (shared commenters vs expected): |log2(ratio)| of 2 — four times or a quarter of
-# the expectation — reaches the strongest tint, capped so the cell's text stays legible.
-_HEAT_LOG2_FULL = 2.0
-_HEAT_MAX_PERCENT = 60
-# A pair whose shared and expected commenters are both below this stays untinted: a ratio of 1 to 0.2
-# is noise, not overlap.
-_HEAT_MIN_COUNT = 3
-# A cohort cell reaches the strongest tint when this share of the cohort comes back.
-_COHORT_FULL_SHARE = 0.5
-
-
-def _heat(ratio: float | None) -> dict[str, Any] | None:
-    """A diverging tint for an observed/expected *ratio*: side (``pos``/``neg``) and percent."""
-    if ratio is None or ratio <= 0:
-        return None
-    strength = min(abs(math.log2(ratio)) / _HEAT_LOG2_FULL, 1.0)
-    return {"side": "pos" if ratio >= 1 else "neg", "percent": round(strength * _HEAT_MAX_PERCENT)}
 
 
 def _audience_extras(section: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -1667,25 +1644,12 @@ def _audience_extras(section: str, data: dict[str, Any]) -> dict[str, Any]:
     if section == "overlap":
         for row in data["channel_rows"]:
             row["cells"] = [
-                None
-                if cell is None
-                else {
-                    **cell,
-                    "heat": _heat(cell["ratio"])
-                    if cell["shared"] and max(cell["shared"], cell["expected"]) >= _HEAT_MIN_COUNT
-                    else None,
-                }
-                for cell in row["cells"]
+                None if cell is None else {**cell, "heat": audience_tables.pair_heat(cell)} for cell in row["cells"]
             ]
         return {}
     if section == "retention" and data.get("accounts"):
         for cohort in data["cohorts"]:
-            cohort["cells"] = [
-                None
-                if v is None
-                else {"value": v, "percent": round(min(v / _COHORT_FULL_SHARE, 1.0) * _HEAT_MAX_PERCENT)}
-                for v in cohort["cells"]
-            ]
+            cohort["cells"] = [audience_tables.cohort_cell(v) for v in cohort["cells"]]
         return {
             "chart_data": {
                 "monthly": [{"month": m["month"], "active": m["active"], "new": m["new"]} for m in data["monthly"]]
@@ -1708,7 +1672,7 @@ class AudienceView(TemplateView):
             raise Http404("No such Audience section.")
         title, compute = _AUDIENCE_SECTIONS[section]
         voice = Label.from_filter_param(self.request.GET.get("filter"))
-        data = compute(voice)
+        data = compute(audience.Scope(voice=voice))
         ctx.update(data)
         ctx.update(
             {
@@ -1726,107 +1690,6 @@ class AudienceView(TemplateView):
         return ctx
 
 
-def _num(value: float | None) -> str:
-    return "" if value is None else f"{value:.6g}"
-
-
-def _title(channel: Channel | None) -> str:
-    return channel.title if channel is not None else ""
-
-
-def _audience_csv(section: str, data: dict[str, Any]) -> tuple[tuple[str, ...], list[list[Any]]]:
-    """The columns and rows of an Audience section's CSV (its main table)."""
-    if section == "participation":
-        columns = (
-            *_CHANNEL_CSV_COLUMNS,
-            "subscribers",
-            "commenters",
-            "replies",
-            "replies_per_commenter",
-            "commenters_per_subscriber",
-            "one_time_share",
-            "top10_share",
-            "gini",
-            "effective_commenters",
-            "hyperactive_reply_share",
-        )
-        rows = [
-            [
-                row["channel_id"],
-                *_channel_csv_cells(row["channel"]),
-                "" if row["subscribers"] is None else row["subscribers"],
-                row["accounts"],
-                row["replies"],
-                _num(row["mean"]),
-                _num(row["commenter_rate"]),
-                _num(row["one_time_share"]),
-                _num(row["top10_share"]),
-                _num(row["gini"]),
-                _num(row["effective_number"]),
-                _num(row["hyperactive_reply_share"]),
-            ]
-            for row in data["channels"]
-        ]
-        return columns, rows
-    if section == "breadth":
-        columns = ("label_group", "label", "commenters", "replies", "commenting_elsewhere_share")
-        rows = [
-            [g["name"], lab["name"], lab["commenters"], lab["replies"], _num(lab["elsewhere_share"])]
-            for g in data["groups"]
-            for lab in g["labels"]
-        ]
-        return columns, rows
-    if section == "overlap":
-        columns = ("channel_a_id", "channel_a", "channel_b_id", "channel_b", "shared", "expected", "ratio", "p", "q")
-        rows = [
-            [
-                pr["a"],
-                _title(pr["channel_a"]),
-                pr["b"],
-                _title(pr["channel_b"]),
-                pr["shared"],
-                _num(pr["expected"]),
-                _num(pr["ratio"]),
-                _num(pr["p"]),
-                _num(pr["q"]),
-            ]
-            for pr in data["pairs"]
-        ]
-        return columns, rows
-    if section == "retention":
-        return ("month", "active_commenters", "new_commenters", "channels_with_comments"), [
-            [m["month"], m["active"], m["new"], m["channels"]] for m in data.get("monthly", [])
-        ]
-    if section == "channel-commenters":
-        columns = (
-            "commenting_channel_telegram_id",
-            "commenting_channel",
-            "commenting_in_target",
-            "channel_id",
-            "channel",
-            "comments",
-            "first",
-            "last",
-            "cited_either_way",
-        )
-        rows = [
-            [
-                r["sender_tid"],
-                _title(r["sender"]) or r["sender_name"],
-                int(r["sender_in_target"]),
-                r["channel"].pk if r["channel"] else "",
-                _title(r["channel"]),
-                r["comments"],
-                r["first"].isoformat() if r["first"] else "",
-                r["last"].isoformat() if r["last"] else "",
-                "" if r["cited"] is None else int(r["cited"]),
-            ]
-            for r in data["pairs"]
-        ]
-        return columns, rows
-    raise Http404("This section has no CSV.")
-
-
 class AudienceCSVView(View):
     """``/audience/<section>.csv`` — an Audience section's main table, scoped like the page."""
 
@@ -1835,7 +1698,9 @@ class AudienceCSVView(View):
         if section not in _AUDIENCE_SECTIONS:
             raise Http404("No such Audience section.")
         voice = Label.from_filter_param(request.GET.get("filter"))
-        columns, rows = _audience_csv(section, _AUDIENCE_SECTIONS[section][1](voice))
+        columns, rows = audience_tables.section_table(
+            section, _AUDIENCE_SECTIONS[section][1](audience.Scope(voice=voice))
+        )
         return _csv_response(f"{section}.csv", columns, rows)
 
 

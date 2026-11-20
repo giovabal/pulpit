@@ -208,6 +208,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.timeline_window` | Sliding-window length in months (a multiple of the step, larger than it); `0` = consecutive, non-overlapping periods | `0` |
 | `outputs.event_impact` | Test each recorded event with an interrupted time series of the network's weekly activity ([docs](event-impact.md)) | `false` |
 | `outputs.links` | Outbound-link layer: the sites the channels link to by domain category, per-channel link measures, label × category matrix, co-linking pairs ([docs](outbound-links.md)) | `false` |
+| `outputs.audience` | The Audience page's sections over the export's commenters: participation, breadth, overlap, retention, channels as commenters ([docs](audience.md)); skipped when no reply is in scope | `true` |
 
 ## `[layouts]`
 

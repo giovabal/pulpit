@@ -179,8 +179,26 @@ class ParticipationTests(_Corpus):
         attribute(self.b, nation)
         self.reply(self.post_a, 10)
         self.reply(self.post_b, 11)
-        data = audience.participation(europe)
+        data = audience.participation(audience.Scope(voice=europe))
         self.assertEqual([row["channel_id"] for row in data["channels"]], [self.b.pk])
+
+    def test_scope_channel_ids_replace_the_in_target_set(self) -> None:
+        self.reply(self.post_a, 10)
+        self.reply(self.post_b, 11)
+        self.reply(self.post_out, 12)
+        data = audience.participation(audience.Scope(channel_ids=frozenset({self.b.pk, self.out.pk})))
+        # B only: Out is in the set but holds no in-target period, so its posts never pass the chokepoint.
+        self.assertEqual([row["channel_id"] for row in data["channels"]], [self.b.pk])
+        self.assertEqual(data["scope_channels"], 2)
+
+    def test_scope_dates_bound_the_posts(self) -> None:
+        later = Message.objects.create(channel=self.b, telegram_id=2, date=_DATE.replace(month=9))
+        self.reply(self.post_b, 10)
+        self.reply(later, 11, n=2)
+        start, end = datetime.date(2024, 9, 1), datetime.date(2024, 8, 31)  # both inclusive
+        self.assertEqual(audience.participation(audience.Scope(start=start))["overall"]["accounts"], 1)
+        self.assertEqual(audience.participation(audience.Scope(end=end))["overall"]["replies"], 1)
+        self.assertEqual(audience.participation()["overall"]["replies"], 3)
 
     def test_no_reply(self) -> None:
         data = audience.participation()

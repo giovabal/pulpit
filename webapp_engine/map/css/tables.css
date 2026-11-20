@@ -14,6 +14,9 @@
   --text: #1c1917;
   --muted: #78716c;
   --border: #e3e0d8;
+  /* Diverging tints (more / fewer than expected) — webapp.css --div-pos / --div-neg. */
+  --div-pos: #4338ca;
+  --div-neg: #c2410c;
   /* Shape */
   --radius: .5rem;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .05);
@@ -53,6 +56,8 @@
   --text: #e7e5e4;
   --muted: #c7c1bb;
   --border: #2a2a31;
+  --div-pos: #6366f1;
+  --div-neg: #ea580c;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow: 0 4px 12px rgba(0, 0, 0, .55);
   --bs-primary: #818cf8;
@@ -679,4 +684,103 @@ th.col-group-start {
   width: auto;
   opacity: .65;
   vertical-align: middle;
+}
+
+/* ── Audience page (audience.html) ─────────────────────────────
+   Mirror of the webapp.css .audience-* heat cells: --heat (a percentage
+   set inline) mixes the tint into the surface; the text keeps the ink.
+   "table td." outranks Bootstrap's .table > :not(caption) > * > * cell
+   background, which would otherwise paint over the tint. */
+.audience-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.audience-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.audience-card-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.audience-card-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-card-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-left: 0.25rem;
+}
+
+.audience-card-secondary {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.audience-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.audience-chart {
+  position: relative;
+  height: 260px;
+}
+
+.audience-cell {
+  min-width: 2.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table td.audience-cell--pos {
+  background: color-mix(in srgb, var(--div-pos) var(--heat), var(--surface));
+}
+
+.table td.audience-cell--neg {
+  background: color-mix(in srgb, var(--div-neg) var(--heat), var(--surface));
+}
+
+.table td.audience-cell--seq {
+  background: color-mix(in srgb, var(--accent) var(--heat), var(--surface));
+}
+
+.table td.audience-cell--self {
+  background: var(--hover);
+}
+
+.audience-sig {
+  margin-left: 0.125rem;
+  font-size: 0.625rem;
+  vertical-align: super;
+}
+
+.audience-key {
+  padding: 0 0.25rem;
+  border-radius: 2px;
+}
+
+.audience-key--pos {
+  background: color-mix(in srgb, var(--div-pos) 40%, transparent);
+}
+
+.audience-key--neg {
+  background: color-mix(in srgb, var(--div-neg) 40%, transparent);
+}
+
+.audience-section {
+  scroll-margin-top: 4rem;
 }

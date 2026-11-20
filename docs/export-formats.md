@@ -26,6 +26,9 @@ exports/
     links.html              ← outbound links: sites, categories, label × category matrix, co-linking (with --links --html)
     links.xlsx              ← its channels / sites / categories / co-linking / matrix sheets (with --links --xlsx)
     channel_sites.csv, links_colinking.csv  ← channel × site long table and co-linking pairs (with --links --csv)
+    audience.html           ← the commenters: participation, breadth, overlap, retention, channels as commenters (with --html; on unless --no-audience)
+    audience.xlsx           ← its summary and section tables (with --xlsx)
+    audience_<section>.csv  ← each section's main table, the Audience page's CSVs (with --csv)
     coordination.html       ← 2D co-forwarding coordination map (with --coordination-2d)
     coordination3d.html     ← 3D co-forwarding coordination map (with --coordination-3d)
     vacancy_analysis.html   ← replacement-candidate ranking (optional)
@@ -63,6 +66,7 @@ exports/
       mrqap.json            (when --mrqap)
       event_impact.json     (when --event-impact)
       links.json            (when --links)
+      audience.json         (unless --no-audience; skipped when no reply is in scope)
       timeline.json         (when --timeline-step)
     data_<period>/          (one per period with --timeline-step: data_2024/, data_2024Q1/, data_2024-03/)
       ...
@@ -428,6 +432,10 @@ Written with `--event-impact` (`data/event_impact.json` always; the page with `-
 ## links.html / links.xlsx / channel_sites.csv — outbound links
 
 Written with `--links` (`data/links.json` always, per timeline period too; the page with `--html`). The categories' share of link events, a label × category matrix per partition label group, one row per observed channel (linking posts share, distinct sites, platform diversity, monetisation / mainstream / alternative shares, categorised share, top sites), one row per site (category, messages, channels, first and last link, the labels linking most) and the co-linking pairs (shared sites against the number expected by chance, BH q, the shared sites rarest first). The per-channel measures also join the channel table, `nodes.csv` and GEXF/GraphML. The XLSX has `Channels` / `Sites` (with one sheet per period on a timeline export), `Categories`, `Co-linking` and `Matrix <group>` sheets; `channel_sites.csv` is the long channel × site table with message counts, `links_colinking.csv` the pairs. See [Outbound links](outbound-links.md).
+
+## audience.html / audience.xlsx / audience_*.csv — the commenters
+
+Written unless `--no-audience`, when the scope holds at least one reply (`data/audience.json` always; the page with `--html`). The five sections of the web app's [Audience](audience.md) page, computed once over the whole date range on the export's own scope: the observed in-target channels of the graph (so `--channel-types`, `--filter-labels` and the lost / private switches apply; dead leaves and environment channels are left out) and their posts inside their in-target periods and `--startdate` / `--enddate`. Not computed per timeline period. The page shows each section's figures, charts and tables; the XLSX has a `Summary` sheet, the five main tables (`Participation`, `Breadth labels`, `Overlap pairs`, `Retention monthly`, `Channel commenters` — the CSVs' layout, numbers kept numeric) and the tables beside them (`Activity`, `Breadth classes`, `Overlap channels`, `Overlap labels`, `Cohorts`); `audience_participation.csv`, `audience_breadth.csv`, `audience_overlap.csv`, `audience_retention.csv` and `audience_channel_commenters.csv` are the page's CSVs. Aggregates only — no commenting account is identified; channels are named, as on the page.
 
 ## network.gexf / network.graphml — network exchange formats
 

@@ -19,9 +19,9 @@ from collections import Counter, defaultdict
 
 from django.db.models import Q
 
-from webapp.models import Channel, Label, Message, MessageReply
+from webapp.models import Channel, Message, MessageReply
 
-from .scope import coverage, scope_posts
+from .scope import Scope, coverage, scope_posts
 
 #: Telethon marks a channel's id as −(MARKED_CHANNEL_OFFSET + id).
 MARKED_CHANNEL_OFFSET = 1_000_000_000_000
@@ -49,9 +49,9 @@ def _cited(a: Channel, b: Channel) -> bool:
     ).exists()
 
 
-def channel_commenters(voice: Label | None = None) -> dict:
+def channel_commenters(scope: Scope | None = None) -> dict:
     """Everything the channels-as-commenters section shows, for one scope."""
-    rows = MessageReply.objects.filter(parent_message__in=scope_posts(voice).values("pk"), sender_id__lt=0).values_list(
+    rows = MessageReply.objects.filter(parent_message__in=scope_posts(scope).values("pk"), sender_id__lt=0).values_list(
         "sender_id",
         "sender_name",
         "date",
@@ -102,5 +102,5 @@ def channel_commenters(voice: Label | None = None) -> dict:
         "kinds": {KIND_OWN: kinds[KIND_OWN], KIND_GROUP: kinds[KIND_GROUP], KIND_OTHER: kinds[KIND_OTHER]},
         "commenting_channels": len({tid for tid, _ in pairs}),
         "uncited_pairs": sum(1 for r in out if r["cited"] is False),
-        **coverage(voice),
+        **coverage(scope),
     }

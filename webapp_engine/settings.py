@@ -507,6 +507,7 @@ SA_TIMELINE_STEP = _structural.outputs.timeline_step
 SA_TIMELINE_WINDOW = int(getattr(_structural.outputs, "timeline_window", 0) or 0)
 SA_EVENT_IMPACT = bool(getattr(_structural.outputs, "event_impact", False))
 SA_LINKS = bool(getattr(_structural.outputs, "links", False))
+SA_AUDIENCE = bool(getattr(_structural.outputs, "audience", True))
 SA_EVENT_WINDOW_WEEKS = int(getattr(_structural.computation, "event_window_weeks", 26) or 26)
 SA_VACANCY_MEASURES = ",".join(_structural.vacancy.measures)
 SA_VACANCY_MONTHS_BEFORE = _structural.vacancy.months_before
