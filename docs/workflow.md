@@ -146,8 +146,8 @@ The options panel is organized into four independent groups — each is its own 
 
 | Option | When to use it |
 | :----- | :------------- |
-| **In target channels** | On by default. Recomputes in-degree and out-degree for all in-target channels. |
-| **Out of target channels** | On by default. Recomputes citation degree for out-of-target channels referenced by in-target ones, and resets to 0 the degrees of out-of-target channels no longer referenced (e.g. a channel whose in-target labels were removed). |
+| **In target channels** | On by default. Recomputes in-degree and out-degree for all in-target channels: the number of in-target channels that forward or mention each one, and the number it forwards or mentions. A channel counts once however many posts cite. |
+| **Out of target channels** | On by default. Recomputes citation degree (the number of in-target channels citing it) for out-of-target channels referenced by in-target ones, and resets to 0 the degrees of out-of-target channels no longer referenced (e.g. a channel whose in-target labels were removed). |
 
 **4. Index** — offline steps after the crawl (no Telegram connection needed).
 

@@ -15,6 +15,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from crawler.channel_crawler import ChannelCrawler
+from crawler.degrees import refresh_degrees
 from crawler.hole_fixer import fix_message_holes, iter_hole_ranges
 from crawler.management.commands.crawl_channels import (
     _TELETHON_PKG_PATH,
@@ -3389,6 +3390,19 @@ class DegreeRefreshTests(TestCase):
         self.assertEqual(self._degrees(self.out_of_period), (0, 0))
         self.assertEqual(self._degrees(self.never_computed), (None, None))
 
+    def test_degrees_count_channels_not_messages(self) -> None:
+        # More citations from the same amplifier: forwards and t.me/ mentions alike.
+        for tid, cited in ((103, self.source), (104, self.cited)):
+            Message.objects.create(
+                telegram_id=tid, channel=self.amplifier, date=_dated(2023, 7, 1), forwarded_from=cited
+            )
+        mention = Message.objects.create(telegram_id=105, channel=self.amplifier, date=_dated(2023, 7, 2))
+        mention.references.add(self.source, self.cited)
+        self._run(in_degrees=True, out_degrees=True)
+        self.assertEqual(self._degrees(self.amplifier), (0, 1))
+        self.assertEqual(self._degrees(self.source), (1, 0))
+        self.assertEqual(self._degrees(self.cited), (1, 0))
+
     def test_reset_runs_when_nothing_is_cited(self) -> None:
         Message.objects.all().delete()
         self._run(out_degrees=True)
@@ -3406,6 +3420,70 @@ class DegreeRefreshTests(TestCase):
         self._run(in_degrees=True)
         self.assertEqual(self._degrees(self.source), (1, 0))
         self.assertEqual(self._degrees(self.uncited), (5, 2))
+
+
+class CitationDegreeRuleTests(TestCase):
+    """``crawler.degrees.refresh_degrees``: who counts towards the stored degrees."""
+
+    def setUp(self) -> None:
+        self.org = make_label(name="Org", is_in_target=True)
+        self.ch1 = make_channel(telegram_id=1, title="One", label=self.org)
+        self.ch2 = make_channel(telegram_id=2, title="Two", label=self.org)
+
+    def _degrees(self, channel: Channel) -> tuple[int | None, int | None]:
+        refresh_degrees()
+        channel.refresh_from_db()
+        return channel.in_degree, channel.out_degree
+
+    def _cite(self, tid: int, citing: Channel, *, forward: Channel | None = None, mention=()) -> None:
+        message = Message.objects.create(telegram_id=tid, channel=citing, forwarded_from=forward)
+        message.references.add(*mention)
+
+    def test_forward_from_an_in_target_channel_counts(self) -> None:
+        self._cite(10, self.ch2, forward=self.ch1)
+        self.assertEqual(self._degrees(self.ch1), (1, 0))
+        self.assertEqual(self._degrees(self.ch2), (0, 1))
+
+    def test_citing_oneself_is_not_a_tie(self) -> None:
+        self._cite(10, self.ch1, forward=self.ch1, mention=[self.ch1])
+        self.assertEqual(self._degrees(self.ch1), (0, 0))
+
+    def test_a_citer_without_an_in_target_label_does_not_count(self) -> None:
+        boring = make_channel(telegram_id=50, label=make_label(name="Boring", is_in_target=False))
+        self._cite(10, boring, forward=self.ch1)
+        self.assertEqual(self._degrees(self.ch1), (0, 0))
+
+    def test_out_degree_counts_in_target_channels_only(self) -> None:
+        outside = make_channel(telegram_id=50, title="Outside")
+        self._cite(10, self.ch1, forward=self.ch2, mention=[outside])
+        self.assertEqual(self._degrees(self.ch1), (0, 1))
+        self.assertEqual(self._degrees(outside), (1, 0))
+
+    def test_in_degree_counts_citing_channels_not_messages(self) -> None:
+        ch3 = make_channel(telegram_id=3, title="Three", label=self.org)
+        self._cite(10, self.ch2, forward=self.ch1)
+        self._cite(11, self.ch2, forward=self.ch1)
+        self._cite(12, self.ch2, mention=[self.ch1])
+        self._cite(13, ch3, mention=[self.ch1])
+        self.assertEqual(self._degrees(self.ch1), (2, 0))
+
+    def test_out_degree_counts_cited_channels_not_messages(self) -> None:
+        ch3 = make_channel(telegram_id=3, title="Three", label=self.org)
+        self._cite(10, self.ch1, forward=self.ch2)
+        self._cite(11, self.ch1, forward=self.ch2)
+        self._cite(12, self.ch1, mention=[self.ch2, ch3])
+        self.assertEqual(self._degrees(self.ch1), (0, 2))
+
+    @override_settings(DEFAULT_CHANNEL_TYPES=["CHANNEL"])
+    def test_lost_private_and_other_type_citers_count(self) -> None:
+        # The stored in-degree is the dead-leaf gate; build_graph's --include-lost /
+        # --include-private / --channel-types filter later, so every citer counts here.
+        leaf = make_channel(telegram_id=40, title="Leaf")
+        for tid, state in ((20, {"is_lost": True}), (21, {"is_private": True}), (22, {"megagroup": True})):
+            citer = make_channel(telegram_id=tid, title=str(state), label=self.org, **state)
+            self._cite(tid, citer, forward=self.ch1, mention=[leaf])
+        self.assertEqual(self._degrees(self.ch1), (3, 0))
+        self.assertEqual(self._degrees(leaf), (3, 0))
 
 
 class GapCouldBeInTargetTests(TestCase):

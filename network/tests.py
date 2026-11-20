@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
+from crawler.degrees import refresh_degrees
 from network.community import (
     COMMUNITY_ALGORITHMS,
     LEIDEN_RUNS,
@@ -1582,7 +1583,7 @@ class BuildGraphTests(TestCase):
         ch3 = make_channel(telegram_id=3, label=None, title="Dead Leaf")
         # ch2 (in target) forwards from ch3 → ch3 gets in_degree > 0
         Message.objects.create(telegram_id=10, channel=self.ch2, forwarded_from=ch3)
-        ch3.refresh_degrees()
+        refresh_degrees()
         ch3.refresh_from_db()
         self.assertGreater(ch3.in_degree or 0, 0)
         # Create a ch1↔ch2 edge so graph is valid
@@ -1692,7 +1693,7 @@ class BuildGraphTests(TestCase):
             forwarded_from=leaf,
             date=datetime.datetime(2023, 6, 15, tzinfo=datetime.timezone.utc),
         )
-        leaf.refresh_degrees()
+        refresh_degrees()
         _, channel_dict, _, channel_qs = build_graph(
             draw_dead_leaves=True,
             start_date=datetime.date(2023, 1, 1),
@@ -1724,7 +1725,7 @@ class BuildGraphTests(TestCase):
             channel=self.ch1,
             date=datetime.datetime(2023, 3, 1, tzinfo=datetime.timezone.utc),
         )
-        leaf.refresh_degrees()
+        refresh_degrees()
         _, channel_dict, _, _ = build_graph(
             draw_dead_leaves=True,
             start_date=datetime.date(2023, 1, 1),
@@ -7761,8 +7762,7 @@ class EnvironmentDepthGraphTests(TestCase):
         Message.objects.create(telegram_id=200, channel=self.e1, date=_at(2023, 4, 1), forwarded_from=self.b)
         Message.objects.create(telegram_id=201, channel=self.e1, date=_at(2023, 4, 2), forwarded_from=self.e2)
         Message.objects.create(telegram_id=300, channel=self.e2, date=_at(2023, 5, 1), forwarded_from=self.a)
-        for ch in (self.a, self.b, self.e1, self.e2):
-            ch.refresh_degrees()
+        refresh_degrees()
 
     def _ids(self, channel_dict: dict) -> set[str]:
         return set(channel_dict)
@@ -7822,7 +7822,7 @@ class EnvironmentDepthGraphTests(TestCase):
     def test_dead_leaf_reports_depth_one(self) -> None:
         leaf = make_channel(telegram_id=40, label=None, title="Leaf")
         Message.objects.create(telegram_id=500, channel=self.a, date=_at(2023, 7, 1), forwarded_from=leaf)
-        leaf.refresh_degrees()
+        refresh_degrees()
         _, channel_dict, _, _ = build_graph(draw_dead_leaves=True)
         self.assertEqual(channel_dict[str(leaf.pk)]["data"]["environment_depth"], 1)
         # Without a depth the environment channels are dead leaves too (E1 is cited by A)…

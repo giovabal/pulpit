@@ -204,9 +204,9 @@ VALID_EDGE_WEIGHT_STRATEGIES = {"NONE", "TOTAL", "PARTIAL_MESSAGES", "PARTIAL_RE
 
 #: Every edge's ``weight`` is rescaled to ``EDGE_WEIGHT_SCALE · w / max(w)``, so the heaviest edge weighs this.
 EDGE_WEIGHT_SCALE = 10
-#: Dead-leaf criterion: an out-of-target channel cited (forwarded or mentioned) at least this many times by the
-#: in-target set, all time (``Channel.in_degree``).
-DEAD_LEAF_MIN_CITATIONS = 1
+#: Dead-leaf criterion: an out-of-target channel cited (forwarded or mentioned) by at least this many in-target
+#: channels, all time (``Channel.in_degree``, counted in distinct channels by ``crawler.degrees``).
+DEAD_LEAF_MIN_CITING_CHANNELS = 1
 
 _SOURCE = "network/graph_builder.py"
 
@@ -223,13 +223,13 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         source=f"{_SOURCE}: EDGE_WEIGHT_SCALE",
     ),
     FixedParameter(
-        name="Dead-leaf minimum citations",
-        value=DEAD_LEAF_MIN_CITATIONS,
+        name="Dead-leaf minimum citing channels",
+        value=DEAD_LEAF_MIN_CITING_CHANNELS,
         scope="graph",
-        affects="With dead leaves drawn, an out-of-target channel enters the graph when the in-target channels "
-        "cited it at least this many times over all time (Channel.in_degree); one cited only outside the "
+        affects="With dead leaves drawn, an out-of-target channel enters the graph when at least this many "
+        "in-target channels have cited it over all time (Channel.in_degree); one cited only outside the "
         "analysed periods is then dropped as isolated.",
-        source=f"{_SOURCE}: DEAD_LEAF_MIN_CITATIONS",
+        source=f"{_SOURCE}: DEAD_LEAF_MIN_CITING_CHANNELS",
     ),
 )
 
@@ -402,8 +402,8 @@ def build_graph(
 
     A *dead-leaf* node is an out-of-target channel that at least one in-target
     channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
-    gated by ``draw_dead_leaves``: the crawl counts every such forward/mention
-    from the in-target set and stores the total in the out-of-target channel's
+    gated by ``draw_dead_leaves``: the crawl counts the in-target channels citing
+    each out-of-target channel (``crawler.degrees``) and stores the count in its
     ``in_degree``, so a non-zero in-degree is exactly the dead-leaf criterion.
     """
     # Node set: channels with an in-target period overlapping [start_date, end_date]
@@ -422,9 +422,9 @@ def build_graph(
         qs_filter &= Q(Exists(under_selection))
     if draw_dead_leaves:
         # Dead-leaf criterion: an out-of-target channel cited (forwarded or
-        # mentioned) at least once by some in-target channel. The cited count
+        # mentioned) by some in-target channel. The number of citing channels
         # lives in in_degree under the citation orientation (amplifier→source).
-        dead_leaf_q = Q(in_degree__gte=DEAD_LEAF_MIN_CITATIONS)
+        dead_leaf_q = Q(in_degree__gte=DEAD_LEAF_MIN_CITING_CHANNELS)
         if filter_labels:
             # Under a container-label filter, an in-target channel outside the
             # selection must not slip back in through the dead-leaf gate — its
@@ -688,7 +688,7 @@ def build_graph(
         )
 
     # Remove org-less nodes that ended up with no edges. Two ways they arise:
-    # dead leaves earned their slot via the all-time, period-blind
+    # dead leaves earned their slot via the all-time, window-blind
     # ``Channel.in_degree`` but edge construction is period-aware
     # (``channel_cutoff_q``), so a leaf cited solely outside those periods — or
     # inside a restricted analysis window with no citations — keeps no edge; and an

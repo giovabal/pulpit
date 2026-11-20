@@ -8,7 +8,6 @@ import shutil
 import sys
 import tempfile
 from argparse import ArgumentParser, BooleanOptionalAction
-from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from time import sleep
@@ -17,11 +16,12 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import OperationalError, connection
-from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q
+from django.db.models import Count, Exists, Max, Min, OuterRef, Q
 
 from crawler.channel_crawler import ChannelCrawler, user_account_fields
 from crawler.client import TelegramAPIClient
 from crawler.custom_emoji import resolve_custom_emoji
+from crawler.degrees import DEGREE_BATCH_SIZE, degree_updates, ever_in_target_q, save_degrees
 from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, ReferenceResolver, extract_text_references
@@ -45,11 +45,6 @@ from telethon import errors
 from telethon.sync import TelegramClient
 
 logger = logging.getLogger(__name__)
-
-
-def _ever_in_target() -> Q:
-    """Q matching channels that hold at least one in-target label period (any time)."""
-    return Q(Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label__is_in_target=True)))
 
 
 from dataclasses import dataclass  # noqa: E402
@@ -841,8 +836,8 @@ class Command(BaseCommand):
         ``label_fmt`` accepts a single ``{total}`` placeholder so the caller
         doesn't have to interpolate twice (once for the announce banner and
         once for the per-batch progress tick). Set ``announce=True`` to emit
-        the leading banner line — used by the first pass; the second pass
-        piggy-backs on the same stream and omits it.
+        the leading banner line — used by the first batch written; the later
+        ones piggy-back on the same stream and omit it.
         """
         total = len(channels)
         if not total:
@@ -851,9 +846,9 @@ class Command(BaseCommand):
         printer = ProgressPrinter(self.stdout, total)
         if announce:
             printer.announce(f"\n{label}")
-        for i in range(0, total, 100):
-            Channel.objects.bulk_update(channels[i : i + 100], ["in_degree", "out_degree"])
-            done = min(i + 100, total)
+        for i in range(0, total, DEGREE_BATCH_SIZE):
+            save_degrees(channels[i : i + DEGREE_BATCH_SIZE])
+            done = min(i + DEGREE_BATCH_SIZE, total)
             printer.progress(f"{label} [{done}/{total}]")
         printer.ensure_newline()
 
@@ -1600,7 +1595,7 @@ class Command(BaseCommand):
             qs = (
                 Channel.objects.filter(pk__in=new_pks[i : i + _PK_BATCH])
                 .filter(channel_type_filter(opts.channel_types))
-                .exclude(_ever_in_target())
+                .exclude(ever_in_target_q())
                 .exclude(to_inspect=True)
                 .exclude(is_user_account=True)
             )
@@ -1727,7 +1722,7 @@ class Command(BaseCommand):
 
     def _build_crawl_qs(self, opts: CrawlOptions) -> Any:
         """Channels included in this crawl: channels ever in-target, plus to_inspect candidates."""
-        qs = Channel.objects.filter(_ever_in_target() | Q(to_inspect=True)).filter(
+        qs = Channel.objects.filter(ever_in_target_q() | Q(to_inspect=True)).filter(
             channel_type_filter(opts.channel_types)
         )
         if not opts.retry_lost_and_private:
@@ -1932,7 +1927,9 @@ class Command(BaseCommand):
 
                         if get_channels_info and opts.update_type_excluded_info:
                             all_in_target_base = (
-                                Channel.objects.filter(_ever_in_target()).exclude(is_lost=True).exclude(is_private=True)
+                                Channel.objects.filter(ever_in_target_q())
+                                .exclude(is_lost=True)
+                                .exclude(is_private=True)
                             )
                             excluded_by_type = all_in_target_base.exclude(channel_type_filter(channel_types)).order_by(
                                 "-id"
@@ -2238,144 +2235,15 @@ class Command(BaseCommand):
 
         # ── DEGREES (no Telegram client needed) ───────────────────────────────
         if in_degrees or out_degrees:
+            # Network-wide, not crawl-scoped, counted in distinct channels: the rule
+            # lives in crawler/degrees.py.
             self.stdout.write("\nRefreshing degrees: querying message data…")
             self.stdout.flush()
-            # Global, not crawl-scoped: degrees are network-wide quantities, and an
-            # ever-in-target channel outside --filter-labels/--channel-types scope must
-            # never fall into cited_pks — the out-degrees pass would overwrite it with
-            # out_degree=0. Lost messages are excluded throughout to match
-            # Channel.refresh_degrees() and the graph builder.
-            in_target_pks = set(Channel.objects.filter(_ever_in_target()).values_list("pk", flat=True))
-
-            cited_pks = (
-                set(
-                    Message.objects.alive()
-                    .filter(
-                        channel_cutoff_q(),
-                        forwarded_from__isnull=False,
-                    )
-                    .values_list("forwarded_from_id", flat=True)
-                )
-                | set(
-                    Message.references.through.objects.filter(
-                        channel_cutoff_q("message__channel", "message__date"),
-                        message__is_lost=False,
-                    ).values_list("channel_id", flat=True)
-                )
-            ) - in_target_pks
-
-            if in_degrees and in_target_pks:
-                self.stdout.write("Refreshing degrees: computing citation counts…")
-                self.stdout.flush()
-                fwd_cited_by = set(
-                    Message.objects.alive()
-                    .filter(
-                        channel_cutoff_q(),
-                        forwarded_from_id__in=in_target_pks,
-                    )
-                    .exclude(channel_id=F("forwarded_from_id"))
-                    .values_list("id", "forwarded_from_id")
-                )
-                ref_cited_by = set(
-                    Message.references.through.objects.filter(
-                        channel_cutoff_q("message__channel", "message__date"),
-                        channel_id__in=in_target_pks,
-                        message__is_lost=False,
-                    )
-                    .exclude(message__channel_id=F("channel_id"))
-                    .values_list("message_id", "channel_id")
-                )
-                cited_by_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited_by | ref_cited_by)
-
-                fwd_cites = set(
-                    Message.objects.alive()
-                    .filter(
-                        channel_cutoff_q(),
-                        channel_id__in=in_target_pks,
-                        forwarded_from_id__in=in_target_pks,
-                    )
-                    .exclude(channel_id=F("forwarded_from_id"))
-                    .values_list("channel_id", "id")
-                )
-                ref_cites = set(
-                    Message.references.through.objects.filter(
-                        channel_cutoff_q("message__channel", "message__date"),
-                        message__channel_id__in=in_target_pks,
-                        channel_id__in=in_target_pks,
-                        message__is_lost=False,
-                    )
-                    .exclude(message__channel_id=F("channel_id"))
-                    .values_list("message__channel_id", "message_id")
-                )
-                cites_counts: Counter[int] = Counter(src for src, _ in fwd_cites | ref_cites)
-
-                channels_to_update = list(Channel.objects.filter(pk__in=in_target_pks))
-                for ch in channels_to_update:
-                    # Citation orientation: incoming = cited by others, outgoing = cites others.
-                    ch.in_degree = cited_by_counts.get(ch.pk, 0)
-                    ch.out_degree = cites_counts.get(ch.pk, 0)
-
-                self._bulk_update_degrees(
-                    channels_to_update,
-                    "Refreshing degrees for {total} in-target channels",
-                    announce=True,
-                )
-
-            if out_degrees and cited_pks:
-                fwd_cited = set(
-                    Message.objects.alive()
-                    .filter(
-                        channel_cutoff_q(),
-                        forwarded_from_id__in=cited_pks,
-                    )
-                    .exclude(channel_id=F("forwarded_from_id"))
-                    .values_list("id", "forwarded_from_id")
-                )
-                ref_cited = set(
-                    Message.references.through.objects.filter(
-                        channel_cutoff_q("message__channel", "message__date"),
-                        channel_id__in=cited_pks,
-                        message__is_lost=False,
-                    )
-                    .exclude(message__channel_id=F("channel_id"))
-                    .values_list("message_id", "channel_id")
-                )
-                citations_counts: Counter[int] = Counter(tgt for _, tgt in fwd_cited | ref_cited)
-
-                cited_channels = list(Channel.objects.filter(pk__in=cited_pks))
-                for ch in cited_channels:
-                    # Out-of-target channels: only the citation count matters; it
-                    # lives in in_degree under the amplifier→source convention.
-                    ch.in_degree = citations_counts.get(ch.pk, 0)
-                    ch.out_degree = 0
-
-                self._bulk_update_degrees(
-                    cited_channels,
-                    "Refreshing citation degree for {total} referenced channels",
-                )
-
-            if out_degrees:
-                # The rest of the out-of-target channels are cited by no in-period message
-                # any more — a channel whose in-target labels were removed, or one whose
-                # citing messages fell out of the periods or were purged — so their degrees
-                # are 0. Reset the ones still showing an earlier value (never-computed NULLs
-                # stay NULL); in-target channels are --in-degrees' to rewrite, cited ones were
-                # just recomputed above.
-                stale_channels = [
-                    ch
-                    for ch in Channel.objects.filter(Q(in_degree__gt=0) | Q(out_degree__gt=0)).only(
-                        "pk", "in_degree", "out_degree"
-                    )
-                    if ch.pk not in in_target_pks and ch.pk not in cited_pks
-                ]
-                for ch in stale_channels:
-                    ch.in_degree = 0
-                    ch.out_degree = 0
-
-                self._bulk_update_degrees(
-                    stale_channels,
-                    "Resetting degrees for {total} channels no longer in target or cited",
-                )
+            announce = True
+            for update in degree_updates(in_target=in_degrees, out_of_target=out_degrees):
+                if update.channels:
+                    self._bulk_update_degrees(update.channels, update.label, announce=announce)
+                    announce = False
 
         self._sync_message_tags()
 
