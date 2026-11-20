@@ -15,6 +15,7 @@ from django.db.models import Max, Min
 from django.utils import timezone
 
 from network import (
+    audience_layer,
     community,
     community_stats,
     coordination,
@@ -453,6 +454,8 @@ class ResolvedOptions:
     event_window_weeks: int = event_impact.EVENT_WINDOW_WEEKS_DEFAULT
     # Outbound-link layer (network.link_layer): the sites linked to, by domain category.
     do_links: bool = False
+    # The Audience page's sections over the export's scope (network.audience_layer) — on unless --no-audience.
+    do_audience: bool = True
 
     timeline_window: int | None = None
 
@@ -536,6 +539,7 @@ class ResolvedOptions:
             "event_impact": self.do_event_impact,
             "event_window_weeks": self.event_window_weeks,
             "links": self.do_links,
+            "audience": self.do_audience,
             "interest_structural": self.do_interest_structural,
             "interest_window_days": self.interest_window_days,
             "interest_include_mentions": self.interest_include_mentions,
@@ -1343,6 +1347,19 @@ class Command(BaseCommand):
                 "alternative shares), a sites table, a label × category matrix and statistically validated "
                 "co-linking pairs. Writes data/links.json; links.html with --html, links.xlsx with --xlsx, "
                 "channel_sites.csv with --csv. See docs/outbound-links.md."
+            ),
+        )
+        parser.add_argument(
+            "--audience",
+            dest="audience",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=(
+                "The Audience page's sections — participation inequality, breadth, audience overlap, retention, "
+                "channels as commenters — over the commenters of the export's observed in-target channels, posts "
+                "inside --startdate/--enddate. On by default; --no-audience skips it. Writes data/audience.json; "
+                "audience.html with --html, audience.xlsx with --xlsx, audience_<section>.csv with --csv. Needs "
+                "replies stored by crawl_channels --fetch-replies. See docs/audience.md."
             ),
         )
         # ── Interest structural analysis (per-message C + D) ─────────────────
@@ -2790,6 +2807,7 @@ class Command(BaseCommand):
             do_dyadic_export=_o("dyadic_export", False),
             do_event_impact=_o("event_impact", False),
             do_links=_o("links", False),
+            do_audience=_o("audience", True),
             event_window_weeks=max(
                 int(_o("event_window_weeks", event_impact.EVENT_WINDOW_WEEKS_DEFAULT) or 0),
                 event_impact.MIN_WEEKS_PER_SIDE,
@@ -3057,6 +3075,25 @@ class Command(BaseCommand):
                 f"({global_links_payload['colinking']['validated']} validated co-linking pairs)"
             )
 
+        # The Audience page's sections over the export's own scope (observed in-target channels, its dates).
+        audience_result: audience_layer.AudienceExport | None = None
+        if opts.do_audience:
+            self.stdout.write("- audience (commenters) … ", ending="")
+            self.stdout.flush()
+            audience_result = audience_layer.compute_audience(
+                graph, graph_data, start_date=opts.start_date, end_date=opts.end_date
+            )
+            run_facts.audience_commenters = audience_result.payload["participation"]["overall"]["accounts"]
+            if audience_result.has_data:
+                coverage = audience_result.payload["coverage"]
+                self.stdout.write(
+                    f"{audience_result.payload['participation']['overall']['accounts']} commenters on "
+                    f"{coverage['channels_with_comments']} of {coverage['scope_channels']} channels"
+                )
+            else:
+                self.stdout.write(self.style.WARNING("skipped (no reply in scope — crawl with --fetch-replies)"))
+                audience_result = None
+
         _final_target = str(Path(settings.BASE_DIR) / "exports" / opts.export_name)
         # All writes go to the staging directory; it is renamed to _final_target only after
         # write_summary_json completes, making every live export atomically consistent.
@@ -3091,6 +3128,7 @@ class Command(BaseCommand):
             or opts.do_robustness
             or (opts.do_dominance and opts.do_html)
             or (opts.do_links and opts.do_html)
+            or (audience_result is not None and opts.do_html)
             # interest_structural.html imports ./js/utils.js and css/tables.css from
             # the copied map assets, like the vacancy/robustness pages above.
             or opts.do_interest_structural
@@ -3277,6 +3315,18 @@ class Command(BaseCommand):
                 )
             if opts.do_csv:
                 exporter.write_channel_sites_csv(global_links_payload, root_target)
+
+        if audience_result is not None:
+            self.stdout.write("- audience (json" + (" + html" if opts.do_html else "") + ")")
+            exporter.write_audience_json(audience_result.payload, root_target)
+            if opts.do_html:
+                tables.write_audience_html(
+                    output_filename=os.path.join(root_target, "audience.html"),
+                    seo=opts.seo,
+                    project_title=project_title,
+                )
+            if opts.do_csv:
+                exporter.write_audience_csv(audience_result, root_target)
 
         if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("- media")
@@ -3709,6 +3759,13 @@ class Command(BaseCommand):
                     project_title=project_title,
                     year_data=links_periods,
                 )
+            if audience_result is not None:
+                self.stdout.write("- audience (xlsx)")
+                tables.write_audience_xlsx(
+                    audience_result,
+                    output_filename=os.path.join(root_target, "audience.xlsx"),
+                    project_title=project_title,
+                )
 
         self.stdout.write("- index")
         os.makedirs(root_target, exist_ok=True)
@@ -3744,6 +3801,8 @@ class Command(BaseCommand):
             include_event_impact_xlsx=opts.do_event_impact and opts.do_xlsx,
             include_links_html=opts.do_links and opts.do_html,
             include_links_xlsx=opts.do_links and opts.do_xlsx,
+            include_audience_html=audience_result is not None and opts.do_html,
+            include_audience_xlsx=audience_result is not None and opts.do_xlsx,
         )
 
         near_copy_count: int | None = None

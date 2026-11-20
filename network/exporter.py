@@ -29,6 +29,7 @@ import networkx as nx
 from networkx.readwrite.gexf import GEXFWriter
 
 if TYPE_CHECKING:
+    from network.audience_layer import AudienceExport
     from network.coordination import CoordinationResult
 
 logger = logging.getLogger(__name__)
@@ -871,6 +872,7 @@ def write_summary_json(
         "event_impact",
         "event_window_weeks",
         "links",
+        "audience",
     )
     opts: dict = {}
     for key in _OPTION_KEYS:
@@ -1017,6 +1019,26 @@ def write_channel_sites_csv(payload: dict, output_dir: str) -> None:
         writer = _csv.writer(fh)
         writer.writerow(headers)
         writer.writerows(rows)
+
+
+def write_audience_json(payload: dict, graph_dir: str) -> None:
+    """Write data/audience.json from :func:`network.audience_layer.compute_audience`."""
+    data_dir = os.path.join(graph_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "audience.json"), "w") as f:
+        f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
+
+
+def write_audience_csv(result: "AudienceExport", output_dir: str) -> None:
+    """Write one ``audience_<section>.csv`` per Audience section — the page's CSVs, over the export's scope."""
+    from network.audience_layer import csv_tables
+
+    os.makedirs(output_dir, exist_ok=True)
+    for filename, columns, rows in csv_tables(result):
+        with open(os.path.join(output_dir, filename), "w", newline="", encoding="utf-8") as fh:
+            writer = _csv.writer(fh)
+            writer.writerow(columns)
+            writer.writerows(rows)
 
 
 def write_dominance_csv(payload: dict, output_dir: str) -> None:

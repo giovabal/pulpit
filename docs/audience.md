@@ -2,7 +2,7 @@
 
 *Who reads these channels? Telegram shows a channel's subscribers only to its admins, so a crawler sees one number per channel and no people. The part of the audience that can be followed person by person is the **commenters**: the accounts replying in a channel's discussion group. The Audience page measures them — how concentrated the commenting is, how far commenters spread across channels and labels, which channels share them, and whether they come back.*
 
-Open it from **Audience** in the top menu (`/audience/`). It needs comments in the database: run the crawl with **Fetch replies** (`crawl_channels --fetch-replies`) on channels that have a discussion group. Nothing here is part of the `structural_analysis` export; the page reads the database directly, and every section has a **CSV** of its main table.
+Open it from **Audience** in the top menu (`/audience/`). It needs comments in the database: run the crawl with **Fetch replies** (`crawl_channels --fetch-replies`) on channels that have a discussion group. The page reads the database directly, and every section has a **CSV** of its main table. Every `structural_analysis` export carries the same sections too — see [In an export](#in-an-export).
 
 ---
 
@@ -78,6 +78,18 @@ A reply's sender can be a channel instead of a person: an admin posting under th
 The last is a channel-to-channel tie the citation network does not see, since that is built from forwards and mentions. The table lists each pair with its comments and dates, and *Also cited* says whether the two channels forward or mention each other, either way, in any stored message (when the commenting channel has not been crawled, only the other channel's messages can show it). Channels are public actors, so they are named.
 
 Every channel commenting on another channel's posts gets a row in the channels list, even when it has since been deleted, so the table links it. See [Workflow § Channels found in comments](workflow.md#channels-found-in-comments).
+
+---
+
+## In an export
+
+`structural_analysis` writes the five sections into the export unless told not to (Outputs → *Audience*, CLI `--no-audience`): `audience.html` with **HTML**, `audience.xlsx` with **XLSX**, the sections' CSVs (`audience_<section>.csv`) with **CSV**, and `data/audience.json` always. Same statistics as the page, on the export's own scope:
+
+- **Channels**: the graph's observed in-target channels, so the export's channel types, scope filter and lost / private switches apply. Dead leaves and environment channels are left out, as everywhere the page says *in target*.
+- **Posts**: inside the channels' in-target periods and the export's **Start** / **End** dates. One computation over the whole range; the sections are not repeated per timeline period (Retention is already a time series).
+- **Commenters**: the bot and bulk-poster flags and the Manage → Commenters overrides as they stand when the export runs.
+
+With no reply in scope the section is skipped with a warning. `PARAMETERS.md` lists the thresholds, null-model settings and seeds the sections ran with. See [Export formats](export-formats.md#audiencehtml--audiencexlsx--audience_csv--the-commenters).
 
 ---
 

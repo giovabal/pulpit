@@ -13,11 +13,21 @@ from __future__ import annotations
 import datetime
 from collections import Counter, defaultdict
 
-from webapp.models import Label
+from network.parameters import FixedParameter
 
-from .scope import coverage, reply_records
+from .scope import Scope, coverage, reply_records
 
 COHORT_QUARTERS = 8
+
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Retention: cohort horizon",
+        value=f"{COHORT_QUARTERS} quarters",
+        scope="audience",
+        affects="How many quarters after its first reply a cohort's return rate is followed.",
+        source="webapp/audience/retention.py: COHORT_QUARTERS",
+    ),
+)
 
 
 def _month(day: datetime.date) -> str:
@@ -42,11 +52,11 @@ def _months_between(first: datetime.date, last: datetime.date) -> list[str]:
     return out
 
 
-def retention(voice: Label | None = None) -> dict:
+def retention(scope: Scope | None = None) -> dict:
     """Everything the retention section shows, for one scope."""
-    replies = [r for r in reply_records(voice) if r.day is not None]
+    replies = [r for r in reply_records(scope) if r.day is not None]
     if not replies:
-        return {"accounts": 0, **coverage(voice)}
+        return {"accounts": 0, **coverage(scope)}
     first: dict[int, datetime.date] = {}
     last: dict[int, datetime.date] = {}
     months_active: dict[str, set[int]] = defaultdict(set)
@@ -95,5 +105,5 @@ def retention(voice: Label | None = None) -> dict:
         "returning_share": sum(1 for a in first if _month(first[a]) != _month(last[a])) / len(first),
         "cohorts": cohorts,
         "cohort_quarters": list(range(1, COHORT_QUARTERS + 1)),
-        **coverage(voice),
+        **coverage(scope),
     }

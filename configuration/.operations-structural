@@ -28,6 +28,7 @@ structural_similarity = false
 consensus_matrix = false
 draw_dead_leaves = false
 timeline_step = "none"
+audience = true
 
 [edges]
 weight_strategy = "PARTIAL_REFERENCES"

@@ -109,6 +109,9 @@ STRUCTURAL_DEFAULTS: dict = {
         "event_impact": False,
         # Outbound-link layer: the sites the channels link to, by domain category (links.html, data/links.json).
         "links": False,
+        # The Audience page's sections over the export's scope (audience.html, data/audience.json). On by default:
+        # cheap, and skipped with a warning when no reply is in scope.
+        "audience": True,
     },
     "edges": {
         "weight_strategy": "",

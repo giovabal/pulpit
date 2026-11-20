@@ -548,6 +548,10 @@
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="The web sites the observed channels link to, by the categories of Manage → Domains: per-channel link measures in the channel table (linking posts, distinct sites, platform diversity, monetisation / mainstream / alternative shares), a sites table, a label × category matrix and statistically validated co-linking pairs. Writes links.html with HTML tables, links.xlsx, channel_sites.csv. See docs/outbound-links.md."></i>
                 </label>
+                <label class="ops-flag"><input type="checkbox" name="audience" {% if ad.SA_AUDIENCE %}checked{% endif %}>Audience
+                  <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     title="The Audience page's sections over the commenters of the exported channels and dates: participation inequality, breadth, audience overlap, retention, channels as commenters. Writes audience.html with HTML tables, audience.xlsx, audience_<section>.csv. Needs replies stored by Fetch replies; skipped when there are none. See docs/audience.md."></i>
+                </label>
                 <label class="ops-flag"><input type="checkbox" name="interest_structural" {% if ad.SA_INTEREST_STRUCTURAL %}checked{% endif %}>Interesting messages
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Rank individual messages by how far they travelled — how many different groups they reached and how influential the channels that picked them up were. Writes data/interest_structural.json. Each message is also scored on the engagement it drew compared with its channel's usual level (always on, computed at crawl time)."></i>
@@ -2158,6 +2162,7 @@ function showToast(msg, type) {
         setVal('timeline_window', opts.timeline_window ? opts.timeline_window : '');
         setCheck('event_impact', opts.event_impact);
         setCheck('links', opts.links);
+        setCheck('audience', opts.audience !== false);
         setVal('event_window_weeks', opts.event_window_weeks != null ? opts.event_window_weeks : '');
 
         // Text / number fields

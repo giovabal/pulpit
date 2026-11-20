@@ -111,6 +111,8 @@ class Command(BaseCommand):
             include_event_impact_xlsx=exists("event_impact.xlsx"),
             include_links_html=exists("links.html"),
             include_links_xlsx=exists("links.xlsx"),
+            include_audience_html=exists("audience.html"),
+            include_audience_xlsx=exists("audience.xlsx"),
             include_compare_html=True,
             compare_files=compare_files,
         )

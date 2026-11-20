@@ -25,9 +25,21 @@ from collections.abc import Iterable
 
 from django.db.models import Count, Max, Min, Q, QuerySet
 
+from network.parameters import FixedParameter
 from webapp.models import CommenterReview, MessageReply
 
 BULK_THREAD_COMMENTS = 100
+
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Commenters: bulk-poster threshold",
+        value=BULK_THREAD_COMMENTS,
+        scope="audience",
+        affects="An account with at least this many replies under one post is left out of every audience figure "
+        "(as is a Telegram bot), unless Manage → Commenters keeps it.",
+        source="webapp/commenters.py: BULK_THREAD_COMMENTS",
+    ),
+)
 
 REASON_TELEGRAM_BOT = "telegram_bot"
 REASON_BULK = "bulk"

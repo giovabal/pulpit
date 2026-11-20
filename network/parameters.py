@@ -38,6 +38,7 @@ parameter only when its scope was active in the run. Scope keys:
 * ``timeline`` — the per-period exports
 * ``event_impact`` — the interrupted time series around recorded events (``--event-impact``)
 * ``links`` — the outbound-link layer (``--links``)
+* ``audience`` — the Audience page's sections over the export's commenters (``--audience``)
 """
 
 import datetime
@@ -82,6 +83,7 @@ SCOPES: frozenset[str] = frozenset(
         "timeline",
         "event_impact",
         "links",
+        "audience",
     }
 )
 SCOPE_PREFIXES: tuple[str, ...] = ("measure:", "strategy:", "layout:")
@@ -145,6 +147,7 @@ PARAMETER_MODULES: tuple[str, ...] = (
     "network.coordination",
     "network.vacancy_analysis",
     "network.interest_structural",
+    "webapp.audience",
 )
 
 # Sections of the "Fixed parameters" part, in document order, and the scope(s) each one lists.
@@ -163,6 +166,7 @@ SECTION_ORDER: tuple[str, ...] = (
     "Timeline",
     "Event impact",
     "Outbound links",
+    "Audience",
 )
 _SECTION_BY_SCOPE: dict[str, str] = {
     "graph": "Graph & edges",
@@ -187,6 +191,7 @@ _SECTION_BY_SCOPE: dict[str, str] = {
     "timeline": "Timeline",
     "event_impact": "Event impact",
     "links": "Outbound links",
+    "audience": "Audience",
 }
 _SECTION_BY_PREFIX: dict[str, str] = {"measure:": "Measures", "strategy:": "Communities", "layout:": "Layout"}
 
@@ -217,6 +222,7 @@ _SCOPE_LABELS: dict[str, str] = {
     "timeline": "timeline",
     "event_impact": "event impact",
     "links": "outbound links",
+    "audience": "audience",
     "strategy:LABELGROUP": "label-group partitions",
 }
 
@@ -383,6 +389,8 @@ def active_scopes(opts: Any, *, coordination_laid_out: bool = True) -> set[str]:
         scopes.add("event_impact")
     if getattr(opts, "do_links", False):
         scopes.add("links")
+    if getattr(opts, "do_audience", False):
+        scopes.add("audience")
     return scopes
 
 
@@ -556,7 +564,8 @@ class RunFacts:
     maps a measure token to what became of it (``MODULEROLE``'s resolved basis, a skipped instance).
     The ``fa2_iterations`` values are the resolved run lengths, ``coordination_ties`` the number of
     full-range coordination ties (``None`` = not computed), ``interest_*`` the automatically chosen
-    structural-interest basis and authority attribute.
+    structural-interest basis and authority attribute, ``audience_commenters`` the commenters the Audience
+    sections counted (``None`` = not computed, ``0`` = skipped: no reply in scope).
     """
 
     nodes: int | None = None
@@ -573,6 +582,7 @@ class RunFacts:
     interest_community: str = ""
     interest_authority: str = ""
     timeline_periods: list[tuple[str, str]] = field(default_factory=list)
+    audience_commenters: int | None = None
 
 
 _EDGE_WEIGHT_DESCRIPTIONS: dict[str, str] = {
@@ -1305,6 +1315,31 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
         )
     else:
         _off("outbound links", "--links")
+
+    if getattr(opts, "do_audience", False):
+        counted = facts.audience_commenters
+        topics.append(
+            (
+                "Audience",
+                [
+                    (
+                        "Audience sections",
+                        "on" if counted else "on — skipped, no reply in scope",
+                        _code("--audience"),
+                        "The Audience page's sections over the commenters of the observed in-target channels, posts "
+                        "inside the export's dates; commenter flags (bots, bulk posters) and Manage → Commenters "
+                        "overrides as they stood at export time.",
+                    ),
+                    *(
+                        [("Commenters counted", f"{counted:,}", "—", "User accounts kept, over the whole date range.")]
+                        if counted
+                        else []
+                    ),
+                ],
+            )
+        )
+    else:
+        _off("audience", "--no-audience")
 
     if timeline_on(opts):
         exported = facts.timeline_periods

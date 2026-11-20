@@ -35,9 +35,10 @@ from collections import Counter, defaultdict
 from django.db.models import Count, F
 
 from network.link_layer import _bh
-from webapp.models import Channel, Label, Message
+from network.parameters import FixedParameter
+from webapp.models import Channel, Message
 
-from .scope import MIN_GROUP_COVERAGE, LabelResolver, coverage, reply_records, scope_posts
+from .scope import MIN_GROUP_COVERAGE, LabelResolver, Scope, coverage, reply_records, scope_posts
 
 import numpy as np
 
@@ -46,6 +47,50 @@ QAP_PERMUTATIONS = 9999
 QAP_SEED = 42
 FIT_TOLERANCE = 1e-10
 FIT_MAX_ITERATIONS = 10_000
+
+_SOURCE = "webapp/audience/overlap.py"
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Audience overlap: null model",
+        value="every commenter's number of channels fixed exactly, every channel's commenters on average "
+        "(conditional Poisson sampling); exact sum-of-binomials tail of the shared commenters",
+        scope="audience",
+        affects="What a pair's shared commenters (channels, and labels of each partition group) are tested against.",
+        source=f"{_SOURCE}: fit_fixed_size_weights, overlap_pairs",
+        note="Chen, Dempster & Liu (1994); the account side of Neal's (2014) fixed-degree-sequence model. Not the "
+        "BiCM, which inflates the expected overlaps when most commenters use one channel.",
+    ),
+    FixedParameter(
+        name="Audience overlap: weight fit convergence",
+        value=f"max relative error < {FIT_TOLERANCE:g}, at most {FIT_MAX_ITERATIONS:,} iterations",
+        scope="audience",
+        affects="Precision of the fitted channel weights of the null.",
+        source=f"{_SOURCE}: FIT_TOLERANCE, FIT_MAX_ITERATIONS",
+    ),
+    FixedParameter(
+        name="Audience overlap: significance level",
+        value=OVERLAP_Q_THRESHOLD,
+        scope="audience",
+        affects="Benjamini–Hochberg q below which a pair (with at least one shared commenter) is significant.",
+        source=f"{_SOURCE}: OVERLAP_Q_THRESHOLD",
+        note="BH over every pair of channels with commenters (Benjamini & Hochberg 1995).",
+    ),
+    FixedParameter(
+        name="Audience vs citations: QAP permutations",
+        value=QAP_PERMUTATIONS,
+        scope="audience",
+        affects="Resolution of the QAP p-value of the shared-commenters × citations correlation (floor 1/(K+1)).",
+        source=f"{_SOURCE}: QAP_PERMUTATIONS",
+        note="Krackhardt (1987, 1988).",
+    ),
+    FixedParameter(
+        name="Audience vs citations: QAP seed",
+        value=QAP_SEED,
+        scope="audience",
+        affects="The permutations drawn — the QAP p-value is reproducible run to run.",
+        source=f"{_SOURCE}: QAP_SEED",
+    ),
+)
 
 
 def _elementary(lam: np.ndarray, kmax: int) -> np.ndarray:
@@ -162,10 +207,12 @@ def overlap_pairs(per_unit: dict[int, set[int]]) -> dict:
     return result
 
 
-def citation_counts(channel_ids: list[int]) -> Counter:
-    """Forwards + mentions between the channels, either way, inside their in-target periods."""
-    ids = set(channel_ids)
-    posts = scope_posts().filter(channel_id__in=ids)
+def citation_counts(channel_ids: list[int], scope: Scope | None = None) -> Counter:
+    """Forwards + mentions between the channels, either way, inside their in-target periods (and the
+    scope's dates)."""
+    ids = frozenset(channel_ids)
+    scope = scope or Scope()
+    posts = scope_posts(Scope(channel_ids=ids, start=scope.start, end=scope.end))
     counts: Counter = Counter()
     forwards = (
         posts.filter(forwarded_from_id__in=ids)
@@ -220,9 +267,9 @@ def qap_correlation(units: list[int], shared: dict[frozenset, int], citations: C
     }
 
 
-def overlap(voice: Label | None = None) -> dict:
+def overlap(scope: Scope | None = None) -> dict:
     """Everything the audience-overlap section shows, for one scope."""
-    replies = reply_records(voice)
+    replies = reply_records(scope)
     per_channel: dict[int, set[int]] = defaultdict(set)
     for r in replies:
         per_channel[r.channel_id].add(r.sender_id)
@@ -295,6 +342,6 @@ def overlap(voice: Label | None = None) -> dict:
         "validated": sum(1 for pr in channel_result["pairs"] if pr["significant"]),
         "q_threshold": OVERLAP_Q_THRESHOLD,
         "label_groups": label_groups,
-        "qap": qap_correlation(units, shared_counts, citation_counts(units)),
-        **coverage(voice),
+        "qap": qap_correlation(units, shared_counts, citation_counts(units, scope)),
+        **coverage(scope),
     }

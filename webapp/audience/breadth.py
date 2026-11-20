@@ -23,9 +23,9 @@ from __future__ import annotations
 import math
 from collections import Counter, defaultdict
 
-from webapp.models import Label
+from network.parameters import FixedParameter
 
-from .scope import MIN_GROUP_COVERAGE, LabelResolver, coverage, reply_records
+from .scope import MIN_GROUP_COVERAGE, LabelResolver, Scope, coverage, reply_records
 
 # Classes of replies per account for the observed-vs-expected table; (low, high) inclusive, None = open.
 BREADTH_ACTIVITY_BINS = ((2, 2), (3, 5), (6, 10), (11, 20), (21, 50), (51, None))
@@ -35,6 +35,19 @@ CHANNEL_COUNT_BINS = ((1, 1), (2, 2), (3, 3), (4, 5), (6, None))
 
 def _bin_label(low: int, high: int | None) -> str:
     return str(low) if low == high else (f"{low}–{high}" if high is not None else f"{low}+")
+
+
+FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
+    FixedParameter(
+        name="Breadth: activity classes",
+        value=", ".join(_bin_label(lo, hi) for lo, hi in BREADTH_ACTIVITY_BINS),
+        scope="audience",
+        affects="The replies-per-account classes the observed channels (and labels) reached are compared with "
+        "their rarefaction expectation in; one-reply accounts are left out.",
+        source="webapp/audience/breadth.py: BREADTH_ACTIVITY_BINS",
+        note="Rarefaction: Hurlbert (1971).",
+    ),
+)
 
 
 def _log_comb(n: int, k: int) -> float:
@@ -110,9 +123,9 @@ def _spread(per_account: dict[int, Counter], totals: list[int]) -> dict:
     }
 
 
-def breadth(voice: Label | None = None) -> dict:
+def breadth(scope: Scope | None = None) -> dict:
     """Everything the breadth section shows, for one scope."""
-    replies = reply_records(voice)
+    replies = reply_records(scope)
     per_account: dict[int, Counter] = defaultdict(Counter)
     for r in replies:
         per_account[r.sender_id][r.channel_id] += 1
@@ -182,5 +195,5 @@ def breadth(voice: Label | None = None) -> dict:
         "multi_channel_share": (sum(1 for d in distinct if d > 1) / len(distinct)) if distinct else None,
         "channel_spread": _spread(per_account, list(channel_totals.values())),
         "groups": groups,
-        **coverage(voice),
+        **coverage(scope),
     }

@@ -2,7 +2,7 @@ import json
 import os
 import re
 import shutil
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.template.loader import render_to_string
@@ -16,6 +16,9 @@ from network.utils import CommunityTableData, GraphData
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill
+
+if TYPE_CHECKING:
+    from network.audience_layer import AudienceExport
 
 # Excel forbids \ / ? * : [ ] in sheet titles and caps them at 31 chars.
 _SHEET_TITLE_INVALID = re.compile(r"[\\/?*:]")
@@ -1043,6 +1046,38 @@ def write_links_xlsx(
     wb.save(output_filename)
 
 
+def write_audience_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
+    _write_page(
+        "network/audience.html",
+        output_filename,
+        seo=seo,
+        project_title=project_title,
+        title_part="Audience",
+        seo_title_part="Audience of the channels",
+        description="The commenters of the channels: participation inequality, breadth, audience overlap and retention.",
+    )
+
+
+def write_audience_xlsx(result: "AudienceExport", output_filename: str, project_title: str = "") -> None:
+    """The Audience sections as a workbook: a ``Summary`` sheet, each section's main table (the CSVs' layout)
+    and the tables the page shows beside them (:func:`network.audience_layer.xlsx_sheets`)."""
+    from network.audience_layer import xlsx_sheets
+
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+    for title, headers, rows in xlsx_sheets(result):
+        ws = wb.create_sheet(title=_safe_sheet_title(title))
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for row in rows:
+            ws.append(row)
+    wb.save(output_filename)
+
+
 def write_dominance_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
     _write_page(
         "network/dominance.html",
@@ -1131,6 +1166,8 @@ def write_index_html(
     include_event_impact_xlsx: bool = False,
     include_links_html: bool = False,
     include_links_xlsx: bool = False,
+    include_audience_html: bool = False,
+    include_audience_xlsx: bool = False,
 ) -> None:
     if seo:
         title = project_title or "Network Analysis"
@@ -1171,6 +1208,8 @@ def write_index_html(
         "include_event_impact_xlsx": include_event_impact_xlsx,
         "include_links_html": include_links_html,
         "include_links_xlsx": include_links_xlsx,
+        "include_audience_html": include_audience_html,
+        "include_audience_xlsx": include_audience_xlsx,
         **_pulpit_ctx(),
     }
     content = render_to_string("network/index.html", context)
