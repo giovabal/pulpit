@@ -14,6 +14,6 @@ Rather than just detecting topics, track which narrative frames appear in messag
 
 ---
 
-← [README](README.md)
+← [README](../README.md)
 
-<img src="webapp_engine/static/pulpit_logo.svg" alt="" width="80">
+<img src="../webapp_engine/static/pulpit_logo.svg" alt="" width="80">
