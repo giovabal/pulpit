@@ -32,6 +32,13 @@
   /* chart colours — read by renderChart() via getComputedStyle */
   --chart-line: #4338ca;
   --chart-line-2: #c2410c;
+  /* Label lines of a split chart: distinguishable in every pair, for CVD too, on this surface. */
+  --split-1: #2f92fa;
+  --split-2: #874208;
+  --split-3: #2f9d03;
+  --split-4: #7a1eb1;
+  --split-5: #f550a3;
+  --split-rest: #78716c;
   --chart-fill: rgba(67, 56, 202, .08);
   --chart-grid: #ece9e3;
   --chart-label: #78716c;
@@ -86,6 +93,12 @@
   /* charts */
   --chart-line: #818cf8;
   --chart-line-2: #ea580c;
+  --split-1: #339cda;
+  --split-2: #975721;
+  --split-3: #16ae12;
+  --split-4: #8e39df;
+  --split-5: #f5409b;
+  --split-rest: #a8a29e;
   --chart-fill: rgba(129, 140, 248, .14);
   --chart-grid: #2a2a31;
   --chart-label: #c7c1bb;
@@ -1095,6 +1108,27 @@ body {
 
 .chart-canvas-wrap--sm {
   height: 320px;
+}
+
+/* Charts split by label: several charts of one panel side by side. */
+.chart-canvas-wrap--split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 1rem;
+  height: auto;
+}
+
+.chart-split-title {
+  margin: 0 0 .25rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.chart-split-canvas {
+  position: relative;
+  height: 420px;
 }
 
 /* ---------- Panel tables (contact info) ---------- */

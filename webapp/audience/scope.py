@@ -1,6 +1,6 @@
 """What every Audience-page section counts: the scope channels, their posts, the kept commenters' replies.
 
-Scope (:class:`Scope`): the in-target channels (under the container label ``voice`` when the page's
+Scope (:class:`Scope`): the in-target channels (those of the label ``voice`` when the page's
 ``?filter=`` names one; exactly ``channel_ids`` for an export — its observed in-target channels), their
 alive posts dated inside their in-target periods (the graph pipeline's ``channel_cutoff_q`` chokepoint,
 applied to the post) and inside ``start`` / ``end`` when given, and the replies to those posts written by
@@ -27,7 +27,7 @@ from webapp.models import Channel, Label, Message, MessageReply
 class Scope:
     """The channels and days a section counts.
 
-    ``voice`` — a container-group label (the page's ``?filter=``): only channels under it. ``channel_ids``
+    ``voice`` — a label (the page's ``?filter=``): only its channels (``in_label``). ``channel_ids``
     — exactly these channels instead of the in-target set (``structural_analysis`` passes its observed
     in-target nodes, which already honour ``--channel-types``, ``--filter-labels`` and the lost / private
     switches). ``start`` / ``end`` — inclusive local-date bounds on the post date (``--startdate`` /
@@ -47,7 +47,7 @@ def scope_channels(scope: Scope | None = None) -> QuerySet[Channel]:
         channels = Channel.objects.filter(pk__in=scope.channel_ids)
     else:
         channels = Channel.objects.in_target()
-    return channels.in_container_label(scope.voice) if scope.voice is not None else channels
+    return channels.in_label(scope.voice) if scope.voice is not None else channels
 
 
 def scope_posts(scope: Scope | None = None) -> QuerySet[Message]:

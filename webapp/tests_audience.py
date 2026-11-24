@@ -182,6 +182,14 @@ class ParticipationTests(_Corpus):
         data = audience.participation(audience.Scope(voice=europe))
         self.assertEqual([row["channel_id"] for row in data["channels"]], [self.b.pk])
 
+    def test_scope_filter_takes_an_ordinary_label(self) -> None:
+        nation = make_label("Nation A", group=LabelGroup.objects.create(name="Nation", is_partition=True))
+        attribute(self.b, nation)
+        self.reply(self.post_a, 10)
+        self.reply(self.post_b, 11)
+        data = audience.participation(audience.Scope(voice=nation))
+        self.assertEqual([row["channel_id"] for row in data["channels"]], [self.b.pk])
+
     def test_scope_channel_ids_replace_the_in_target_set(self) -> None:
         self.reply(self.post_a, 10)
         self.reply(self.post_b, 11)

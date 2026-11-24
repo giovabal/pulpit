@@ -375,6 +375,143 @@ class ReactionRateHistoryTests(_TwoLinesChartMixin, TestCase):
         self.assertEqual(self.lines()[1], [10])
 
 
+class SplitChartsTests(TestCase):
+    """``?split=<label group>`` on the home page's charts (``stats.split.LabelSplit``)."""
+
+    def setUp(self):
+        self.org = make_label(name="Org", is_in_target=True)
+        self.nation = LabelGroup.objects.create(name="Nation", is_partition=True)
+        self.labels = {}
+        self.next_id = 0
+
+    def label(self, name):
+        if name not in self.labels:
+            self.labels[name] = make_label(name=name, group=self.nation, is_in_target=False)
+        return self.labels[name]
+
+    def channels(self, nation, n):
+        made = []
+        for _ in range(n):
+            self.next_id += 1
+            channel = make_channel(telegram_id=self.next_id, title=f"{nation} {self.next_id}", label=self.org)
+            if nation:
+                attribute(channel, self.label(nation))
+            made.append(channel)
+        return made
+
+    def post(self, channel, date="2024-05-10T12:00:00Z", **fields):
+        self.next_id += 1
+        return Message.objects.create(telegram_id=self.next_id, channel=channel, date=date, **fields)
+
+    def charts(self, name, **params):
+        data = json.loads(self.client.get(reverse(name), {"split": self.nation.pk, **params}).content)
+        return data, [{line["label"]: line["values"] for line in chart["lines"]} for chart in data["charts"]]
+
+    def test_totals_add_up_over_the_lines(self):
+        for channel in self.channels("Germany", 2) + self.channels("UK", 1) + self.channels(None, 1):
+            self.post(channel, views=100, total_reactions=3)
+            self.post(channel, views=50, total_reactions=0, date="2024-07-10T12:00:00Z")
+        for name, expected in (
+            ("messages-history-data", {"Germany": [2, 0, 2], "UK": [1, 0, 1], "No Nation label": [1, 0, 1]}),
+            ("views-history-data", {"Germany": [200, 0, 100], "UK": [100, 0, 50], "No Nation label": [100, 0, 50]}),
+            ("active-channels-history-data", {"Germany": [2, 0, 2], "UK": [1, 0, 1], "No Nation label": [1, 0, 1]}),
+            ("reactions-history-data", {"Germany": [6, 0, 0], "UK": [3, 0, 0], "No Nation label": [3, 0, 0]}),
+        ):
+            with self.subTest(chart=name):
+                data, (lines,) = self.charts(name)
+                self.assertEqual(data["labels"], ["2024-05", "2024-06", "2024-07"])
+                self.assertEqual(data["split"], "Nation")
+                self.assertEqual(lines, expected)
+
+    def test_the_most_active_labels_get_a_line_the_others_share_one(self):
+        for n, nation in enumerate(("A", "B", "C", "D", "E", "F", "G")):
+            for channel in self.channels(nation, 7 - n):
+                self.post(channel)
+        data, (lines,) = self.charts("messages-history-data")
+        self.assertEqual(list(lines), ["A", "B", "C", "D", "E", "Other (2)"])
+        self.assertEqual(lines["Other (2)"], [2 + 1])
+        self.assertEqual([x["kind"] for x in data["charts"][0]["lines"]], ["label"] * 5 + ["other"])
+
+    def test_every_chart_draws_the_same_lines(self):
+        # Germany forwards only: it still has its line (empty) on the charts of own posts.
+        source = make_channel(telegram_id=900, title="Source")
+        for channel in self.channels("Germany", 5):
+            self.post(channel, views=30, forwarded_from=source)
+        for channel in self.channels("UK", 6):
+            self.post(channel, views=100, total_reactions=1)
+        for name in (
+            "messages-history-data",
+            "forwards-history-data",
+            "avg-involvement-history-data",
+            "own-forwarded-views-history-data",
+            "reaction-rate-history-data",
+        ):
+            with self.subTest(chart=name):
+                for chart in self.charts(name)[1]:
+                    self.assertEqual(list(chart), ["UK", "Germany"])
+        own, forwards = self.charts("own-forwarded-views-history-data")[1]
+        self.assertEqual((own, forwards), ({"UK": [100], "Germany": [None]}, {"UK": [None], "Germany": [30]}))
+
+    def test_medians_need_enough_active_channels(self):
+        for channel, views in zip(self.channels("Germany", 5), (10, 20, 30, 40, 5000), strict=True):
+            self.post(channel, views=views)
+        for channel in self.channels("UK", 4):
+            self.post(channel, views=100)
+        data, (lines,) = self.charts("avg-involvement-history-data")
+        self.assertEqual(lines, {"Germany": [30], "UK": [None]})
+        self.assertEqual(data["y_label"], "median channel's views per post")
+
+    def test_median_is_over_channels_not_days(self):
+        channels = self.channels("Germany", 5)
+        for day in range(1, 9):  # one channel posting on eight days counts once
+            self.post(channels[0], views=1000, date=f"2024-05-{day:02d}T12:00:00Z")
+        for channel in channels[1:]:
+            self.post(channel, views=10)
+        self.assertEqual(self.charts("avg-involvement-history-data")[1][0]["Germany"], [10])
+
+    def test_reaction_rate_counts_an_album_once(self):
+        for channel in self.channels("Germany", 5):
+            for views, reactions in ((480, 20), (500, 0)):
+                self.post(channel, views=views, total_reactions=reactions, grouped_id=77)
+        data, (lines,) = self.charts("reaction-rate-history-data")
+        self.assertEqual(lines, {"Germany": [40]})
+
+    def test_label_is_read_at_the_posts_date(self):
+        (channel,) = self.channels(None, 1)
+        attribute(channel, self.label("Germany"), end="2024-05-31")
+        attribute(channel, self.label("UK"), start="2024-06-01")
+        self.post(channel)
+        self.post(channel, date="2024-06-10T12:00:00Z")
+        self.assertEqual(self.charts("messages-history-data")[1], [{"Germany": [1, 0], "UK": [0, 1]}])
+
+    def test_container_group_splits_through_the_child_labels(self):
+        continents = LabelGroup.objects.create(name="Continent", is_partition=True, is_container=True)
+        europe = make_label(name="Europe", group=continents, is_in_target=False)
+        LabelParent.objects.create(label=self.label("Germany"), parent=europe)
+        for channel in self.channels("Germany", 2) + self.channels("USA", 1):
+            self.post(channel)
+        data, (lines,) = self.charts("messages-history-data", split=continents.pk)
+        self.assertEqual(lines, {"Europe": [2], "No Continent label": [1]})
+
+    def test_scope_and_split_combine(self):
+        for nation, n in (("Germany", 2), ("UK", 1)):
+            for channel in self.channels(nation, n):
+                self.post(channel)
+        _, (lines,) = self.charts("messages-history-data", filter=self.label("Germany").pk)
+        self.assertEqual(lines, {"Germany": [2]})
+
+    def test_without_split_the_charts_are_unchanged(self):
+        self.post(self.channels("Germany", 1)[0], views=10)
+        for value in ("", "x", "999999"):
+            data = json.loads(self.client.get(reverse("messages-history-data"), {"split": value}).content)
+            self.assertNotIn("charts", data)
+            self.assertEqual(data["values"], [1])
+
+    def test_empty_database(self):
+        data = json.loads(self.client.get(reverse("messages-history-data"), {"split": self.nation.pk}).content)
+        self.assertEqual((data["labels"], data["values"]), ([], []))
+
+
 class _ChannelTwoLinesChartMixin(_TwoLinesChartMixin):
     def url(self):
         return reverse(self.url_name, kwargs={"pk": self.channel.pk})

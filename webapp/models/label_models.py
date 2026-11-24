@@ -92,6 +92,17 @@ class LabelGroup(BaseColorModel):
             msg += f"; and {len(conflicts) - limit} more"
         return msg + "."
 
+    @classmethod
+    def splittable(cls) -> "models.QuerySet[LabelGroup]":
+        """The groups the home page's charts can be split by: partition groups with labels, primary first."""
+        return cls.objects.filter(is_partition=True, labels__isnull=False).distinct().order_by("-is_primary", "name")
+
+    @classmethod
+    def from_split_param(cls, raw) -> "LabelGroup | None":
+        """Resolve a ``?split=`` query-string value (the *Split by* menu); anything else splits nothing."""
+        raw = str(raw or "").strip()
+        return cls.splittable().filter(pk=int(raw)).first() if raw.isdigit() else None
+
     def clean(self) -> None:
         # A partition group requires non-overlapping periods per channel; refuse to become one
         # (or remain one) while conflicts exist, naming them so the operator can correct them.
@@ -151,16 +162,15 @@ class Label(BaseColorModel):
 
     @classmethod
     def from_filter_param(cls, raw) -> "Label | None":
-        """Resolve a home-page ``?filter=`` query-string value to a container-group label.
+        """Resolve a ``?filter=`` query-string value (the *Scope* menu) to a label of any group.
 
-        Non-integer, unknown, or non-container values select nothing (the
-        unfiltered dashboard) rather than erroring — the param travels in
-        user-editable URLs.
+        Non-integer or unknown values select nothing (the unfiltered dashboard)
+        rather than erroring — the param travels in user-editable URLs.
         """
         raw = str(raw or "").strip()
         if not raw.isdigit():
             return None
-        return cls.objects.select_related("group").filter(pk=int(raw), group__is_container=True).first()
+        return cls.objects.select_related("group").filter(pk=int(raw)).first()
 
     @classmethod
     def parse_filter_labels(cls, raw) -> list[int]:

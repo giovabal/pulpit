@@ -6,14 +6,15 @@ from typing import Any, ClassVar
 
 from django.db import models
 from django.db.models import Avg, Count, Max, Min, Q, Sum
-from django.db.models.functions import TruncMonth
+from django.db.models.functions import TruncDate, TruncMonth
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views import View
 
 from stats.queries import channel_month_spine, global_month_spine, reindex_to_spine
-from webapp.models import Channel, Message, MessageReaction
+from stats.split import LabelSplit
+from webapp.models import Channel, LabelGroup, Message, MessageReaction
 from webapp.utils.emoji import emoji_present
 
 import pandas as pd
@@ -22,18 +23,18 @@ _EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b")
 
 
 def _scoped_in_target_channels(request: HttpRequest):
-    """In-target channels, restricted to the home page's ``?filter=`` voice when present.
+    """In-target channels, restricted to the home page's ``?filter=`` label when present.
 
-    The voice is a container-group label (e.g. Continents → Europe); the scope is
-    the channels holding it or one of its child labels. Unknown / absent values
-    fall back to the full in-target set, matching ``Label.from_filter_param``.
+    The label is e.g. Continents → Europe or Nation → Germany (``ChannelQuerySet.in_label``).
+    Unknown / absent values fall back to the full in-target set, matching
+    ``Label.from_filter_param``.
     """
     from webapp.models import Label
 
     qs = Channel.objects.in_target()
     voice = Label.from_filter_param(request.GET.get("filter"))
     if voice is not None:
-        qs = qs.in_container_label(voice)
+        qs = qs.in_label(voice)
     return qs
 
 
@@ -49,9 +50,36 @@ def _medians_by_month(values: Iterable[tuple[Any, float]], spine: list[str]) -> 
 
 
 class _GlobalScopeView(View):
-    """A month-by-month series over the in-target messages of the home page's scope."""
+    """A month-by-month series over the in-target messages of the home page's scope.
+
+    With ``?split=<label group id>`` (``LabelGroup.from_split_param``) the response carries ``charts`` instead:
+    one line per label (:class:`stats.split.LabelSplit`), each chart with its ``title`` (a panel may hold two).
+    """
 
     y_label: ClassVar[str]
+    #: Axis title when split, where the lines show something else (the median channel).
+    split_y_label: ClassVar[str] = ""
+    #: First month (``YYYY-MM``) the figure can exist for; earlier months are left off the chart.
+    first_month: ClassVar[str] = ""
+
+    def plain_response(self, request: HttpRequest) -> JsonResponse:
+        raise NotImplementedError
+
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        """The ``{"title", "lines"}`` of each chart, from *messages* carrying their local ``day``."""
+        raise NotImplementedError
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        group = LabelGroup.from_split_param(request.GET.get("split"))
+        if group is None:
+            return self.plain_response(request)
+        spine = [month for month in global_month_spine() if month >= self.first_month]
+        y_label = self.split_y_label or self.y_label
+        if not spine:
+            return JsonResponse({"labels": [], "values": [], "y_label": y_label})
+        messages = self.get_queryset(request).annotate(day=TruncDate("date"))
+        charts = self.split_charts(messages, LabelSplit(messages, group, spine))
+        return JsonResponse({"labels": spine, "y_label": y_label, "split": group.name, "charts": charts})
 
     def get_queryset(self, request: HttpRequest) -> models.QuerySet[Message]:
         """The in-scope messages, with their local ``month``."""
@@ -98,7 +126,7 @@ class _TwoLines:
 
 
 class _GlobalTwoLinesBase(_TwoLines, _GlobalScopeView):
-    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+    def plain_response(self, request: HttpRequest) -> JsonResponse:
         return self.two_lines_response(self.get_queryset(request), global_month_spine())
 
 
@@ -127,12 +155,39 @@ class _OwnForwardedViews(_TwoLines):
         return medians(messages.filter(~forward_header_q())), medians(messages.filter(forward_header_q()))
 
 
+def _channel_day_views(messages: models.QuerySet[Message]) -> models.QuerySet:
+    """``(channel, day, total views, posts with a view count)`` rows, what ``LabelSplit.medians`` takes."""
+    rows = messages.filter(views__isnull=False).order_by().values("channel_id", "day")
+    return rows.annotate(total=Sum("views"), posts=Count("id")).values_list("channel_id", "day", "total", "posts")
+
+
+def _own_posts(messages: models.QuerySet[Message], when: str) -> dict[tuple, list[int]]:
+    """``{(when, channel, post): [views, reactions]}`` of the own posts with views, an album being one post.
+
+    Telegram puts an album's reactions on a single message while every message carries views, so counting
+    messages would read an album of five at a fifth of its rate. Its views are its best-seen message's.
+    """
+    from network.near_copies import forward_header_q
+
+    rows = (
+        messages.filter(~forward_header_q(), views__gt=0)
+        .values_list(when, "channel_id", "grouped_id", "pk", "views", "total_reactions")
+        .order_by()
+    )
+    posts: dict[tuple, list[int]] = {}
+    for moment, channel_id, grouped_id, pk, views, reactions in rows:
+        album = ("album", grouped_id) if grouped_id is not None else ("post", pk)
+        post = posts.setdefault((moment, channel_id, album), [0, 0])
+        post[0] = max(post[0], views)
+        post[1] += reactions
+    return posts
+
+
 class _ReactionRate(_TwoLines):
     """Reactions per 1,000 views of own posts: of all of them together, and of the typical channel or post.
 
-    An album is one post: Telegram puts its reactions on a single message while every message carries views,
-    so counting messages would read an album of five at a fifth of its rate. Its views are its best-seen
-    message's. Forwards are left out, and posts with no view count cannot have a rate.
+    An album is one post (``_own_posts``). Forwards are left out, and posts with no view count cannot have
+    a rate.
     """
 
     first_month = "2022-01"  # Telegram added reactions on 30 December 2021: before, 0 would mean nothing
@@ -147,19 +202,7 @@ class _ReactionRate(_TwoLines):
     def get_lines(
         self, messages: models.QuerySet[Message], spine: list[str]
     ) -> tuple[list[float | None], list[float | None]]:
-        from network.near_copies import forward_header_q
-
-        rows = (
-            messages.filter(~forward_header_q(), views__gt=0)
-            .values_list("month", "channel_id", "grouped_id", "pk", "views", "total_reactions")
-            .order_by()
-        )
-        posts: dict[tuple, list[int]] = {}
-        for month, channel_id, grouped_id, pk, views, reactions in rows:
-            album = ("album", grouped_id) if grouped_id is not None else ("post", pk)
-            post = posts.setdefault((month, channel_id, album), [0, 0])
-            post[0] = max(post[0], views)
-            post[1] += reactions
+        posts = _own_posts(messages, "month")
         by_unit: dict[tuple, list[int]] = {}
         by_month: dict[str, list[int]] = {}
         for key, (views, reactions) in posts.items():
@@ -187,7 +230,12 @@ class _GlobalTimeSeriesBase(_GlobalScopeView):
         """Further keys of the response (more series on the same axis)."""
         return {}
 
-    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        """The series is a total: it adds up over the labels."""
+        rows = messages.order_by().values("channel_id", "day").annotate(value=self.get_annotation())
+        return [{"title": "", "lines": split.sums(rows.values_list("channel_id", "day", "value"))}]
+
+    def plain_response(self, request: HttpRequest) -> JsonResponse:
         spine = global_month_spine()
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
@@ -231,6 +279,10 @@ class ActiveChannelsHistoryDataView(_GlobalTimeSeriesBase):
     def get_annotation(self) -> Count:
         return Count("channel", distinct=True)
 
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        rows = messages.order_by().values_list("channel_id", "day").distinct()
+        return [{"title": "", "lines": split.channel_counts(rows)}]
+
 
 class ForwardsHistoryDataView(_GlobalTimeSeriesBase):
     annotate_field = "total_forwards"
@@ -272,13 +324,34 @@ class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
             "extra_lines": [{"label": "median of active channels", "values": medians}],
         }
 
+    split_y_label = "median channel's views per post"
+
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        return [{"title": "", "lines": split.medians(_channel_day_views(messages))}]
+
 
 class OwnForwardedViewsHistoryDataView(_OwnForwardedViews, _GlobalTwoLinesBase):
-    pass
+    split_y_label = "median channel's views per post"
+
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        from network.near_copies import forward_header_q
+
+        return [
+            {"title": title, "lines": split.medians(_channel_day_views(messages.filter(kind)))}
+            for title, kind in ((self.values_label, ~forward_header_q()), (self.extra_label, forward_header_q()))
+        ]
 
 
 class ReactionRateHistoryDataView(_ReactionRate, _GlobalTwoLinesBase):
     extra_label = "median of active channels"
+    split_y_label = "median channel's reactions per 1,000 views"
+
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        rows = (
+            (channel_id, day, 1000 * reactions, views)
+            for (day, channel_id, _post), (views, reactions) in _own_posts(messages, "day").items()
+        )
+        return [{"title": "", "lines": split.medians(rows)}]
 
     @staticmethod
     def typical_unit(post: tuple) -> Any:
@@ -533,8 +606,15 @@ class ChannelCrossRefsView(_ChannelTimeSeriesBase):
         return JsonResponse({"mentioned": serialize(mentioned), "mentioning": serialize(mentioning)})
 
 
-class ReactionsHistoryDataView(View):
-    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+class ReactionsHistoryDataView(_GlobalScopeView):
+    y_label = "reactions"
+
+    def split_charts(self, messages: models.QuerySet[Message], split: LabelSplit) -> list[dict[str, Any]]:
+        """Every reaction, not only the eight most used emoji the unsplit chart stacks."""
+        rows = messages.order_by().values("channel_id", "day").annotate(value=Sum("total_reactions"))
+        return [{"title": "", "lines": split.sums(rows.values_list("channel_id", "day", "value"))}]
+
+    def plain_response(self, request: HttpRequest) -> JsonResponse:
         spine = global_month_spine()
         if not spine:
             return JsonResponse({"labels": [], "series": [], "y_label": "reactions"})

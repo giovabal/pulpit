@@ -12,7 +12,7 @@ Open it from **Audience** in the top menu (`/audience/`). It needs comments in t
 - **Posts**: their alive posts dated inside their in-target periods — the same rule the graph uses.
 - **Commenters**: the *user accounts* replying to those posts. A channel or group posting as itself is not a commenter (it has its own section, below). Telegram bots and *bulk posters* — accounts with 100 or more replies under one post, such as an archive dumped into a thread — are left out; [Manage → Commenters](web-interface.md#commenters--managecommenters) lists every account and lets you override either flag.
 
-The page states how many channels in scope have comments. On most corpora that is a minority, so the figures describe those channels' commenters, **not the audience of the whole network**. Commenters are also a self-selected minority of any audience: most members of an online community never post (the "1% rule", tested by van Mierlo 2014), and the most active are not typical of the rest (Kim et al. 2021). The pages show aggregates only; no account is named.
+The **Scope** menu limits the page to one label's channels, as on the home page ([Web interface](web-interface.md)). The page states how many channels in scope have comments. On most corpora that is a minority, so the figures describe those channels' commenters, **not the audience of the whole network**. Commenters are also a self-selected minority of any audience: most members of an online community never post (the "1% rule", tested by van Mierlo 2014), and the most active are not typical of the rest (Kim et al. 2021). The pages show aggregates only; no account is named.
 
 ---
 

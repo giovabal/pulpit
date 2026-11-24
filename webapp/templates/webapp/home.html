@@ -62,6 +62,7 @@
   <div class="search-header">
     <form method="get" action="" class="search-form" role="search">
       {% if filter_voice %}<input type="hidden" name="filter" value="{{ filter_voice.id }}">{% endif %}
+      {% if split_group %}<input type="hidden" name="split" value="{{ split_group.id }}">{% endif %}
       <div class="search-input-wrap">
         <i class="bi bi-search search-icon" aria-hidden="true"></i>
         <input
@@ -103,7 +104,7 @@
 
 </div>
 
-
+<script src="{% vstatic 'webapp/js/split_charts.js' %}"></script>
 <script>
   // Events are best-effort: a failure must not block chart rendering.
   var eventsPromise = fetch("{% url 'events-data' %}")
@@ -129,7 +130,9 @@
       ]).then(function (results) {
         spinner.classList.add('hidden');
         var data = results[0];
-        if (data && data.series) {
+        if (data && data.charts) {
+          renderSplitCharts(wrap, data, results[1]);
+        } else if (data && data.series) {
           renderReactionsChart(canvas, data, results[1]);
         } else {
           renderChart(canvas, data, results[1]);

@@ -46,6 +46,7 @@ from network.vacancy_analysis import (
     configured_max_candidates,
     orphaned_amplifier_pks,
 )
+from stats.split import SPLIT_MAX_LABELS, SPLIT_MIN_CHANNELS
 from webapp import audience, emoji_usage
 from webapp.audience import tables as audience_tables
 from webapp.paginator import DiggPaginator
@@ -497,14 +498,17 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
     }
 
 
-def _container_groups() -> QuerySet[LabelGroup]:
-    """The container label groups with labels, for the ``?filter=`` scope menu (``_scope_filter.html``)."""
-    return (
-        LabelGroup.objects.filter(is_container=True, labels__isnull=False)
-        .prefetch_related("labels")
-        .distinct()
-        .order_by("name")
+def _scope_groups() -> list[tuple[LabelGroup, list[Label]]]:
+    """What the ``?filter=`` scope menu (``_scope_filter.html``) offers, container groups first: every label
+    of a container group, and every other label an in-target channel holds."""
+    held = set(
+        ChannelLabel.objects.filter(channel__in=Channel.objects.in_target().values("pk")).values_list(
+            "label_id", flat=True
+        )
     )
+    groups = LabelGroup.objects.prefetch_related("labels").order_by("-is_container", "name")
+    offered = ((g, [label for label in g.labels.all() if g.is_container or label.pk in held]) for g in groups)
+    return [(group, labels) for group, labels in offered if labels]
 
 
 class HomeView(ListView):
@@ -517,13 +521,18 @@ class HomeView(ListView):
 
     @cached_property
     def filter_voice(self) -> "Label | None":
-        """The container-group label selected via ``?filter=`` (e.g. "Europe"), or None."""
+        """The label selected via ``?filter=`` (e.g. "Europe", "Germany"), or None."""
         return Label.from_filter_param(self.request.GET.get("filter"))
+
+    @cached_property
+    def split_group(self) -> "LabelGroup | None":
+        """The label group the charts are split by (``?split=``), or None."""
+        return LabelGroup.from_split_param(self.request.GET.get("split"))
 
     def get_queryset(self, *args: Any, **kwargs: Any) -> QuerySet[Message]:
         channels = Channel.objects.in_target()
         if self.filter_voice is not None:
-            channels = channels.in_container_label(self.filter_voice)
+            channels = channels.in_label(self.filter_voice)
         qs = (
             Message.objects.filter(channel__in=channels)
             .select_related("channel", "forwarded_from")
@@ -542,17 +551,23 @@ class HomeView(ListView):
         ctx["query"] = q
         ctx.update(_message_options_context(self.request.GET, self.request.user))
 
-        # Dashboard scope: a container-group label ("voice", e.g. Continents → Europe)
-        # restricts the summary cards, the chart panels, and the message list to the
-        # channels holding that label or one of its child labels.
+        # Dashboard scope: a label ("voice", e.g. Continents → Europe or Nation → Germany)
+        # restricts the summary cards, the chart panels, and the message list to its
+        # channels; a split draws the chart panels with one line per label of a group.
         voice = self.filter_voice
-        ctx["container_groups"] = _container_groups()
+        split = self.split_group
+        ctx["scope_groups"] = _scope_groups()
         ctx["filter_voice"] = voice
-        filter_qs = f"?filter={voice.pk}" if voice is not None else ""
-        if voice is not None:
+        ctx["split_groups"] = list(LabelGroup.splittable())
+        ctx["split_group"] = split
+        ctx["split_max_labels"] = SPLIT_MAX_LABELS
+        ctx["split_min_channels"] = SPLIT_MIN_CHANNELS
+        params = {key: obj.pk for key, obj in (("filter", voice), ("split", split)) if obj is not None}
+        filter_qs = f"?{urlencode(params)}" if params else ""
+        if params:
             # Pagination links rebuild the query string from original_query — keep the
-            # selected voice when paging through the (scoped) message list.
-            ctx["original_query"] += f"&filter={voice.pk}"
+            # selected scope and split when paging through the message list.
+            ctx["original_query"] += f"&{urlencode(params)}"
 
         # Two rows of ecosystem-stat cards aggregated over the Message + Channel
         # tables. Cached for an hour and invalidated at the start of every
@@ -1688,7 +1703,7 @@ def _audience_extras(section: str, data: dict[str, Any]) -> dict[str, Any]:
 
 class AudienceView(TemplateView):
     """``/audience/`` and ``/audience/<section>/`` — the audience observed through the commenters
-    (``webapp.audience``, one section per page), scoped by ``?filter=<container label>`` like the
+    (``webapp.audience``, one section per page), scoped by ``?filter=<label>`` like the
     home page."""
 
     template_name = "webapp/audience.html"
@@ -1708,7 +1723,7 @@ class AudienceView(TemplateView):
                 "section_title": title,
                 "section_template": f"webapp/audience/{section.replace('-', '_')}.html",
                 "sections": [(slug, name) for slug, (name, _fn) in _AUDIENCE_SECTIONS.items()],
-                "container_groups": _container_groups(),
+                "scope_groups": _scope_groups(),
                 "filter_voice": voice,
                 "filter_query": f"?filter={voice.pk}" if voice is not None else "",
                 "chart_data": None,

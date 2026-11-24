@@ -58,14 +58,14 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
     a request loop. Returns two card-row lists, ready for the template to
     render without further DB access.
 
-    ``voice`` (a container-group :class:`~webapp.models.Label`, e.g. "Europe")
-    restricts every aggregate to the channels holding that label or one of its
-    child labels; the in-target / out-of-target splits then read as inside /
+    ``voice`` (a :class:`~webapp.models.Label`, e.g. "Europe" or "Germany") restricts
+    every aggregate to the channels holding it (a container-group label's children,
+    ``ChannelQuerySet.in_label``); the in-target / out-of-target splits then read as inside /
     outside the selection.
     """
     in_target_qs = Channel.objects.in_target()
     if voice is not None:
-        in_target_qs = in_target_qs.in_container_label(voice)
+        in_target_qs = in_target_qs.in_label(voice)
     in_target_pks = in_target_qs.values("pk")
     in_target_channels = in_target_qs.count()
     # "To inspect" is a crawl-scope notion, not a per-voice one — under a filter the

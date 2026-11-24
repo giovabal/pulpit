@@ -34,6 +34,15 @@ class ChannelQuerySet(models.QuerySet["Channel"]):
         holds_child = ChannelLabel.objects.filter(channel=OuterRef("pk"), label__parent_links__parent=voice)
         return self.filter(Exists(holds_child))
 
+    def in_label(self, label) -> ChannelQuerySet:
+        """Channels in the scope *label* names: the holders of its child labels for a container-group
+        label (:meth:`in_container_label`), its own holders otherwise. "Any period" semantics too."""
+        from webapp.models import ChannelLabel
+
+        if label.group.is_container:
+            return self.in_container_label(label)
+        return self.filter(Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label=label)))
+
 
 class ChannelManager(models.Manager["Channel"]):
     def get_queryset(self) -> ChannelQuerySet:

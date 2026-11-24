@@ -830,9 +830,10 @@ class LabelParentModelTests(TestCase):
             self.nations.full_clean()
         self.assertIn("is_container", cm.exception.message_dict)
 
-    def test_from_filter_param_resolves_container_labels_only(self) -> None:
+    def test_from_filter_param_resolves_any_label(self) -> None:
         self.assertEqual(Label.from_filter_param(str(self.europe.pk)), self.europe)
-        self.assertIsNone(Label.from_filter_param(str(self.france.pk)))  # not in a container group
+        self.assertEqual(Label.from_filter_param(str(self.france.pk)), self.france)
+        self.assertIsNone(Label.from_filter_param("999999"))
         self.assertIsNone(Label.from_filter_param("abc"))
         self.assertIsNone(Label.from_filter_param(""))
         self.assertIsNone(Label.from_filter_param(None))
@@ -869,6 +870,11 @@ class InContainerLabelQuerysetTests(TestCase):
     def test_includes_only_child_label_holders(self) -> None:
         scoped = Channel.objects.in_target().in_container_label(self.europe)
         self.assertCountEqual(list(scoped), [self.child_holder])
+
+    def test_in_label_takes_a_container_label_or_the_holders(self) -> None:
+        self.assertCountEqual(list(Channel.objects.in_target().in_label(self.europe)), [self.child_holder])
+        org_b = self.outsider.channel_labels.get().label
+        self.assertCountEqual(list(Channel.objects.in_target().in_label(org_b)), [self.outsider])
 
 
 class VstaticTagTests(TestCase):
@@ -914,6 +920,52 @@ class HomeViewTests(TestCase):
         self.assertEqual(resp.context["filter_voice"], europe)
         channels = {m.channel for m in resp.context["object_list"]}
         self.assertEqual(channels, {eu_channel})
+
+    def test_filter_by_an_ordinary_label(self) -> None:
+        nation = LabelGroup.objects.create(name="Nation", is_partition=True)
+        germany = make_label(name="Germany", group=nation, is_in_target=False)
+        org = make_label(name="OrgA")
+        german = make_channel(telegram_id=1, title="DE chan", label=org)
+        attribute(german, germany)
+        other = make_channel(telegram_id=2, title="Other chan", label=org)
+        for n, channel in enumerate((german, other)):
+            Message.objects.create(telegram_id=n, channel=channel, date="2024-01-10T00:00:00Z")
+        resp = self.client.get(reverse("home"), {"filter": germany.pk})
+        self.assertEqual({m.channel for m in resp.context["object_list"]}, {german})
+        self.assertContains(resp, "labelled")
+
+    def test_scope_menu_offers_labels_of_in_target_channels_and_containers_first(self) -> None:
+        nation = LabelGroup.objects.create(name="Nation", is_partition=True)
+        continents = LabelGroup.objects.create(name="Continents", is_container=True, is_partition=True)
+        europe = make_label(name="Europe", group=continents, is_in_target=False)
+        germany, france = (make_label(name=n, group=nation, is_in_target=False) for n in ("Germany", "France"))
+        channel = make_channel(telegram_id=1, title="DE chan", label=make_label(name="OrgA"))
+        attribute(channel, germany)
+        outside = make_channel(telegram_id=2, title="Not in target")
+        attribute(outside, france)
+        offered = {
+            g.name: [x.name for x in labels] for g, labels in self.client.get(reverse("home")).context["scope_groups"]
+        }
+        self.assertEqual(list(offered)[0], "Continents")
+        self.assertEqual(offered["Continents"], [europe.name])
+        self.assertEqual(offered["Nation"], ["Germany"])
+
+    def test_split_is_offered_kept_in_links_and_passed_to_the_charts(self) -> None:
+        nation = LabelGroup.objects.create(name="Nation", is_partition=True)
+        free = LabelGroup.objects.create(name="Topic", is_partition=False)
+        LabelGroup.objects.create(name="Empty", is_partition=True)
+        for group in (nation, free):
+            make_label(name=f"{group.name} label", group=group, is_in_target=False)
+        resp = self.client.get(reverse("home"), {"split": nation.pk})
+        self.assertIn(nation, resp.context["split_groups"])
+        self.assertNotIn(free, resp.context["split_groups"])  # a channel may hold several of its labels
+        self.assertNotIn("Empty", [g.name for g in resp.context["split_groups"]])
+        self.assertEqual(resp.context["split_group"], nation)
+        for panel in resp.context["panels"]:
+            self.assertTrue(panel["url"].endswith(f"?split={nation.pk}"), panel["url"])
+        self.assertIn(f"&split={nation.pk}", resp.context["original_query"])
+        self.assertIsNone(self.client.get(reverse("home"), {"split": free.pk}).context["split_group"])
+        self.assertIsNone(self.client.get(reverse("home"), {"split": "x"}).context["split_group"])
 
     def test_unknown_filter_param_is_ignored(self) -> None:
         resp = self.client.get(reverse("home"), {"filter": "999999"})

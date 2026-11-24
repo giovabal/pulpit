@@ -1,30 +1,48 @@
 {% comment %}
-The "Scope" menu of the home and Audience pages: a container-group label (?filter=<label id>, e.g.
-Continents → Europe) limits the page to the channels under it. Keeps every other query parameter
-(search, message options) and drops the page number. Needs ``container_groups`` and ``filter_voice``.
+The "Scope" menu of the home and Audience pages: a label (?filter=<label id>, e.g. Continents → Europe or
+Nation → Germany) limits the page to its channels. With ``split_groups`` (the home page), also the "Split by"
+menu: a label group (?split=<group id>) draws the charts with one line per label. Keeps every other query
+parameter (search, message options) and drops the page number. Needs ``scope_groups`` and ``filter_voice``;
+the split also ``split_group``, ``split_max_labels`` and ``split_min_channels``.
 {% endcomment %}
-{% if container_groups %}
+{% if scope_groups or split_groups %}
 <form method="get" action="" class="home-filter-bar">
-  {# Keep every other query param (search, message options) while switching scope; drop the page. #}
-  {% for key, values in request.GET.lists %}{% if key != "filter" and key != "page" %}{% for value in values %}
+  {# Keep every other query param (search, message options) while switching; drop the page. #}
+  {% for key, values in request.GET.lists %}{% if key != "filter" and key != "split" and key != "page" %}{% for value in values %}
   <input type="hidden" name="{{ key }}" value="{{ value }}">
   {% endfor %}{% endif %}{% endfor %}
+  {% if scope_groups %}
   <label class="home-filter-label" for="scope-filter-select">
     <i class="bi bi-funnel" aria-hidden="true"></i>Scope
   </label>
   <select id="scope-filter-select" name="filter" class="home-filter-select" onchange="this.form.submit()">
     <option value="">All channels</option>
-    {% for group in container_groups %}
+    {% for group, labels in scope_groups %}
     <optgroup label="{{ group.name }}">
-      {% for voice in group.labels.all %}
+      {% for voice in labels %}
       <option value="{{ voice.id }}"{% if filter_voice and filter_voice.id == voice.id %} selected{% endif %}>{{ voice.name }}</option>
       {% endfor %}
     </optgroup>
     {% endfor %}
   </select>
+  {% endif %}
+  {% if split_groups %}
+  <label class="home-filter-label" for="split-select">
+    <i class="bi bi-diagram-3" aria-hidden="true"></i>Split by
+  </label>
+  <select id="split-select" name="split" class="home-filter-select" onchange="this.form.submit()">
+    <option value="">No split</option>
+    {% for group in split_groups %}
+    <option value="{{ group.id }}"{% if split_group and split_group.id == group.id %} selected{% endif %}>{{ group.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
   {% if filter_voice %}
-  <span class="home-filter-note">Stats below cover only channels under
+  <span class="home-filter-note">Stats below cover only channels {% if filter_voice.group.is_container %}under{% else %}labelled{% endif %}
     <strong>{{ filter_voice.group.name }}: {{ filter_voice.name }}</strong>.</span>
+  {% endif %}
+  {% if split_group %}
+  <span class="home-filter-note">Charts show up to {{ split_max_labels }} <strong>{{ split_group.name }}</strong> labels, those with the most active channels, and the others together. Views per post and the reaction rate show the median channel, with a gap where fewer than {{ split_min_channels }} channels were active.</span>
   {% endif %}
   <noscript><button type="submit" class="search-btn">Apply</button></noscript>
 </form>
