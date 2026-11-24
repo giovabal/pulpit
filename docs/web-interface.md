@@ -9,8 +9,8 @@ The Operations panel is the dashboard you use to launch data collection and anal
 ## Home page — `/`
 
 <figure>
-<img src="../webapp_engine/static/screenshot_15.jpg" alt="Home page: project-level summary cards, with open Reactions per month chart.">
-<figcaption><em>Home page: project-level summary cards, time-series charts, with open Reactions per month chart.</em></figcaption>
+<img src="../webapp_engine/static/screenshot_15.jpg" alt="Home page: project-level summary cards, with open Reactions chart.">
+<figcaption><em>Home page: project-level summary cards, time-series charts, with open Reactions chart.</em></figcaption>
 </figure>
 <br>
 
@@ -46,7 +46,7 @@ A channel shows its network position data once crawled while it has an in-target
 
 <figure>
 <img src="../webapp_engine/static/screenshot_10.jpg" alt="Channel detail page">
-<figcaption><em>Channel detail page: summary cards, reactions, and the messages and views per month charts with event lines.</em></figcaption>
+<figcaption><em>Channel detail page: summary cards, reactions, and the messages and views charts with event lines.</em></figcaption>
 </figure>
 <br>
 

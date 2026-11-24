@@ -564,28 +564,28 @@ class HomeView(ListView):
         ctx["panels"] = [
             {
                 "id": "messages-history",
-                "title": "Messages per month",
+                "title": "Messages",
                 "icon": "bi-bar-chart-line",
                 "url": reverse("messages-history-data") + filter_qs,
                 "description": "Total number of messages posted by monitored channels each month.",
             },
             {
                 "id": "active-channels-history",
-                "title": "Active channels per month",
+                "title": "Active channels",
                 "icon": "bi-broadcast",
                 "url": reverse("active-channels-history-data") + filter_qs,
                 "description": "Number of distinct monitored channels that posted at least one message each month.",
             },
             {
                 "id": "forwards-history",
-                "title": "Forwards per month",
+                "title": "Forwards",
                 "icon": "bi-forward",
                 "url": reverse("forwards-history-data") + filter_qs,
                 "description": "Number of messages forwarded from other monitored channels each month. A proxy for cross-channel amplification activity.",
             },
             {
                 "id": "views-history",
-                "title": "Views per month",
+                "title": "Views",
                 "icon": "bi-eye",
                 "url": reverse("views-history-data") + filter_qs,
                 "description": "Sum of view counts across all messages posted by monitored channels each month.",
@@ -606,7 +606,7 @@ class HomeView(ListView):
             },
             {
                 "id": "reactions-history",
-                "title": "Reactions per month",
+                "title": "Reactions",
                 "icon": "bi-emoji-smile",
                 "url": reverse("reactions-history-data") + filter_qs,
                 "description": "Total reactions to messages posted by monitored channels each month, broken down by the eight most-used emojis. Custom and sticker reactions are aggregated together under the 'custom' bucket.",
@@ -1307,28 +1307,28 @@ class ChannelDetailView(ListView):
         panels = [
             {
                 "id": "ch-messages-history",
-                "title": "Messages per month",
+                "title": "Messages",
                 "icon": "bi-bar-chart-line",
                 "url": reverse("channel-messages-history", kwargs={"pk": ch.pk}),
                 "description": "Number of messages posted by this channel each month.",
             },
             {
                 "id": "ch-views-history",
-                "title": "Views per month",
+                "title": "Views",
                 "icon": "bi-eye",
                 "url": reverse("channel-views-history", kwargs={"pk": ch.pk}),
                 "description": "Sum of view counts across all messages posted by this channel each month.",
             },
             {
                 "id": "ch-forwards-history",
-                "title": "Forwards sent per month",
+                "title": "Forwards sent",
                 "icon": "bi-forward",
                 "url": reverse("channel-forwards-history", kwargs={"pk": ch.pk}),
                 "description": "Number of messages this channel forwarded from other channels each month.",
             },
             {
                 "id": "ch-forwards-received-history",
-                "title": "Forwards received per month",
+                "title": "Forwards received",
                 "icon": "bi-arrow-return-right",
                 "url": reverse("channel-forwards-received-history", kwargs={"pk": ch.pk}),
                 "description": "Number of times this channel's content was forwarded by other monitored channels each month.",
@@ -1349,7 +1349,7 @@ class ChannelDetailView(ListView):
             },
             {
                 "id": "ch-reactions-history",
-                "title": "Reactions per month",
+                "title": "Reactions",
                 "icon": "bi-emoji-smile",
                 "url": reverse("channel-reactions-history", kwargs={"pk": ch.pk}),
                 "type": "reactions-chart",
