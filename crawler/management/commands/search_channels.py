@@ -116,6 +116,7 @@ class Command(BaseCommand):
             qs = qs[: options["amount"]]
         extra_terms = [t for t in (options.get("extra_terms") or []) if t]
         identifiers = [i.strip() for i in (options.get("add_channels") or []) if i.strip()]
+        terms_run = 0
         total_found = 0
         total_new = 0
         with TelegramClient(
@@ -136,14 +137,17 @@ class Command(BaseCommand):
                 add_counts = {"added": 0, "present": 0, "failed": 0}
                 for raw in identifiers:
                     add_counts[self._add_one_channel(crawler, raw)] += 1
+                tested = len(identifiers)
                 summary = (
-                    f"Channel add complete. {add_counts['added']} added, "
-                    f"{add_counts['present']} already in database, {add_counts['failed']} not added."
+                    f"Channel add complete. {tested} channel{'' if tested == 1 else 's'} tested, "
+                    f"{add_counts['added']} new ({add_counts['present']} already in database, "
+                    f"{add_counts['failed']} not added)."
                 )
                 style = self.style.WARNING if add_counts["failed"] else self.style.SUCCESS
                 self.stdout.write(style(summary))
             searched_words: set[str] = set()
             for term in qs:
+                terms_run += 1
                 result = self._run_search(crawler, term.word, "Searching: ")
                 searched_words.add(term.word)  # term.word is already normalised by SearchTerm.save()
                 if result is None:
@@ -159,13 +163,19 @@ class Command(BaseCommand):
                 # searched twice in the same run. Normalise to match SearchTerm.save().
                 if " ".join(word.split()).lower() in searched_words:
                     continue
+                terms_run += 1
                 result = self._run_search(crawler, word, "Searching (extra): ")
                 if result is None:
                     continue
                 found, new = result
                 total_found += found
                 total_new += new
-        self.stdout.write(self.style.SUCCESS(f"\nSearch complete. {total_found} channels found, {total_new} new."))
+        # The search totals count term searches only: after a run that just added channels,
+        # "0 channels found" would read as contradicting the add summary above.
+        if terms_run:
+            self.stdout.write(self.style.SUCCESS(f"\nSearch complete. {total_found} channels found, {total_new} new."))
+        elif not identifiers:
+            self.stdout.write(self.style.WARNING("No search terms or channels to process."))
 
     def _run_search(self, crawler: ChannelCrawler, word: str, label: str) -> tuple[int, int] | None:
         """Run one search term; return (found, new), or None if it failed so the run can continue.

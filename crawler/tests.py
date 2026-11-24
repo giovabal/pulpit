@@ -3027,7 +3027,7 @@ class SearchChannelsAddChannelTests(TestCase):
         # The t.me message link is normalised down to its username segment.
         mock_crawler.resolve_channel_or_classify.assert_called_once_with("NewChan")
         self.assertIn("added: New Chan", output)
-        self.assertIn("1 added, 0 already in database, 0 not added", output)
+        self.assertIn("1 channel tested, 1 new (0 already in database, 0 not added).", output)
 
     @patch(f"{_SEARCH_CMD}.TelegramClient")
     @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
@@ -3053,7 +3053,7 @@ class SearchChannelsAddChannelTests(TestCase):
 
         mock_crawler.resolve_channel_or_classify.assert_not_called()
         self.assertIn("already in database: Existing Chan", output)
-        self.assertIn("0 added, 1 already in database, 0 not added", output)
+        self.assertIn("1 channel tested, 0 new (1 already in database, 0 not added).", output)
 
     @patch(f"{_SEARCH_CMD}.TelegramClient")
     @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
@@ -3083,7 +3083,7 @@ class SearchChannelsAddChannelTests(TestCase):
 
         self.assertIn("already in database: Renamed", output)
         self.assertIn("(metadata refreshed)", output)
-        self.assertIn("0 added, 1 already in database, 0 not added", output)
+        self.assertIn("1 channel tested, 0 new (1 already in database, 0 not added).", output)
 
     @patch(f"{_SEARCH_CMD}.TelegramClient")
     @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
@@ -3107,7 +3107,7 @@ class SearchChannelsAddChannelTests(TestCase):
         self.assertIn("not added (resolves to a user account, not a channel)", output)
         self.assertIn("not added (invite links cannot be resolved to a channel)", output)
         self.assertIn("added: Ok", output)
-        self.assertIn("1 added, 0 already in database, 4 not added", output)
+        self.assertIn("5 channels tested, 1 new (0 already in database, 4 not added).", output)
 
     @override_settings(IGNORE_FLOODWAIT=True)
     @patch(f"{_SEARCH_CMD}.TelegramClient")
@@ -3128,7 +3128,7 @@ class SearchChannelsAddChannelTests(TestCase):
 
         self.assertIn("flood wait, skipping", output)
         self.assertIn("added: After", output)
-        self.assertIn("1 added, 0 already in database, 1 not added", output)
+        self.assertIn("2 channels tested, 1 new (0 already in database, 1 not added).", output)
 
     @patch(f"{_SEARCH_CMD}.TelegramClient")
     @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
@@ -3149,6 +3149,37 @@ class SearchChannelsAddChannelTests(TestCase):
         self.assertEqual([c.args[0] for c in mock_crawler.search_channel.call_args_list], ["ukraine"])
         self.assertIn("Channel add complete.", output)
         self.assertIn("Search complete.", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_add_only_run_prints_no_search_summary(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        # "0 channels found, 0 new" would contradict "1 added" when no term was searched.
+        def _resolve(seed):
+            return make_channel(telegram_id=42, username="newchan", title="New Chan"), MagicMock(), "ok"
+
+        mock_crawler_cls.return_value.resolve_channel_or_classify.side_effect = _resolve
+
+        _, output = self._run(mock_crawler_cls, mock_tc_cls, ["@newchan"])
+
+        self.assertEqual(
+            output.strip().splitlines()[-1],
+            "Channel add complete. 1 channel tested, 1 new (0 already in database, 0 not added).",
+        )
+        self.assertNotIn("Search complete.", output)
+
+    @patch(f"{_SEARCH_CMD}.TelegramClient")
+    @patch(f"{_SEARCH_CMD}.TelegramAPIClient")
+    @patch(f"{_SEARCH_CMD}.ChannelCrawler")
+    def test_nothing_to_process_is_reported(
+        self, mock_crawler_cls: MagicMock, mock_api_cls: MagicMock, mock_tc_cls: MagicMock
+    ) -> None:
+        _, output = self._run(mock_crawler_cls, mock_tc_cls, [])
+
+        self.assertIn("No search terms or channels to process.", output)
+        self.assertNotIn("Search complete.", output)
 
 
 # ---------------------------------------------------------------------------
