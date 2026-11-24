@@ -38,6 +38,16 @@ urlpatterns = [
         name="avg-involvement-history-data",
     ),
     path(
+        "data/own_forwarded_views_history/",
+        views.OwnForwardedViewsHistoryDataView.as_view(),
+        name="own-forwarded-views-history-data",
+    ),
+    path(
+        "data/reaction_rate_history/",
+        views.ReactionRateHistoryDataView.as_view(),
+        name="reaction-rate-history-data",
+    ),
+    path(
         "data/channel/<int:pk>/avg_involvement_history/",
         views.ChannelAvgInvolvementHistoryView.as_view(),
         name="channel-avg-involvement-history",

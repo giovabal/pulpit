@@ -31,6 +31,7 @@
   --space-8: 64px;
   /* chart colours — read by renderChart() via getComputedStyle */
   --chart-line: #4338ca;
+  --chart-line-2: #c2410c;
   --chart-fill: rgba(67, 56, 202, .08);
   --chart-grid: #ece9e3;
   --chart-label: #78716c;
@@ -84,6 +85,7 @@
   --card-border: #2a2a31;
   /* charts */
   --chart-line: #818cf8;
+  --chart-line-2: #ea580c;
   --chart-fill: rgba(129, 140, 248, .14);
   --chart-grid: #2a2a31;
   --chart-label: #c7c1bb;

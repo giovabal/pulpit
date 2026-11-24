@@ -245,15 +245,19 @@
       function renderChart(canvas, data, events) {
         const css = getComputedStyle(document.documentElement);
         const chartLine  = css.getPropertyValue("--chart-line").trim();
+        const chartLine2 = css.getPropertyValue("--chart-line-2").trim();
         const chartFill  = css.getPropertyValue("--chart-fill").trim();
         const chartGrid  = css.getPropertyValue("--chart-grid").trim();
         const chartLabel = css.getPropertyValue("--chart-label").trim();
+        // One more line on the same axis, where the endpoint sends it (stats.views.extra_lines).
+        const extraLines = (data.extra_lines || []).slice(0, 1);
         if (window.PulpitA11y) {
           const yLabel = data.y_label || 'Value';
           const name = _pulpitChartLabel(canvas) || yLabel + ' over time';
           PulpitA11y.accessibleChart(canvas, {
             label: name,
-            summary: (data.labels || []).length + ' periods',
+            summary: (data.labels || []).length + ' periods' +
+              (extraLines.length ? ': ' + [data.values_label].concat(extraLines.map(function (l) { return l.label; })).join(', ') : ''),
           });
         }
         new Chart(canvas, {
@@ -261,6 +265,7 @@
           data: {
             labels: data.labels,
             datasets: [{
+              label: data.values_label || data.y_label,
               data: data.values,
               borderColor: chartLine,
               backgroundColor: chartFill,
@@ -269,17 +274,43 @@
               pointHoverRadius: 5,
               fill: true,
               tension: 0.3,
-            }],
+            }].concat(extraLines.map(function (line) {
+              return {
+                label: line.label,
+                data: line.values,
+                borderColor: chartLine2,
+                backgroundColor: chartLine2,
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointStyle: "rectRot",
+                order: -1, // above the first line's fill
+                fill: false,
+                tension: 0.3,
+              };
+            })),
           },
           options: {
             animation: false,
             responsive: true,
             maintainAspectRatio: false,
+            interaction: extraLines.length ? { mode: "index", intersect: false } : {},
             plugins: {
-              legend: { display: false },
+              legend: {
+                display: extraLines.length > 0,
+                position: "bottom",
+                labels: {
+                  font: { size: 11 },
+                  color: chartLabel,
+                  usePointStyle: true,
+                  boxHeight: 7,
+                  sort: function (a, b) { return a.datasetIndex - b.datasetIndex; },
+                },
+              },
               tooltip: {
+                itemSort: function (a, b) { return a.datasetIndex - b.datasetIndex; },
                 callbacks: {
-                  label: function (ctx) { return data.y_label + ": " + ctx.raw.toLocaleString(); },
+                  label: function (ctx) { return ctx.dataset.label + ": " + ctx.raw.toLocaleString(undefined, { maximumFractionDigits: 1 }); },
                 },
               },
               annotation: {

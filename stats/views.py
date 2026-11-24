@@ -1,5 +1,7 @@
 import re
 from collections import Counter
+from collections.abc import Iterable
+from statistics import median
 from typing import Any, ClassVar
 
 from django.db import models
@@ -35,26 +37,79 @@ def _scoped_in_target_channels(request: HttpRequest):
     return qs
 
 
-class _GlobalTimeSeriesBase(View):
-    annotate_field: ClassVar[str]
+def _medians_by_month(values: Iterable[tuple[Any, float]], spine: list[str]) -> list[float | None]:
+    """The median of each month's ``(month, value)`` pairs — one value per channel — over *spine*.
+
+    ``None``, not 0, for a month with no value: there is no typical channel that month.
+    """
+    by_month: dict[str, list[float]] = {}
+    for month, value in values:
+        by_month.setdefault(month.strftime("%Y-%m"), []).append(value)
+    return [round(median(by_month[month]), 1) if month in by_month else None for month in spine]
+
+
+class _GlobalScopeView(View):
+    """A month-by-month series over the in-target messages of the home page's scope."""
+
     y_label: ClassVar[str]
+
+    def get_queryset(self, request: HttpRequest) -> models.QuerySet[Message]:
+        """The in-scope messages, with their local ``month``."""
+        from network.utils import channel_cutoff_q
+
+        in_target_pks = _scoped_in_target_channels(request).values("pk")
+        return (
+            Message.objects.alive()
+            .filter(channel__in=in_target_pks, date__isnull=False)
+            .filter(channel_cutoff_q())
+            .annotate(month=TruncMonth("date"))
+        )
+
+
+class _GlobalTwoLinesBase(_GlobalScopeView):
+    """Two lines on one axis: ``values`` under ``values_label``, plus one ``extra_lines`` entry."""
+
+    values_label: ClassVar[str]
+    extra_label: ClassVar[str]
+    #: First month (``YYYY-MM``) the figure can exist for; earlier months are left off the chart.
+    first_month: ClassVar[str] = ""
+
+    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
+        raise NotImplementedError
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        spine = [month for month in global_month_spine() if month >= self.first_month]
+        if not spine:
+            return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
+        values, extra = self.get_lines(request, spine)
+        return JsonResponse(
+            {
+                "labels": spine,
+                "values": values,
+                "y_label": self.y_label,
+                "values_label": self.values_label,
+                "extra_lines": [{"label": self.extra_label, "values": extra}],
+            }
+        )
+
+
+class _GlobalTimeSeriesBase(_GlobalScopeView):
+    annotate_field: ClassVar[str]
 
     def get_annotation(self) -> Count | Sum | Avg:
         raise NotImplementedError
+
+    def extra_payload(self, request: HttpRequest, spine: list[str]) -> dict[str, Any]:
+        """Further keys of the response (more series on the same axis)."""
+        return {}
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
         spine = global_month_spine()
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
 
-        from network.utils import channel_cutoff_q
-
-        in_target_pks = _scoped_in_target_channels(request).values("pk")
         monthly_data = (
-            Message.objects.alive()
-            .filter(channel__in=in_target_pks, date__isnull=False)
-            .filter(channel_cutoff_q())
-            .annotate(month=TruncMonth("date"))
+            self.get_queryset(request)
             .values("month")
             .annotate(**{self.annotate_field: self.get_annotation()})
             .order_by("month")
@@ -68,7 +123,12 @@ class _GlobalTimeSeriesBase(View):
             else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
         )
         return JsonResponse(
-            {"labels": list(df["month"]), "values": list(df[self.annotate_field]), "y_label": self.y_label}
+            {
+                "labels": list(df["month"]),
+                "values": list(df[self.annotate_field]),
+                "y_label": self.y_label,
+                **self.extra_payload(request, spine),
+            }
         )
 
 
@@ -105,11 +165,94 @@ class ViewsHistoryDataView(_GlobalTimeSeriesBase):
 
 
 class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
+    """Views per post, read two ways: the mean over all the month's posts, where channels posting a lot weigh
+    more, and the median across the month's active channels of each one's own mean, where each counts once."""
+
     annotate_field = "avg_involvement"
     y_label = "avg views"
 
     def get_annotation(self) -> Avg:
         return Avg("views", default=0)
+
+    def extra_payload(self, request: HttpRequest, spine: list[str]) -> dict[str, Any]:
+        by_channel = (
+            self.get_queryset(request)
+            .filter(views__isnull=False)
+            .values("month", "channel_id")
+            .annotate(mean_views=Avg("views"))
+            .order_by()
+        )
+        medians = _medians_by_month(((row["month"], row["mean_views"]) for row in by_channel), spine)
+        return {
+            "values_label": "mean of all posts",
+            "extra_lines": [{"label": "median of active channels", "values": medians}],
+        }
+
+
+class OwnForwardedViewsHistoryDataView(_GlobalTwoLinesBase):
+    """Views per post of own posts and of forwards: the median across channels of each one's mean of the kind.
+
+    A forward is any message with a forward header (``forward_header_q``). Messages count as in the mean-and-median
+    chart, so the lines compare with its median.
+    """
+
+    y_label = "views per post"
+    values_label = "own posts"
+    extra_label = "forwards"
+
+    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
+        from network.near_copies import forward_header_q
+
+        def medians(messages: models.QuerySet[Message]) -> list[float | None]:
+            rows = messages.values("month", "channel_id").annotate(mean_views=Avg("views")).order_by()
+            return _medians_by_month(((row["month"], row["mean_views"]) for row in rows), spine)
+
+        messages = self.get_queryset(request).filter(views__isnull=False)
+        return medians(messages.filter(~forward_header_q())), medians(messages.filter(forward_header_q()))
+
+
+class ReactionRateHistoryDataView(_GlobalTwoLinesBase):
+    """Reactions per 1,000 views of own posts: of all of them together, and of the median channel.
+
+    An album is one post: Telegram puts its reactions on a single message while every message carries views,
+    so counting messages would read an album of five at a fifth of its rate. Its views are its best-seen
+    message's. Forwards are left out, and posts with no view count cannot have a rate.
+    """
+
+    first_month = "2022-01"  # Telegram added reactions on 30 December 2021: before, 0 would mean nothing
+    y_label = "reactions per 1,000 views"
+    values_label = "all own posts"
+    extra_label = "median of active channels"
+
+    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
+        from network.near_copies import forward_header_q
+
+        rows = (
+            self.get_queryset(request)
+            .filter(~forward_header_q(), views__gt=0)
+            .values_list("month", "channel_id", "grouped_id", "pk", "views", "total_reactions")
+            .order_by()
+        )
+        posts: dict[tuple, list[int]] = {}
+        for month, channel_id, grouped_id, pk, views, reactions in rows:
+            album = ("album", grouped_id) if grouped_id is not None else ("post", pk)
+            post = posts.setdefault((month, channel_id, album), [0, 0])
+            post[0] = max(post[0], views)
+            post[1] += reactions
+        by_channel: dict[tuple, list[int]] = {}
+        by_month: dict[str, list[int]] = {}
+        for (month, channel_id, _album), (views, reactions) in posts.items():
+            for totals in (
+                by_channel.setdefault((month, channel_id), [0, 0]),
+                by_month.setdefault(month.strftime("%Y-%m"), [0, 0]),
+            ):
+                totals[0] += views
+                totals[1] += reactions
+        overall = [
+            round(1000 * by_month[month][1] / by_month[month][0], 1) if month in by_month else None for month in spine
+        ]
+        rates = ((month, 1000 * reactions / views) for (month, _), (views, reactions) in by_channel.items())
+        return overall, _medians_by_month(rates, spine)
 
 
 class _ChannelTimeSeriesBase(View):

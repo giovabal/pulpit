@@ -233,6 +233,144 @@ class AvgInvolvementHistoryDataViewTests(TestCase):
         self.assertEqual(data["labels"], ["2024-05"])
         self.assertEqual(data["values"], [0])
 
+    def _median_line(self, **params):
+        data = json.loads(self.client.get(reverse("avg-involvement-history-data"), params).content)
+        (line,) = data["extra_lines"]
+        self.assertEqual(line["label"], "median of active channels")
+        return data, line["values"]
+
+    def test_median_counts_each_active_channel_once(self):
+        # A prolific big channel pulls the mean of all posts, not the median of channels.
+        others = [make_channel(telegram_id=n, title=f"C{n}", label=self.org) for n in (2, 3, 4)]
+        for n in range(8):
+            Message.objects.create(telegram_id=n, channel=self.channel, date="2024-05-01T00:00:00Z", views=1000)
+        for channel, views in zip(others[:2], ((10, 30), (50, 50)), strict=True):
+            for n, v in enumerate(views):
+                Message.objects.create(telegram_id=n, channel=channel, date="2024-05-02T00:00:00Z", views=v)
+        # others[2] posts nothing: not an active channel.
+        data, medians = self._median_line()
+        self.assertEqual(data["values_label"], "mean of all posts")
+        self.assertEqual(data["values"], [(8 * 1000 + 140) / 12])
+        self.assertEqual(medians, [50])
+
+    def test_median_is_empty_where_no_channel_posted_or_views_are_unknown(self):
+        Message.objects.create(telegram_id=1, channel=self.channel, date="2024-03-01T12:00:00Z", views=100)
+        Message.objects.create(telegram_id=2, channel=self.channel, date="2024-05-01T12:00:00Z", views=None)
+        data, medians = self._median_line()
+        self.assertEqual(data["labels"], ["2024-03", "2024-04", "2024-05"])
+        self.assertEqual(data["values"], [100, 0, 0])
+        self.assertEqual(medians, [100, None, None])
+
+    def test_median_follows_the_in_target_periods(self):
+        bounded = make_channel(telegram_id=2, title="C2")
+        attribute(bounded, self.org, start="2024-06-01")
+        for channel, views in ((self.channel, 100), (bounded, 900)):
+            for n, date in enumerate(("2024-05-10T12:00:00Z", "2024-06-10T12:00:00Z")):
+                Message.objects.create(telegram_id=n, channel=channel, date=date, views=views)
+        _, medians = self._median_line()
+        self.assertEqual(medians, [100, 500])
+
+    def test_other_series_have_no_extra_line(self):
+        Message.objects.create(telegram_id=1, channel=self.channel, date="2024-05-01T00:00:00Z", views=100)
+        data = json.loads(self.client.get(reverse("views-history-data")).content)
+        self.assertNotIn("extra_lines", data)
+
+
+class _TwoLinesChartMixin:
+    url_name: str
+
+    def setUp(self):
+        self.org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=1, title="C1", label=self.org)
+        self.next_id = 0
+
+    def post(self, channel=None, date="2024-05-10T12:00:00Z", **fields):
+        self.next_id += 1
+        return Message.objects.create(telegram_id=self.next_id, channel=channel or self.channel, date=date, **fields)
+
+    def lines(self, **params):
+        data = json.loads(self.client.get(reverse(self.url_name), params).content)
+        (extra,) = data["extra_lines"]
+        return data["labels"], data["values"], extra["values"]
+
+    def test_empty_db_returns_empty_response(self):
+        data = json.loads(self.client.get(reverse(self.url_name)).content)
+        self.assertEqual((data["labels"], data["values"]), ([], []))
+
+
+class OwnForwardedViewsHistoryTests(_TwoLinesChartMixin, TestCase):
+    url_name = "own-forwarded-views-history-data"
+
+    def test_own_posts_and_forwards_are_apart(self):
+        source = make_channel(telegram_id=9, title="Source")
+        self.post(views=100)
+        self.post(views=300)
+        self.post(views=30, forwarded_from=source)
+        self.post(views=50, fwd_from_from_name="Hidden user")  # a header without a source channel
+        other = make_channel(telegram_id=2, title="C2", label=self.org)
+        self.post(other, views=1000)
+        self.assertEqual(self.lines(), (["2024-05"], [600], [40]))
+
+    def test_months_without_a_kind_are_gaps(self):
+        source = make_channel(telegram_id=9, title="Source")
+        self.post(views=100, date="2024-03-10T12:00:00Z")
+        self.post(views=30, forwarded_from=source)
+        self.post(views=None)
+        self.assertEqual(self.lines(), (["2024-03", "2024-04", "2024-05"], [100, None, None], [None, None, 30]))
+
+
+class ReactionRateHistoryTests(_TwoLinesChartMixin, TestCase):
+    url_name = "reaction-rate-history-data"
+
+    def test_rate_of_all_posts_and_of_the_median_channel(self):
+        self.post(views=1000, total_reactions=10)
+        self.post(views=3000, total_reactions=10)
+        other = make_channel(telegram_id=2, title="C2", label=self.org)
+        self.post(other, views=100, total_reactions=4)
+        # All together 24 / 4,100; the channels' own rates are 5 and 40.
+        self.assertEqual(self.lines(), (["2024-05"], [5.9], [22.5]))
+
+    def test_an_album_is_one_post(self):
+        for views, reactions in ((480, 20), (500, 0), (490, 0)):
+            self.post(views=views, total_reactions=reactions, grouped_id=77)
+        self.assertEqual(self.lines(), (["2024-05"], [40], [40]))
+
+    def test_starts_when_telegram_added_reactions(self):
+        self.post(views=1000, date="2021-11-10T12:00:00Z")
+        self.post(views=1000, total_reactions=10, date="2022-02-10T12:00:00Z")
+        self.assertEqual(self.lines(), (["2022-01", "2022-02"], [None, 10], [None, 10]))
+
+    def test_only_older_posts_gives_an_empty_chart(self):
+        self.post(views=1000, date="2021-11-10T12:00:00Z")
+        data = json.loads(self.client.get(reverse(self.url_name)).content)
+        self.assertEqual((data["labels"], data["values"]), ([], []))
+
+    def test_albums_are_keyed_by_channel(self):
+        other = make_channel(telegram_id=2, title="C2", label=self.org)
+        for channel in (self.channel, other):
+            self.post(channel, views=1000, total_reactions=10, grouped_id=77)
+        self.assertEqual(self.lines()[1], [10])
+
+    def test_forwards_and_posts_without_views_are_left_out(self):
+        source = make_channel(telegram_id=9, title="Source")
+        self.post(views=1000, total_reactions=10)
+        self.post(views=1000, total_reactions=500, forwarded_from=source)
+        self.post(views=0, total_reactions=3)
+        self.post(views=None, total_reactions=3)
+        self.assertEqual(self.lines(), (["2024-05"], [10], [10]))
+
+    def test_months_without_own_posts_are_gaps(self):
+        self.post(views=1000, total_reactions=10, date="2024-03-10T12:00:00Z")
+        self.post(views=1000, total_reactions=20)
+        self.assertEqual(self.lines(), (["2024-03", "2024-04", "2024-05"], [10, None, 20], [10, None, 20]))
+
+    def test_follows_the_in_target_periods(self):
+        bounded = make_channel(telegram_id=2, title="C2")
+        attribute(bounded, self.org, start="2024-06-01")
+        self.post(views=1000, total_reactions=10)
+        self.post(bounded, views=1000, total_reactions=90)
+        self.assertEqual(self.lines()[1], [10])
+
 
 class HomeFilterScopeTests(TestCase):
     """``?filter=<container label>`` scopes the global time-series endpoints.

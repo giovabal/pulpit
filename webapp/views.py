@@ -592,10 +592,17 @@ class HomeView(ListView):
             },
             {
                 "id": "avg-involvement-history",
-                "title": "Average involvement per month",
+                "title": "Views per post: mean and median",
                 "icon": "bi-graph-up",
                 "url": reverse("avg-involvement-history-data") + filter_qs,
-                "description": "Average number of views per message across monitored channels each month. A proxy for audience engagement intensity.",
+                "description": "Views per post of monitored channels each month, read two ways: the mean of all posts, where channels that post a lot weigh more, and the median of active channels, where each channel counts once through its own mean. Posts keep gaining views for months, so the latest months read low.",
+            },
+            {
+                "id": "own-forwarded-views-history",
+                "title": "Views per post: own posts and forwards",
+                "icon": "bi-layers",
+                "url": reverse("own-forwarded-views-history-data") + filter_qs,
+                "description": "The median channel's views per post each month, its own posts apart from the posts it forwards. Each channel counts once through its own mean of that kind of post.",
             },
             {
                 "id": "reactions-history",
@@ -603,6 +610,13 @@ class HomeView(ListView):
                 "icon": "bi-emoji-smile",
                 "url": reverse("reactions-history-data") + filter_qs,
                 "description": "Total reactions to messages posted by monitored channels each month, broken down by the eight most-used emojis. Custom and sticker reactions are aggregated together under the 'custom' bucket.",
+            },
+            {
+                "id": "reaction-rate-history",
+                "title": "Reactions per 1,000 views",
+                "icon": "bi-hand-thumbs-up",
+                "url": reverse("reaction-rate-history-data") + filter_qs,
+                "description": "How often a view turns into a reaction, on monitored channels' own posts (forwards left out, an album counted as one post): all own posts together, and the median channel. It starts in 2022, when Telegram added reactions. Reactions come faster than views, so the latest months read high until their posts have aged.",
             },
         ]
         return ctx
@@ -1321,10 +1335,10 @@ class ChannelDetailView(ListView):
             },
             {
                 "id": "ch-avg-involvement-history",
-                "title": "Average involvement per month",
+                "title": "Views per post",
                 "icon": "bi-graph-up",
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
-                "description": "Average number of views per message for this channel each month. A proxy for audience engagement intensity.",
+                "description": "Average number of views per message for this channel each month. Posts keep gaining views for months, so the latest months read low.",
             },
             {
                 "id": "ch-reactions-history",
