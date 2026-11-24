@@ -53,6 +53,16 @@ urlpatterns = [
         name="channel-avg-involvement-history",
     ),
     path(
+        "data/channel/<int:pk>/own_forwarded_views_history/",
+        views.ChannelOwnForwardedViewsHistoryView.as_view(),
+        name="channel-own-forwarded-views-history",
+    ),
+    path(
+        "data/channel/<int:pk>/reaction_rate_history/",
+        views.ChannelReactionRateHistoryView.as_view(),
+        name="channel-reaction-rate-history",
+    ),
+    path(
         "data/channel/<int:pk>/cross_refs/",
         views.ChannelCrossRefsView.as_view(),
         name="channel-cross-refs",

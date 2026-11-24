@@ -38,9 +38,9 @@ def _scoped_in_target_channels(request: HttpRequest):
 
 
 def _medians_by_month(values: Iterable[tuple[Any, float]], spine: list[str]) -> list[float | None]:
-    """The median of each month's ``(month, value)`` pairs — one value per channel — over *spine*.
+    """The median of each month's ``(month, value)`` pairs — one per channel, or per post — over *spine*.
 
-    ``None``, not 0, for a month with no value: there is no typical channel that month.
+    ``None``, not 0, for a month with no value: nothing is typical of it.
     """
     by_month: dict[str, list[float]] = {}
     for month, value in values:
@@ -66,22 +66,26 @@ class _GlobalScopeView(View):
         )
 
 
-class _GlobalTwoLinesBase(_GlobalScopeView):
+class _TwoLines:
     """Two lines on one axis: ``values`` under ``values_label``, plus one ``extra_lines`` entry."""
 
+    y_label: ClassVar[str]
     values_label: ClassVar[str]
     extra_label: ClassVar[str]
     #: First month (``YYYY-MM``) the figure can exist for; earlier months are left off the chart.
     first_month: ClassVar[str] = ""
 
-    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
+    def get_lines(
+        self, messages: models.QuerySet[Message], spine: list[str]
+    ) -> tuple[list[float | None], list[float | None]]:
+        """Both lines over *spine*, from *messages* carrying their local ``month``."""
         raise NotImplementedError
 
-    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        spine = [month for month in global_month_spine() if month >= self.first_month]
+    def two_lines_response(self, messages: models.QuerySet[Message], spine: list[str]) -> JsonResponse:
+        spine = [month for month in spine if month >= self.first_month]
         if not spine:
             return JsonResponse({"labels": [], "values": [], "y_label": self.y_label})
-        values, extra = self.get_lines(request, spine)
+        values, extra = self.get_lines(messages, spine)
         return JsonResponse(
             {
                 "labels": spine,
@@ -91,6 +95,86 @@ class _GlobalTwoLinesBase(_GlobalScopeView):
                 "extra_lines": [{"label": self.extra_label, "values": extra}],
             }
         )
+
+
+class _GlobalTwoLinesBase(_TwoLines, _GlobalScopeView):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+        return self.two_lines_response(self.get_queryset(request), global_month_spine())
+
+
+class _OwnForwardedViews(_TwoLines):
+    """Views per post of own posts and of forwards: the median across channels of each one's mean of the kind,
+    so for a single channel its own mean.
+
+    A forward is any message with a forward header (``forward_header_q``). Messages count as in the
+    mean-and-median chart, so the lines compare with it.
+    """
+
+    y_label = "views per post"
+    values_label = "own posts"
+    extra_label = "forwards"
+
+    def get_lines(
+        self, messages: models.QuerySet[Message], spine: list[str]
+    ) -> tuple[list[float | None], list[float | None]]:
+        from network.near_copies import forward_header_q
+
+        def medians(kind: models.QuerySet[Message]) -> list[float | None]:
+            rows = kind.values("month", "channel_id").annotate(mean_views=Avg("views")).order_by()
+            return _medians_by_month(((row["month"], row["mean_views"]) for row in rows), spine)
+
+        messages = messages.filter(views__isnull=False)
+        return medians(messages.filter(~forward_header_q())), medians(messages.filter(forward_header_q()))
+
+
+class _ReactionRate(_TwoLines):
+    """Reactions per 1,000 views of own posts: of all of them together, and of the typical channel or post.
+
+    An album is one post: Telegram puts its reactions on a single message while every message carries views,
+    so counting messages would read an album of five at a fifth of its rate. Its views are its best-seen
+    message's. Forwards are left out, and posts with no view count cannot have a rate.
+    """
+
+    first_month = "2022-01"  # Telegram added reactions on 30 December 2021: before, 0 would mean nothing
+    y_label = "reactions per 1,000 views"
+    values_label = "all own posts"
+
+    @staticmethod
+    def typical_unit(post: tuple) -> Any:
+        """What the median line counts once: the channel, or the post, of a ``(month, channel, post)`` key."""
+        raise NotImplementedError
+
+    def get_lines(
+        self, messages: models.QuerySet[Message], spine: list[str]
+    ) -> tuple[list[float | None], list[float | None]]:
+        from network.near_copies import forward_header_q
+
+        rows = (
+            messages.filter(~forward_header_q(), views__gt=0)
+            .values_list("month", "channel_id", "grouped_id", "pk", "views", "total_reactions")
+            .order_by()
+        )
+        posts: dict[tuple, list[int]] = {}
+        for month, channel_id, grouped_id, pk, views, reactions in rows:
+            album = ("album", grouped_id) if grouped_id is not None else ("post", pk)
+            post = posts.setdefault((month, channel_id, album), [0, 0])
+            post[0] = max(post[0], views)
+            post[1] += reactions
+        by_unit: dict[tuple, list[int]] = {}
+        by_month: dict[str, list[int]] = {}
+        for key, (views, reactions) in posts.items():
+            month = key[0]
+            for totals in (
+                by_unit.setdefault((month, self.typical_unit(key)), [0, 0]),
+                by_month.setdefault(month.strftime("%Y-%m"), [0, 0]),
+            ):
+                totals[0] += views
+                totals[1] += reactions
+        overall = [
+            round(1000 * by_month[month][1] / by_month[month][0], 1) if month in by_month else None for month in spine
+        ]
+        rates = ((month, 1000 * reactions / views) for (month, _unit), (views, reactions) in by_unit.items())
+        return overall, _medians_by_month(rates, spine)
 
 
 class _GlobalTimeSeriesBase(_GlobalScopeView):
@@ -189,70 +273,16 @@ class AvgInvolvementHistoryDataView(_GlobalTimeSeriesBase):
         }
 
 
-class OwnForwardedViewsHistoryDataView(_GlobalTwoLinesBase):
-    """Views per post of own posts and of forwards: the median across channels of each one's mean of the kind.
-
-    A forward is any message with a forward header (``forward_header_q``). Messages count as in the mean-and-median
-    chart, so the lines compare with its median.
-    """
-
-    y_label = "views per post"
-    values_label = "own posts"
-    extra_label = "forwards"
-
-    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
-        from network.near_copies import forward_header_q
-
-        def medians(messages: models.QuerySet[Message]) -> list[float | None]:
-            rows = messages.values("month", "channel_id").annotate(mean_views=Avg("views")).order_by()
-            return _medians_by_month(((row["month"], row["mean_views"]) for row in rows), spine)
-
-        messages = self.get_queryset(request).filter(views__isnull=False)
-        return medians(messages.filter(~forward_header_q())), medians(messages.filter(forward_header_q()))
+class OwnForwardedViewsHistoryDataView(_OwnForwardedViews, _GlobalTwoLinesBase):
+    pass
 
 
-class ReactionRateHistoryDataView(_GlobalTwoLinesBase):
-    """Reactions per 1,000 views of own posts: of all of them together, and of the median channel.
-
-    An album is one post: Telegram puts its reactions on a single message while every message carries views,
-    so counting messages would read an album of five at a fifth of its rate. Its views are its best-seen
-    message's. Forwards are left out, and posts with no view count cannot have a rate.
-    """
-
-    first_month = "2022-01"  # Telegram added reactions on 30 December 2021: before, 0 would mean nothing
-    y_label = "reactions per 1,000 views"
-    values_label = "all own posts"
+class ReactionRateHistoryDataView(_ReactionRate, _GlobalTwoLinesBase):
     extra_label = "median of active channels"
 
-    def get_lines(self, request: HttpRequest, spine: list[str]) -> tuple[list[float | None], list[float | None]]:
-        from network.near_copies import forward_header_q
-
-        rows = (
-            self.get_queryset(request)
-            .filter(~forward_header_q(), views__gt=0)
-            .values_list("month", "channel_id", "grouped_id", "pk", "views", "total_reactions")
-            .order_by()
-        )
-        posts: dict[tuple, list[int]] = {}
-        for month, channel_id, grouped_id, pk, views, reactions in rows:
-            album = ("album", grouped_id) if grouped_id is not None else ("post", pk)
-            post = posts.setdefault((month, channel_id, album), [0, 0])
-            post[0] = max(post[0], views)
-            post[1] += reactions
-        by_channel: dict[tuple, list[int]] = {}
-        by_month: dict[str, list[int]] = {}
-        for (month, channel_id, _album), (views, reactions) in posts.items():
-            for totals in (
-                by_channel.setdefault((month, channel_id), [0, 0]),
-                by_month.setdefault(month.strftime("%Y-%m"), [0, 0]),
-            ):
-                totals[0] += views
-                totals[1] += reactions
-        overall = [
-            round(1000 * by_month[month][1] / by_month[month][0], 1) if month in by_month else None for month in spine
-        ]
-        rates = ((month, 1000 * reactions / views) for (month, _), (views, reactions) in by_channel.items())
-        return overall, _medians_by_month(rates, spine)
+    @staticmethod
+    def typical_unit(post: tuple) -> Any:
+        return post[1]
 
 
 class _ChannelTimeSeriesBase(View):
@@ -289,6 +319,10 @@ class _ChannelTimeSeriesBase(View):
         """Post-process each monthly value before serialising. Default: identity."""
         return value
 
+    def extra_payload(self, channel: Channel, spine: list[str]) -> dict[str, Any]:
+        """Further keys of the response (more series on the same axis)."""
+        return {}
+
     def get_spine(self, channel: Channel) -> list[str]:
         """Month spine the data are reindexed to. Default: the channel's own posting
         span. Views whose data come from *other* channels' messages must override
@@ -324,7 +358,12 @@ class _ChannelTimeSeriesBase(View):
             else pd.DataFrame({"month": spine, self.annotate_field: [0] * len(spine)})
         )
         return JsonResponse(
-            {"labels": list(df["month"]), "values": list(df[self.annotate_field]), "y_label": self.y_label}
+            {
+                "labels": list(df["month"]),
+                "values": list(df[self.annotate_field]),
+                "y_label": self.y_label,
+                **self.extra_payload(channel, spine),
+            }
         )
 
 
@@ -403,6 +442,38 @@ class ChannelAvgInvolvementHistoryView(_ChannelTimeSeriesBase):
 
     def post_process_value(self, value: Any) -> int:
         return round(value)
+
+    def extra_payload(self, channel: Channel, spine: list[str]) -> dict[str, Any]:
+        views = (
+            self.get_queryset(channel)
+            .filter(views__isnull=False)
+            .annotate(month=TruncMonth("date"))
+            .values_list("month", "views")
+            .order_by()
+        )
+        return {
+            "values_label": "mean of all posts",
+            "extra_lines": [{"label": "median post", "values": _medians_by_month(views, spine)}],
+        }
+
+
+class _ChannelTwoLinesBase(_TwoLines, _ChannelTimeSeriesBase):
+    def get(self, request: HttpRequest, pk: int, *args: Any, **kwargs: Any) -> JsonResponse:
+        channel = get_object_or_404(Channel, pk=pk)
+        messages = self.get_queryset(channel).annotate(month=TruncMonth("date"))
+        return self.two_lines_response(messages, self.get_spine(channel))
+
+
+class ChannelOwnForwardedViewsHistoryView(_OwnForwardedViews, _ChannelTwoLinesBase):
+    pass
+
+
+class ChannelReactionRateHistoryView(_ReactionRate, _ChannelTwoLinesBase):
+    extra_label = "median own post"
+
+    @staticmethod
+    def typical_unit(post: tuple) -> Any:
+        return post
 
 
 class ChannelCrossRefsView(_ChannelTimeSeriesBase):

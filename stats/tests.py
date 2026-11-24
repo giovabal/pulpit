@@ -288,13 +288,16 @@ class _TwoLinesChartMixin:
         self.next_id += 1
         return Message.objects.create(telegram_id=self.next_id, channel=channel or self.channel, date=date, **fields)
 
+    def url(self):
+        return reverse(self.url_name)
+
     def lines(self, **params):
-        data = json.loads(self.client.get(reverse(self.url_name), params).content)
+        data = json.loads(self.client.get(self.url(), params).content)
         (extra,) = data["extra_lines"]
         return data["labels"], data["values"], extra["values"]
 
-    def test_empty_db_returns_empty_response(self):
-        data = json.loads(self.client.get(reverse(self.url_name)).content)
+    def test_no_messages_returns_empty_response(self):
+        data = json.loads(self.client.get(self.url()).content)
         self.assertEqual((data["labels"], data["values"]), ([], []))
 
 
@@ -342,7 +345,7 @@ class ReactionRateHistoryTests(_TwoLinesChartMixin, TestCase):
 
     def test_only_older_posts_gives_an_empty_chart(self):
         self.post(views=1000, date="2021-11-10T12:00:00Z")
-        data = json.loads(self.client.get(reverse(self.url_name)).content)
+        data = json.loads(self.client.get(self.url()).content)
         self.assertEqual((data["labels"], data["values"]), ([], []))
 
     def test_albums_are_keyed_by_channel(self):
@@ -370,6 +373,49 @@ class ReactionRateHistoryTests(_TwoLinesChartMixin, TestCase):
         self.post(views=1000, total_reactions=10)
         self.post(bounded, views=1000, total_reactions=90)
         self.assertEqual(self.lines()[1], [10])
+
+
+class _ChannelTwoLinesChartMixin(_TwoLinesChartMixin):
+    def url(self):
+        return reverse(self.url_name, kwargs={"pk": self.channel.pk})
+
+    def test_unknown_channel_returns_404(self):
+        self.assertEqual(self.client.get(reverse(self.url_name, kwargs={"pk": 999})).status_code, 404)
+
+    def test_only_this_channels_posts_in_its_in_target_periods_count(self):
+        bounded = make_channel(telegram_id=2, title="C2")
+        attribute(bounded, self.org, start="2024-06-01")
+        self.post(bounded, views=1000, total_reactions=90)  # before its period
+        self.post(bounded, views=1000, total_reactions=10, date="2024-06-10T12:00:00Z")
+        self.post(views=5000, total_reactions=5000)
+        self.channel = bounded
+        labels, values, _extra = self.lines()
+        self.assertEqual(labels, ["2024-05", "2024-06"])
+        self.assertIsNone(values[0])
+        self.assertEqual(values[1], {"channel-reaction-rate-history": 10}.get(self.url_name, 1000))
+
+
+class ChannelOwnForwardedViewsHistoryTests(_ChannelTwoLinesChartMixin, TestCase):
+    url_name = "channel-own-forwarded-views-history"
+
+    def test_mean_of_each_kind(self):
+        source = make_channel(telegram_id=9, title="Source")
+        for views in (100, 200, 600):
+            self.post(views=views)
+        self.post(views=30, forwarded_from=source)
+        self.post(views=51, fwd_from_from_name="Hidden user")
+        self.assertEqual(self.lines(), (["2024-05"], [300], [40.5]))
+
+
+class ChannelReactionRateHistoryTests(_ChannelTwoLinesChartMixin, TestCase):
+    url_name = "channel-reaction-rate-history"
+
+    def test_rate_of_all_posts_and_of_the_median_post(self):
+        self.post(views=1000, total_reactions=10)
+        self.post(views=100, total_reactions=3)
+        for views, reactions in ((450, 100), (500, 0)):  # an album: one post, 100 / 500
+            self.post(views=views, total_reactions=reactions, grouped_id=77)
+        self.assertEqual(self.lines(), (["2024-05"], [70.6], [30]))
 
 
 class HomeFilterScopeTests(TestCase):
@@ -597,3 +643,14 @@ class ChannelAvgInvolvementHistoryViewTests(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data["labels"], ["2024-09"])
         self.assertEqual(data["values"], [100])
+
+    def test_median_post_beside_the_mean(self):
+        for n, (date, views) in enumerate(
+            (("2024-09-02", 10), ("2024-09-03", 20), ("2024-09-04", 3000), ("2024-11-02", None), ("2024-11-03", 7))
+        ):
+            Message.objects.create(telegram_id=n, channel=self.channel, date=f"{date}T12:00:00Z", views=views)
+        response = self.client.get(reverse("channel-avg-involvement-history", kwargs={"pk": self.channel.pk}))
+        data = json.loads(response.content)
+        self.assertEqual(data["values_label"], "mean of all posts")
+        self.assertEqual(data["values"], [1010, 0, 7])
+        self.assertEqual(data["extra_lines"], [{"label": "median post", "values": [20, None, 7]}])

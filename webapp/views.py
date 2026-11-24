@@ -1335,10 +1335,17 @@ class ChannelDetailView(ListView):
             },
             {
                 "id": "ch-avg-involvement-history",
-                "title": "Views per post",
+                "title": "Views per post: mean and median",
                 "icon": "bi-graph-up",
                 "url": reverse("channel-avg-involvement-history", kwargs={"pk": ch.pk}),
-                "description": "Average number of views per message for this channel each month. Posts keep gaining views for months, so the latest months read low.",
+                "description": "Views per post of this channel each month: the mean of all its posts, which a few widely seen ones raise, and the median post. Posts keep gaining views for months, so the latest months read low.",
+            },
+            {
+                "id": "ch-own-forwarded-views-history",
+                "title": "Views per post: own posts and forwards",
+                "icon": "bi-layers",
+                "url": reverse("channel-own-forwarded-views-history", kwargs={"pk": ch.pk}),
+                "description": "Average views per post of this channel each month, its own posts apart from the posts it forwards.",
             },
             {
                 "id": "ch-reactions-history",
@@ -1347,6 +1354,13 @@ class ChannelDetailView(ListView):
                 "url": reverse("channel-reactions-history", kwargs={"pk": ch.pk}),
                 "type": "reactions-chart",
                 "description": "Monthly breakdown of the top emoji reactions on this channel's messages.",
+            },
+            {
+                "id": "ch-reaction-rate-history",
+                "title": "Reactions per 1,000 views",
+                "icon": "bi-hand-thumbs-up",
+                "url": reverse("channel-reaction-rate-history", kwargs={"pk": ch.pk}),
+                "description": "How often a view turns into a reaction, on this channel's own posts (forwards left out, an album counted as one post): all of them together, and the median post. It starts in 2022, when Telegram added reactions. Reactions come faster than views, so the latest months read high until their posts have aged.",
             },
             {
                 "id": "ch-cross-refs",
