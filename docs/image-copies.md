@@ -41,7 +41,7 @@ Each copy is one citation event copier → origin:
 
 | Where | Effect |
 | :-- | :-- |
-| Edges | a new raw count `weight_image_copies` beside `weight_forwards`, `weight_mentions`, `weight_copies`; every edge-weight strategy counts it, and the copying post joins the citing-message denominator of `PARTIAL_REFERENCES` unless it already cites (a `t.me/` link, a text near-copy) |
+| Edges | a new raw count `weight_image_copies` beside `weight_forwards`, `weight_mentions`, `weight_copies`; every edge-weight strategy counts it, and the copying post joins the citing-message denominator of `PARTIAL_REFERENCES` unless it already cites (a mention, a text near-copy) |
 | Amplification | a copy received counts as a forward received |
 | Content originality | a copy made counts as a non-original message (once per post, even when its text is a near-copy too) |
 | Diffusion lag | a cross-channel copy contributes its lag (copy date − origin date) |

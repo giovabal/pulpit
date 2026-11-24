@@ -37,8 +37,8 @@ def channel_network_data(
     **primary** group for the analysis window (``resolved_label`` =
     ``(label_id, name, color)``); channels with no in-target label in the
     primary group for the window — *dead-leaf* nodes, i.e. out-of-target
-    channels an in-target channel forwarded from or mentioned via a ``t.me/``
-    link — fall back to ``dead_leaves_color`` (or, when ``None``,
+    channels an in-target channel forwarded from or mentioned (``t.me/`` link or
+    @handle) — fall back to ``dead_leaves_color`` (or, when ``None``,
     ``settings.DEAD_LEAVES_COLOR``). ``group_partitions`` maps every *partition*
     group's pk → ``(label_id, label_color)`` resolved for the window, feeding the
     ``LABELGROUP<id>`` community strategies. The node keys ``organization`` /
@@ -401,7 +401,7 @@ def build_graph(
     even as dead leaves — so their citations and messages never enter the graph.
 
     A *dead-leaf* node is an out-of-target channel that at least one in-target
-    channel has forwarded from or mentioned via a ``t.me/`` link. Inclusion is
+    channel has forwarded from or mentioned (``t.me/`` link or @handle). Inclusion is
     gated by ``draw_dead_leaves``: the crawl counts the in-target channels citing
     each out-of-target channel (``crawler.degrees``) and stores the count in its
     ``in_degree``, so a non-zero in-degree is exactly the dead-leaf criterion.
@@ -593,7 +593,7 @@ def build_graph(
     # Near-copies: text re-posted without the forward header, read as a forward of the earliest
     # publication. Each copying message is one citation event copier → origin and one citing
     # message for the PARTIAL_REFERENCES denominator — unless it already counts there through a
-    # t.me/ reference it carries (a forwarded message can never be a copy, by construction).
+    # mention it carries (a forwarded message can never be a copy, by construction).
     near_copies: list[NearCopy] = []
     copy_counts: dict[tuple[int, int], int] = {}
     if include_near_copies:
@@ -625,7 +625,7 @@ def build_graph(
 
     # Image copies: a picture post re-posting an earlier post's image without a forward header (network.image_copies)
     # — one citation event per copying post, which joins the citing-message denominator unless its first message
-    # already counts there (a t.me/ reference, or a text near-copy).
+    # already counts there (a mention, or a text near-copy).
     image_copies: list[ImageCopy] = []
     image_copy_counts: dict[tuple[int, int], int] = {}
     if include_image_copies:

@@ -134,7 +134,7 @@ Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI fla
 | `messages.fix_holes` | Scan per-channel message ID sequences for gaps and refetch missing messages | `false` |
 | `messages.fix_missing_media` | Re-download photos and videos that were never saved or are missing from disk | `false` |
 | `messages.retry_lost_messages` | Bulk-refetch every message currently marked `is_lost=True`; rows Telegram returns are unmarked | `false` |
-| `messages.retry_references` | Re-attempt `t.me/` references that could not be resolved in a previous run | `false` |
+| `messages.retry_references` | Re-attempt mentions (`t.me/` links and @handles) that could not be resolved in a previous run | `false` |
 | `messages.force_retry_unresolved_references` | Together with `messages.retry_references`, also retries references previously marked permanently unresolvable | `false` |
 
 > The loader silently translates the pre-0.21 spellings `messages.fixholes` → `messages.fix_holes` and `messages.force_retry_unresolved` → `messages.force_retry_unresolved_references` at parse time, so older snapshots load unchanged; re-saving them through the panel rewrites the file with the canonical keys.
@@ -155,7 +155,7 @@ Pre-populates the *1. Channels* fieldset of the Crawl Channels form. The CLI fla
 
 ## `[environment]` — citation-neighbourhood crawl
 
-Pre-populates the **Environment** fieldset of the Crawl Channels form (CLI: `--environment`, `--environment-depth N`, `--environment-download-{images,video,audio,stickers,other-media}` and their `--no-` counterparts). When enabled, the crawler also fetches the out-of-scope channels the in-scope ones cite — forwards and `t.me/` references — up to `depth` citation hops away: full channel details plus every message dated inside the in-scope channels' in-target window. Reached channels are stamped with their distance (`Channel.environment_depth`) and their messages survive `purge_out_of_target_messages`. `depth` is the only key with reach beyond the form: it is the `--environment-depth` fallback. Media downloads for these channels follow the five toggles here, **not** `[downloads]`.
+Pre-populates the **Environment** fieldset of the Crawl Channels form (CLI: `--environment`, `--environment-depth N`, `--environment-download-{images,video,audio,stickers,other-media}` and their `--no-` counterparts). When enabled, the crawler also fetches the out-of-scope channels the in-scope ones cite — forwards, `t.me/` links and @handles — up to `depth` citation hops away: full channel details plus every message dated inside the in-scope channels' in-target window. Reached channels are stamped with their distance (`Channel.environment_depth`) and their messages survive `purge_out_of_target_messages`. `depth` is the only key with reach beyond the form: it is the `--environment-depth` fallback. Media downloads for these channels follow the five toggles here, **not** `[downloads]`.
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
@@ -181,7 +181,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | :--- | :---------- | ---------------: |
 | `graph.community_palette` | Colour palette for communities. Any palette name from [python-graph-gallery.com/color-palette-finder](https://python-graph-gallery.com/color-palette-finder/) (case-sensitive — explicit palette names are kept in their canonical order). The value `"ORGANIZATION"` is accepted as an alias for `"vaporwave"` *reversed*. Empty `""` disables palette rendering. | `""` |
 | `graph.community_palette_reversed` | Reverse the palette so the most-vivid colours land on the largest communities | `false` |
-| `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link) | `#596a64` |
+| `graph.dead_leaves_color` | Hex colour for dead-leaf nodes (out-of-target channels that an in-target one has forwarded from or mentioned: `t.me/` link or @handle) | `#596a64` |
 | `graph.output_dir` | Directory where `structural_analysis` writes all output files. Relative paths resolve from the project root. | `graph` |
 
 ## `[outputs]` — what to write
@@ -203,7 +203,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.mrqap` | Fit the dyadic regression of citation ties — same label per partition group, reverse tie, activity and audience — with MRQAP permutation p-values ([docs](dyadic-models.md)) | `false` |
 | `outputs.dyadic_export` | Write `dyads/`: actors, ties, timestamped citation events and yearly waves for ERGM, relational event models and RSiena ([docs](dyadic-models.md)) | `false` |
 | `outputs.consensus_matrix` | Generate the community-detection consensus matrix (requires ≥ 2 non-metadata (non-LABELGROUP) strategies in `communities.strategies`) | `false` |
-| `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned via a `t.me/` link | `false` |
+| `outputs.draw_dead_leaves` | Include dead leaves in the graph: out-of-target channels that an in-target one has forwarded from or mentioned (`t.me/` link or @handle) | `false` |
 | `outputs.timeline_step` | Timeline granularity: `"none"`, `"year"`, `"quarter"` or `"month"` | `"none"` |
 | `outputs.timeline_window` | Sliding-window length in months (a multiple of the step, larger than it); `0` = consecutive, non-overlapping periods | `0` |
 | `outputs.event_impact` | Test each recorded event with an interrupted time series of the network's weekly activity ([docs](event-impact.md)) | `false` |
@@ -263,7 +263,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
 | `edges.weight_strategy` | Edge-weighting method: `PARTIAL_REFERENCES`, `PARTIAL_MESSAGES`, `TOTAL`, `NONE`. Empty `""` disables edge weighting. | `""` |
-| `edges.include_mentions` | Treat inline `t.me/` mentions as edges alongside forwards | `false` |
+| `edges.include_mentions` | Treat mentions (`t.me/` links and @handles in a post) as edges alongside forwards | `false` |
 | `edges.include_self_references` | Include self-loop edges where a channel forwards or mentions itself | `false` |
 | `edges.near_copy_edges` | Read **near-copies** as citations: an original post whose text is near-identical to an earlier original post counts as a forward of the earliest publication (panel: *Include near-copies as edges*; CLI `--near-copy-edges`). See [Near-copies as edges](#near-copies-as-edges) | `false` |
 | `edges.near_copy_threshold` | Minimum Jaccard resemblance of the two posts' word-shingle sets for the later one to count as a copy (`--near-copy-threshold`; panel *Near-copy similarity ≥*) | `0.8` |
@@ -274,7 +274,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 
 ### Edge-weight strategies
 
-For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` be the count of X's messages contributing the citation, `total(X)` the amplifier's full message count, and `citing(X)` the count of X's messages that carry at least one `forwarded_from` or `t.me/` reference (a single message can contribute several citations but counts as one citing message).
+For an amplifier X that forwards or mentions a cited channel Y, let `n(X→Y)` be the count of X's messages contributing the citation, `total(X)` the amplifier's full message count, and `citing(X)` the count of X's messages that carry at least one `forwarded_from` or mention (a single message can contribute several citations but counts as one citing message).
 
 | Strategy | Weight formula | Semantics | Academic basis |
 | :------- | :------------- | :-------- | :------------- |

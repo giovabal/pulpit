@@ -68,6 +68,26 @@ python manage.py store_commenting_channels             # add them, each live, pr
 
 A channel deleted since is still added, under the name it commented with, as *private*: Telegram gives the same answer for a deleted channel and for one closed to your account. That way the Audience page can link it and you can label it. The new channels are not crawled unless you label them in target, and a comment is not a citation, so they appear on a map only when in-target messages cite them.
 
+### Mentions by @handle
+
+A post mentions another channel through a `t.me/` link or a plain `@handle`, and both count as a citation. Three things about handles differ from links:
+
+- **A channel's own handle, or that of the channel a post forwards, is not a mention.** It signs the post. Counting it would make every signed original post a citing one.
+- **People are left out.** Most handles that name a person are contact addresses, so nothing about them is stored. Bots are kept, as with links.
+- **Other platforms' handles are ignored** where they can be told apart: inside a link (`youtube.com/@name`), with a dot (`@some.brand`), or with a server (`@user@server`). An Instagram or X handle written alone looks like a Telegram one, and Telegram itself links it.
+
+A mention, by link or by handle, goes to the channel holding the name when Pulpit looks it up, even one created after the post. A group that starts over under its old handle keeps its citations, but so does an unrelated channel that took a freed handle: compare a channel's creation date with the posts citing it when that matters.
+
+Posts stored before Pulpit read handles are filled in from their text. Run this once, when no crawl is running:
+
+```sh
+python manage.py backfill_mentions --dry-run    # count; nothing written
+python manage.py backfill_mentions              # record the handles of stored channels, queue the rest; no Telegram call
+python manage.py backfill_mentions --resolve    # also look up unknown handles, the most used first (--limit N)
+```
+
+It covers in-target channels' posts within their in-target periods. Looking up handles hits Telegram's rate limits sooner than anything else: the command stops at a long flood wait, and the next run carries on from there. Refresh the degrees afterwards (`crawl_channels --in-degrees --out-degrees`), since they count mentions. Exports made before the backfill hold fewer mentions, so don't compare them with later ones.
+
 ---
 
 ## Step 3 — Organize your channels
@@ -140,7 +160,7 @@ The options panel is organized into four independent groups — each is its own 
 | **Fix message holes** | Scan message ID sequences for gaps and fill them in. Can run without *Get new messages*. |
 | **Fix missing media** | Re-download photos, videos, audio (voice notes and audio files), stickers, custom emoji, and other media that were never saved or are missing from disk. Honors the toggles in the **Media types** sidebar — uncheck a type to skip it. |
 | **Retry lost messages** | Re-fetch every message currently marked as lost. Messages that Telegram returns are unmarked and their stats refreshed; the rest stay lost. Useful after a transient outage or to clean up stale lost-flags accumulated by older refreshes that ran with a small date window. |
-| **Retry unresolved references** | Re-attempt t.me/ links that could not be resolved in a previous run. |
+| **Retry unresolved references** | Re-attempt mentions (t.me/ links and @handles) that could not be resolved in a previous run. |
 
 **3. Refresh degrees** — recalculate citation counts (no Telegram connection needed).
 
@@ -169,7 +189,7 @@ The options panel is organized into four independent groups — each is its own 
 - **Sticker download** — static webp stickers, animated TGS, and video webm stickers, and the files of the custom emoji used in posts and reactions.
 - **Other media download** — everything else (PDFs, archives, arbitrary documents).
 
-**Environment:** the **Environment** fieldset (CLI: `--environment`) extends the crawl beyond your monitored channels to the channels they cite. Flip the switch and Pulpit also fetches, after the normal passes, every out-of-scope channel that an in-scope channel forwards from or links via `t.me/` — their full details and profile picture, plus every message dated inside your monitored channels' in-target window (from the earliest in-target period start to the latest end; open-ended periods leave that side unbounded). The window follows the run's scope: when a later run's window is wider (an earlier period start, or a broader `--filter-labels` / source / type / `--ids` selection), the dates it adds are fetched once, and a narrower window fetches nothing again. **How deep** sets the citation distance: `1` stops at the channels your corpus cites, `2` also crawls the channels *those* cite, and so on — each level is discovered from the in-window messages of the previous one, so a deeper level costs another round of Telegram traffic. Message holes are filled for these channels too when *Fix message holes* is on. The five media checkboxes in the fieldset choose what to download for environment channels, independently of the **Media types** fieldset (all off by default — text only). Reached channels — crawled without error and confirmed live, i.e. not lost, private or a user account — are tagged with their distance (an *Environment · N* badge on the channel page, an `env N` tag and an *Environment* status filter in Manage → Channels), they keep their messages across `purge_out_of_target_messages`, and they stay out of the network map unless a Structural Analysis run sets an **Environment level** (below) — by default only in-target channels form nodes and edges, so the environment enriches what you can browse without changing the analysis. A channel whose crawl fails (flood wait, error, database locked) or that turns out lost, private or a user account is not tagged and does not seed the next level; the next run retries it. The tag records the smallest distance ever observed and is never cleared automatically; labelling an environment channel in-target simply makes it a monitored channel from then on.
+**Environment:** the **Environment** fieldset (CLI: `--environment`) extends the crawl beyond your monitored channels to the channels they cite. Flip the switch and Pulpit also fetches, after the normal passes, every out-of-scope channel that an in-scope channel forwards from or mentions (`t.me/` link or @handle) — their full details and profile picture, plus every message dated inside your monitored channels' in-target window (from the earliest in-target period start to the latest end; open-ended periods leave that side unbounded). The window follows the run's scope: when a later run's window is wider (an earlier period start, or a broader `--filter-labels` / source / type / `--ids` selection), the dates it adds are fetched once, and a narrower window fetches nothing again. **How deep** sets the citation distance: `1` stops at the channels your corpus cites, `2` also crawls the channels *those* cite, and so on — each level is discovered from the in-window messages of the previous one, so a deeper level costs another round of Telegram traffic. Message holes are filled for these channels too when *Fix message holes* is on. The five media checkboxes in the fieldset choose what to download for environment channels, independently of the **Media types** fieldset (all off by default — text only). Reached channels — crawled without error and confirmed live, i.e. not lost, private or a user account — are tagged with their distance (an *Environment · N* badge on the channel page, an `env N` tag and an *Environment* status filter in Manage → Channels), they keep their messages across `purge_out_of_target_messages`, and they stay out of the network map unless a Structural Analysis run sets an **Environment level** (below) — by default only in-target channels form nodes and edges, so the environment enriches what you can browse without changing the analysis. A channel whose crawl fails (flood wait, error, database locked) or that turns out lost, private or a user account is not tagged and does not seed the next level; the next run retries it. The tag records the smallest distance ever observed and is never cleared automatically; labelling an environment channel in-target simply makes it a monitored channel from then on.
 
 > **The first connection to Telegram:** if this is your first run, Telegram will send a verification code to your phone. Enter it in the terminal when prompted.
 
@@ -219,7 +239,7 @@ The map can group and colour channels two complementary ways. Pick from either o
 | **Measures** | Which influence scores to compute for each channel. See [Network measures](network-measures.md) for what each one means. |
 | **Start date / End date** | Limit the analysis to a specific time period — for example, the six months before an election. |
 | **Export name** | Give this export a name (e.g. `march-2024`). If you leave it blank, the date and time are used. You can keep multiple exports and compare them. |
-| **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned via a `t.me/` link. Useful for seeing what outside content your corpus amplifies. |
+| **Draw dead leaves** | Include *dead leaves* — out-of-target channels that one of your monitored channels has forwarded from or mentioned (`t.me/` link or @handle). Useful for seeing what outside content your corpus amplifies. |
 | **Environment level** | An integer right after the map toggles in the Outputs fieldset (CLI: `--environment-depth N`). `0` = nothing changes, in-target channels only; `1` or more = the *environment* previously crawled by Crawl Channels' Environment pass enters the analysis, as far out as that many citation hops — its channels take part in full (edges, measures, communities, coordination, dominance) and every node carries an Environment depth (0 in target) the map can colour by. An environment channel's messages count only inside the environment window — the span of all in-target periods, from the earliest start to the latest end (an open-ended period leaves that side open; no in-target period, no environment messages) — the window the crawl stores them for, so messages a channel kept from a wider earlier crawl, or from being *To inspect*, stay out. Capped at the deepest level crawled so far, which the tooltip shows. |
 
 When the export finishes, click **Data** in the navigation bar to browse your exports and open the map.

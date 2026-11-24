@@ -509,7 +509,7 @@ class FixMissingMediaPrivateChannelTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# ReferenceResolver._is_paused / _pause
+# ReferenceResolver.is_paused / _pause
 # ---------------------------------------------------------------------------
 
 
@@ -518,7 +518,7 @@ class ReferencePauseTests(TestCase):
         self.resolver = ReferenceResolver(_make_api_client())
 
     def test_not_paused_initially(self) -> None:
-        self.assertFalse(self.resolver._is_paused())
+        self.assertFalse(self.resolver.is_paused())
 
     def test_pause_sets_pause_until_in_future(self) -> None:
         error = MagicMock()
@@ -531,7 +531,7 @@ class ReferencePauseTests(TestCase):
         error = MagicMock()
         error.seconds = 60
         self.resolver._pause(error)
-        self.assertTrue(self.resolver._is_paused())
+        self.assertTrue(self.resolver.is_paused())
 
     def test_pause_with_zero_seconds_uses_minimum_1(self) -> None:
         error = MagicMock()
@@ -558,7 +558,7 @@ class ReferencePauseTests(TestCase):
     def test_not_paused_after_deadline_passes(self) -> None:
         # Set pause_until to the past
         self.resolver.reference_resolution_paused_until = timezone.now() - timedelta(seconds=1)
-        self.assertFalse(self.resolver._is_paused())
+        self.assertFalse(self.resolver.is_paused())
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +608,7 @@ class ResolveOneTests(TestCase):
     def test_flood_wait_error_pauses_resolver(self) -> None:
         self.api_client.client.get_entity.side_effect = _flood_error(seconds=30)
         self.resolver._resolve_one("ratechan")
-        self.assertTrue(self.resolver._is_paused())
+        self.assertTrue(self.resolver.is_paused())
 
     def test_generic_rpc_error_returns_none_failed(self) -> None:
         self.api_client.client.get_entity.side_effect = _rpc_error()

@@ -747,7 +747,7 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Include t.me/ mention references as edges alongside forwards "
+                "Include mentions (t.me/ links and @handles) as edges alongside forwards "
                 "(default: off). Use --no-mentions to force forwards only."
             ),
         )
@@ -871,7 +871,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Include dead leaves in the graph: out-of-target channels that an in-target channel has "
-                "forwarded from or mentioned via a t.me/ link."
+                "forwarded from or mentioned (t.me/ link or @handle)."
             ),
         )
         parser.add_argument(

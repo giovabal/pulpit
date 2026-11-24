@@ -66,6 +66,19 @@ _TME_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# An @handle in plain text, read as Telegram reads it: ASCII, a letter first, 4-32 characters, not
+# inside a word, an e-mail or a "@user@server" address. A dot running into a word ("@some.brand") is
+# another platform's handle. A trailing or doubled underscore makes no valid username, and get_entity
+# answers those with an exact *title* match instead, so they must not reach it.
+_MENTION_RE = re.compile(r"(?<![\w@])@([A-Za-z][A-Za-z0-9_]{2,30}[A-Za-z0-9])(?![\w@]|\.\w)")
+# Links, blanked before looking for handles: "youtube.com/@someone" is not a Telegram account.
+_LINK_RE = re.compile(r"(?:https?://|www\.)\S+|(?<![\w.-])(?:[a-z0-9-]+\.)+[a-z0-9-]+/\S*", re.IGNORECASE)
+
+# Prefix of a reference that comes from an @handle rather than a t.me link ("@chan"). Both name a
+# channel, but a person's @handle is mostly a contact address, so people are dropped
+# (``ReferenceResolver._resolve_one``), and a post's own handle is a signature (``is_signature``).
+MENTION_PREFIX = "@"
+
 # Prefix stored in missing_references to mark a reference as permanently unresolvable.
 # Prefixed entries are skipped on subsequent retries unless force_retry=True.
 DEAD_PREFIX = "!"
@@ -86,8 +99,8 @@ def reference_from_path(path: str) -> str | None:
         segments = segments[1:]
     if not segments:
         return None
-    handle = segments[0]
-    if handle.startswith(("+", "$")) or handle in SKIPPABLE_REFERENCES:
+    handle = segments[0].removeprefix(MENTION_PREFIX)
+    if not handle or handle.startswith(("+", "$")) or handle in SKIPPABLE_REFERENCES:
         return None
     return handle
 
@@ -104,33 +117,51 @@ def extract_text_references(text: str) -> list[str]:
     return [ref for ref in refs if ref]
 
 
+def extract_text_mentions(text: str | None) -> list[str]:
+    """Lower-cased @handles in a message's plain text, in order (duplicates kept), links excluded."""
+    handles = (match.group(1).lower() for match in _MENTION_RE.finditer(_LINK_RE.sub(" ", text or "")))
+    return [handle for handle in handles if "__" not in handle]
+
+
 def message_references(text: str | None, entities: Iterable[Any] | None) -> set[str]:
-    """Channel handles a message names: t.me links in its text plus link-entity URLs."""
+    """What a message names: t.me links in its text, link-entity URLs, and @handles.
+
+    A handle named only as an @handle carries ``MENTION_PREFIX``; one also linked counts as the link.
+    """
     refs = set(extract_text_references(text or ""))
     for entity in entities or ():
         url = getattr(entity, "url", None)
         if isinstance(url, str) and (ref := reference_from_url(url)):
             refs.add(ref)
-    return refs
+    return refs | {MENTION_PREFIX + handle for handle in extract_text_mentions(text) if handle not in refs}
 
 
-def _bulk_add_references(pairs: list[tuple["Message", "Channel"]]) -> None:
-    """Insert M2M references in a single bulk_create instead of one query per pair."""
-    if not pairs:
-        return
+def is_signature(reference: str, channel_pk: int, own_pk: int | None, forwarded_from_pk: int | None) -> bool:
+    """Whether an @handle only signs the post: it names the post's own channel or the one it forwards.
+
+    Not recorded as a mention: the forward already is that citation, and a channel closing its posts with
+    its own handle would turn every original post into a citing one (the PARTIAL_REFERENCES denominator).
+    """
+    return reference.startswith(MENTION_PREFIX) and channel_pk in (own_pk, forwarded_from_pk)
+
+
+def add_references(pairs: Iterable[tuple[int, int]]) -> None:
+    """Insert ``(message pk, channel pk)`` references in bulk, skipping those already stored."""
     through = Message.references.through
-    through.objects.bulk_create(
-        [through(message_id=msg.pk, channel_id=ch.pk) for msg, ch in pairs],
-        ignore_conflicts=True,
-    )
+    rows = [through(message_id=message_pk, channel_id=channel_pk) for message_pk, channel_pk in pairs]
+    if rows:
+        through.objects.bulk_create(rows, ignore_conflicts=True, batch_size=1000)
 
 
 class ReferenceResolver:
     def __init__(self, api_client: TelegramAPIClient) -> None:
         self.api_client = api_client
         self.reference_resolution_paused_until: datetime | None = None
+        # Final answers of this run, by reference: None = names no channel to record. Without it, a
+        # contact handle closing every post of a channel would be looked up once per post.
+        self._answers: dict[str, Channel | None] = {}
 
-    def _is_paused(self) -> bool:
+    def is_paused(self) -> bool:
         return bool(self.reference_resolution_paused_until and timezone.now() < self.reference_resolution_paused_until)
 
     def _pause(self, error: Any) -> int:
@@ -179,13 +210,18 @@ class ReferenceResolver:
         return channel
 
     def _resolve_one(self, reference: str, log_prefix: str = "") -> tuple[Channel | None, bool]:
-        """Try to resolve a username to a Channel.
+        """Try to resolve a reference — a t.me handle or an ``@handle`` — to a Channel.
 
         Returns (channel, should_retry) where:
           - (channel, False) — resolved successfully
           - (None, True)     — temporary failure (flood wait, RPC error, paused); retry later
           - (None, False)    — permanent failure (username invalid or not found); do not retry
+
+        An ``@handle`` naming a person is a permanent failure too: people are mentioned as contacts,
+        and nothing about them is stored. Bots are kept, like those behind a t.me link.
         """
+        handle = reference.removeprefix(MENTION_PREFIX)
+        is_mention = handle != reference
         # Username is NOT a unique identity: Telegram handles get recycled, so the same
         # username can be held by several rows — a now-lost old channel and the live
         # channel that took over the handle. Prefer a live (non-lost) row, i.e. the
@@ -196,21 +232,32 @@ class ReferenceResolver:
         # SQLite and PostgreSQL — an exact match would always miss mixed-case handles
         # and fall through to a (flood-wait-prone, and for dead channels permanently
         # failing) get_entity call.
-        channel = Channel.objects.filter(username__iexact=reference).order_by("is_lost", "pk").first()
+        channel = Channel.objects.filter(username__iexact=handle).order_by("is_lost", "pk").first()
         if channel:
+            if is_mention and channel.is_user_account and not channel.is_bot:
+                return None, False
             return channel, False
 
-        if self._is_paused():
+        if reference in self._answers:
+            return self._answers[reference], False
+
+        if self.is_paused():
             return None, True
 
         try:
             self.api_client.wait()
-            new_telegram_channel = self.api_client.client.get_entity(reference)
-            if isinstance(new_telegram_channel, User):
-                return self._user_account_channel(new_telegram_channel, reference), False
-            return Channel.from_telegram_object(new_telegram_channel, force_update=True), False
+            entity = self.api_client.client.get_entity(handle)
+            if not isinstance(entity, User):
+                channel = Channel.from_telegram_object(entity, force_update=True)
+            elif is_mention and entity.bot is not True:
+                channel = None
+            else:
+                channel = self._user_account_channel(entity, handle)
+            self._answers[reference] = channel
+            return channel, False
         except (ValueError, errors.rpcerrorlist.UsernameInvalidError):
             # Permanent: username does not exist or is invalid — no point retrying
+            self._answers[reference] = None
             return None, False
         except errors.rpcerrorlist.FloodWaitError as error:
             wait_seconds = self._pause(error)
@@ -237,7 +284,8 @@ class ReferenceResolver:
         for reference in message_references(message.message, telegram_message.entities):
             channel, should_retry = self._resolve_one(reference)
             if channel:
-                message.references.add(channel)
+                if not is_signature(reference, channel.pk, message.channel_id, message.forwarded_from_id):
+                    message.references.add(channel)
             elif should_retry:
                 missing.append(reference)
 
@@ -254,7 +302,7 @@ class ReferenceResolver:
             qs = qs.filter(channel__in=channel_qs)
         total = qs.count() if status_callback is not None else 0
         to_update: list[Message] = []
-        to_add: list[tuple[Message, "Channel"]] = []
+        to_add: list[tuple[int, int]] = []
         for index, message in enumerate(qs.iterator(chunk_size=500), start=1):
             remaining: list[str] = []
             for raw in message.missing_references.split("|"):
@@ -266,7 +314,7 @@ class ReferenceResolver:
                 # bare prefix of /s/ previews: normalise like a fresh parse. A dead verdict on a
                 # spelling that normalises to a different handle was about the mangled string,
                 # not the channel, so that handle is retried once.
-                reference = reference_from_path(stored)
+                reference = stored if stored.startswith(MENTION_PREFIX) else reference_from_path(stored)
                 if reference is None:
                     continue
                 if reference != stored:
@@ -276,7 +324,8 @@ class ReferenceResolver:
                     continue
                 channel, should_retry = self._resolve_one(reference)
                 if channel:
-                    to_add.append((message, channel))  # deferred until after bulk_update
+                    if not is_signature(reference, channel.pk, message.channel_id, message.forwarded_from_id):
+                        to_add.append((message.pk, channel.pk))  # deferred until after bulk_update
                 elif should_retry:
                     remaining.append(reference)  # transient failure — keep for retry
                 else:
@@ -292,7 +341,7 @@ class ReferenceResolver:
                 # and no entry in missing_references to retry.
                 with transaction.atomic():
                     Message.objects.bulk_update(to_update, ["missing_references"])
-                    _bulk_add_references(to_add)
+                    add_references(to_add)
                 to_update.clear()
                 to_add.clear()
             if status_callback is not None:
@@ -301,4 +350,4 @@ class ReferenceResolver:
             with transaction.atomic():
                 if to_update:
                     Message.objects.bulk_update(to_update, ["missing_references"])
-                _bulk_add_references(to_add)
+                add_references(to_add)

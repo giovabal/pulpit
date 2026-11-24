@@ -349,7 +349,7 @@ One row per directed edge in the network:
 | `target_label` | Label of the target node |
 | `weight` | Combined edge weight computed by the active `--edge-weight-strategy` |
 | `weight_forwards` | Raw count of message forwards contributing to this edge (before normalisation) |
-| `weight_mentions` | Raw count of `t.me/` reference mentions contributing to this edge (before normalisation) |
+| `weight_mentions` | Raw count of mentions (`t.me/` links and @handles) contributing to this edge (before normalisation) |
 | `weight_copies` | Raw count of near-copies contributing to this edge — posts of the source channel whose text re-posted an earlier post of the target channel without the forward header; always `0` unless `--near-copy-edges` was on (see [Configuration § Near-copies as edges](configuration.md#near-copies-as-edges)) |
 | `weight_image_copies` | Raw count of image copies contributing to this edge — picture posts of the source channel re-posting an image of an earlier post of the target channel without the forward header; always `0` unless `--image-copy-edges` was on (see [Image copies](image-copies.md)) |
 

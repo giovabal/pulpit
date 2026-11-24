@@ -1047,7 +1047,7 @@ class ChannelCrawler:
 
     @staticmethod
     def _named_references(message: Message, telegram_message: Any) -> list[str]:
-        """The t.me handles a message names — text links and link entities — before any lookup.
+        """What a message names — t.me links, link entities, @handles — before any lookup.
 
         get_message's first save records them as ``missing_references`` and the resolver then
         rewrites the field with what is really still unresolved, so a lookup that dies half-way

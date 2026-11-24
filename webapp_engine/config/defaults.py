@@ -55,8 +55,8 @@ CRAWL_DEFAULTS: dict = {
         "domains": False,
     },
     "environment": {
-        # Crawl the out-of-scope channels the in-scope ones cite (forwards + t.me/
-        # references), up to `depth` citation hops away, bounded to the in-scope
+        # Crawl the out-of-scope channels the in-scope ones cite (forwards + t.me/ links
+        # and @handles), up to `depth` citation hops away, bounded to the in-scope
         # channels' in-target date window. Their media types are chosen separately
         # from [downloads], which only governs in-scope channels.
         "enabled": False,

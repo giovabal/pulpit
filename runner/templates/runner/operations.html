@@ -184,7 +184,7 @@
                   <label class="ops-flag">
                     <input type="checkbox" name="retry_references" {% if ad.CRAWL_RETRY_REFERENCES %}checked{% endif %}>Retry unresolved references
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                       title="Retry all pending t.me/ references that could not be resolved in a previous run."></i>
+                       title="Retry all pending mentions (t.me/ links and @handles) that could not be resolved in a previous run."></i>
                     <i class="bi bi-sliders ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top" title="Tunable: Force-retry dead references"></i>
                   </label>
                   <label class="ops-flag">
@@ -323,7 +323,7 @@
               <fieldset class="ops-fieldset">
                 <legend>Environment
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Also crawl the out-of-scope channels your in-scope channels cite (forwards and t.me/ links), up to N citation hops away: channel details plus every message dated inside the in-scope channels' in-target window (holes filled when Fix message holes is on). Reached channels are tagged with their distance and keep their messages across purges. Media types are chosen here, independently of the Media types fieldset."></i>
+                     title="Also crawl the out-of-scope channels your in-scope channels cite (forwards, t.me/ links and @handles), up to N citation hops away: channel details plus every message dated inside the in-scope channels' in-target window (holes filled when Fix message holes is on). Reached channels are tagged with their distance and keep their messages across purges. Media types are chosen here, independently of the Media types fieldset."></i>
                 </legend>
                 <div class="ops-switch form-check form-switch">
                   <input class="form-check-input" type="checkbox" role="switch" name="environment" id="environment" {% if ad.CRAWL_ENVIRONMENT %}checked{% endif %}>
@@ -621,7 +621,7 @@
                 <label class="ops-flag">
                   <input type="checkbox" name="include_mentions" {% if ad.SA_INCLUDE_MENTIONS %}checked{% endif %}>Include mentions as edges
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Count t.me/ link references alongside forwards when building edges. Uncheck to use forwards only."></i>
+                     title="Count mentions (t.me/ links and @handles) alongside forwards when building edges. Uncheck to use forwards only."></i>
                 </label>
                 <label class="ops-flag">
                   <input type="checkbox" name="include_self_references" {% if ad.SA_INCLUDE_SELF_REFERENCES %}checked{% endif %}>Include self-references
@@ -701,7 +701,7 @@
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="draw_dead_leaves" {% if ad.SA_DRAW_DEAD_LEAVES %}checked{% endif %}>Include dead leaves
                   <i class="bi bi-info-circle ops-tip ops-flag-param" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Include dead leaves in the graph: out-of-target channels that an in-target channel has forwarded from or mentioned via a t.me/ link. Adds context but can significantly increase graph size. The colour picker below controls the node colour."></i>
+                     title="Include dead leaves in the graph: out-of-target channels that an in-target channel has forwarded from or mentioned (t.me/ link or @handle). Adds context but can significantly increase graph size. The colour picker below controls the node colour."></i>
                 </label>
               </div>
               <div class="ops-params" style="margin-top:.5rem">

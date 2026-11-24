@@ -15,7 +15,7 @@ Telegram channels constantly reference each other — forwarding messages, linki
 </figure>
 <br>
 
-Pulpit collects messages from a set of Telegram channels you define, traces every forward and every `t.me/` link between them, and turns the result into an interactive network map you can explore in a browser — zooming in on individual channels, filtering by detected community, comparing the reach of different actors, stepping through how the network evolved year by year.
+Pulpit collects messages from a set of Telegram channels you define, traces every forward and every mention (`t.me/` link or @handle) between them, and turns the result into an interactive network map you can explore in a browser — zooming in on individual channels, filtering by detected community, comparing the reach of different actors, stepping through how the network evolved year by year.
 
 The analytical layer is built on established methods from network science: [PageRank](docs/network-measures.md#pagerank), [Burt's structural holes](docs/network-measures.md#burts-constraint), [Leiden community detection](docs/community-detection.md#leiden), [k-core decomposition](docs/community-detection.md#k-core), and more — applied to the specific dynamics of Telegram forwarding networks. See the [changelog](CHANGELOG.md) for recent additions.
 
@@ -103,7 +103,7 @@ A Pulpit research project runs in five steps, all accessible from the browser in
 
 1. **Find channels** — *Operations: Search channels* — add keywords; Pulpit searches Telegram and populates a list of matching channels
 2. **Organize** — *Manage: Labels* — define labels (political orientation, country, funding source, or any axis that fits your research), organise them into groups, and mark the ones you care about *in target*; then tag each channel from its editor. Memberships can be time-bounded, and only channels holding an in-target label enter the analysis
-3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from every in-target channel; Pulpit records every forward and every `t.me/` link, building a directed citation network
+3. **Collect channels info and messages** — *Operations: Crawl channels* — download messages from every in-target channel; Pulpit records every forward and every mention (`t.me/` link or @handle), building a directed citation network
 4. **Generate the map** — *Operations: Structural analysis* — run community detection and layout algorithms; export an interactive map, sortable tables, and network exchange files
 5. **Compare maps** — *Operations: Compare analysis* — compare two set of data; It could be the same network at two different times, compare the same network context but for two different countries, or just compare two different networks
 
@@ -248,7 +248,7 @@ See [Robustness analysis](docs/robustness-analysis.md) for the formal definition
 
 ## Technical foundation
 
-**Crawling.** The official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) downloads messages from the channels you select. For each message, Pulpit records forwards (which channel's content was reposted) and inline `t.me/` references (links to other channels). The result is a directed, weighted graph. Edge weight is computed as the number of forwards and references from A to B divided by the number of A's messages that contain any outward reference — not A's total message count — so channels that mostly publish original content and channels that are mostly aggregators are treated symmetrically.
+**Crawling.** The official Telegram API (via [Telethon](https://github.com/LonamiWebs/Telethon)) downloads messages from the channels you select. For each message, Pulpit records forwards (which channel's content was reposted) and mentions of other channels (`t.me/` links and @handles). The result is a directed, weighted graph. Edge weight is computed as the number of forwards and references from A to B divided by the number of A's messages that contain any outward reference — not A's total message count — so channels that mostly publish original content and channels that are mostly aggregators are treated symmetrically.
 
 **Analysis.** The graph is analysed with [NetworkX](https://networkx.org/). Node-level measures rank channels by influence, reach, or structural importance; the battery is deliberately matched to what Telegram's forward-attribution data can support, and the measures left out are documented with the same care as the ones included ([why](docs/network-measures.md#measures-deliberately-not-computed)). Community detection algorithms identify clusters. Whole-network statistics — density, reciprocity, algebraic connectivity (Fiedler 1973), E-I index (Krackhardt & Stern 1988), global efficiency (Latora & Marchiori 2001), and more — characterise the ecosystem as a system. Cross-strategy partition-comparison matrices (ARI, AMI, NMI, VI) quantify how much any two community partitions agree, independently of community labels.
 

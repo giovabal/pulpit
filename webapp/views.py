@@ -1340,7 +1340,7 @@ class ChannelDetailView(ListView):
                 "icon": "bi-arrow-left-right",
                 "url": reverse("channel-cross-refs", kwargs={"pk": ch.pk}),
                 "type": "cross-refs",
-                "description": "Channels this channel mentions (via t.me/ links) and channels that mention it.",
+                "description": "Channels this channel mentions (t.me/ links and @handles) and channels that mention it.",
             },
             {
                 "id": "ch-contact-info",

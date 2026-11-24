@@ -10,8 +10,8 @@ A message survives the purge iff its channel is either:
   of scope (or, for the environment, the crawler's deliberate reach);
   transient flags shouldn't erase history.
 * a forward source for at least one in-target channel (``Message.forwarded_from``
-  joins back to an in-target channel). Channels referenced only via ``t.me/``
-  mentions are *not* preserved — only forward sources are. The mention-target
+  joins back to an in-target channel). Channels referenced only via mentions
+  (``t.me/`` links, @handles) are *not* preserved — only forward sources are. The mention-target
   Channel row itself stays in the database (it's used as a dead-leaf node in
   structural analysis); we just don't keep any messages crawled from it.
 

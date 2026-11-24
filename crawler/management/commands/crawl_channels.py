@@ -572,7 +572,7 @@ class Command(BaseCommand):
             "--retry-references",
             action=BooleanOptionalAction,
             default=None,
-            help="Retry all pending unresolved t.me/ references found in messages.",
+            help="Retry all pending unresolved mentions (t.me/ links and @handles) found in messages.",
         )
         parser.add_argument(
             "--force-retry-unresolved-references",
@@ -624,8 +624,8 @@ class Command(BaseCommand):
             action=BooleanOptionalAction,
             default=None,
             help=(
-                "Also crawl the out-of-scope channels the in-scope ones cite (forwards and t.me/ "
-                "references), up to --environment-depth citation hops away: full channel details "
+                "Also crawl the out-of-scope channels the in-scope ones cite (forwards, t.me/ "
+                "links and @handles), up to --environment-depth citation hops away: full channel details "
                 "plus every message dated inside the in-scope channels' in-target window, with "
                 "message holes filled when --fix-holes is on. Reached channels are stamped with "
                 "their citation distance (Manage → Channels shows it) and keep their messages "
@@ -1553,7 +1553,7 @@ class Command(BaseCommand):
         messages may reach past it, when an earlier run had a wider window or the channel
         was once to_inspect and stored its whole history). Window bounds are inclusive
         local dates, the pipeline's ``make_date_q`` semantics; ``(None, None)`` is
-        unbounded. A citation is a forward (``forwarded_from``) or a ``t.me/`` reference in
+        unbounded. A citation is a forward (``forwarded_from``) or a mention (``references``) in
         a non-lost message. Leaves out everything in ``visited`` (the scope plus earlier
         levels), channels ever in target or marked to_inspect (they belong to the scope
         whatever this run's filters), user accounts, and — unless --retry-lost-and-private

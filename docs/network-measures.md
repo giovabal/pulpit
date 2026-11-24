@@ -1,6 +1,6 @@
 # Network measures
 
-A network measure assigns a numerical score to each channel based on its position in the directed citation graph. Pulpit constructs edges from forwards and `t.me/` references: a directed edge from channel A to channel B means A regularly amplifies B's content, weighted by frequency relative to A's total output.
+A network measure assigns a numerical score to each channel based on its position in the directed citation graph. Pulpit constructs edges from forwards and mentions (`t.me/` links and @handles): a directed edge from channel A to channel B means A regularly amplifies B's content, weighted by frequency relative to A's total output.
 
 All measures can be used to size nodes in the graph viewer, making the most significant channels visually prominent.
 

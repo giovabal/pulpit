@@ -4,7 +4,7 @@
 
 Enable it with **Dominance** in the Outputs fieldset of the Operations panel or `--dominance` on `structural_analysis`. It writes `data/dominance.json` always, `dominance.html` with `--html`, `dominance.xlsx` with `--xlsx` and `dominance_channels.csv` + `dominance_pairs.csv` with `--csv`; it also adds a **David's score** column to the channel table, the CSV/XLSX/GEXF/GraphML exports and the map's size-by menu. With `--timeline-step year` everything is recomputed per year (`data_YYYY/dominance.json`, per-year sheets, a year switcher on the page).
 
-The analysis assumes **positive citation**: a forward or `t.me/` link is a deferral, not an attack. That holds inside one organisation, a movement family or any milieu where channels cite each other to relay, and fails across rival camps. Scope the run accordingly (the Scope filter, label groups, or a dedicated in-target set).
+The analysis assumes **positive citation**: a forward or a mention (`t.me/` link or @handle) is a deferral, not an attack. That holds inside one organisation, a movement family or any milieu where channels cite each other to relay, and fails across rival camps. Scope the run accordingly (the Scope filter, label groups, or a dedicated in-target set).
 
 ---
 
@@ -17,7 +17,7 @@ content(X on Y) = c(X→Y) / citing(X)     # share of X's citing messages that c
 reach(Y on X)   = c(X→Y) / cited(Y)      # share of Y's received citations that X supplies
 ```
 
-`c(X→Y)` counts X's messages that forward Y or link it via `t.me/`; `citing(X)` counts X's messages carrying any citation (the `PARTIAL_REFERENCES` denominator, recorded for every run whatever the edge-weight strategy); `cited(Y)` counts the citations Y receives inside the graph. Normalising the same events by each side's own total is the dependence-asymmetry construction Bascompte, Jordano and Olesen (2006) introduced for mutualistic networks. Each side's overall dependence on the other is the mean of its content and reach components across the two links of the pair, and the pair's **net balance** is the difference:
+`c(X→Y)` counts X's messages that forward Y or mention it (`t.me/` link or @handle); `citing(X)` counts X's messages carrying any citation (the `PARTIAL_REFERENCES` denominator, recorded for every run whatever the edge-weight strategy); `cited(Y)` counts the citations Y receives inside the graph. Normalising the same events by each side's own total is the dependence-asymmetry construction Bascompte, Jordano and Olesen (2006) introduced for mutualistic networks. Each side's overall dependence on the other is the mean of its content and reach components across the two links of the pair, and the pair's **net balance** is the difference:
 
 ```
 dependence(X on Y) = ( content(X on Y) + reach(X on Y) ) / 2

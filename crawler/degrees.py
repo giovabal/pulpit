@@ -10,7 +10,7 @@ messages:
   citing it as ``in_degree`` and ``0`` as ``out_degree``;
 - any other channel still holding an earlier non-zero value is reset to ``0, 0``.
 
-A citation is an alive message forwarding or mentioning (``t.me/``) the cited channel,
+A citation is an alive message forwarding or mentioning (``t.me/`` link, @handle) the cited channel,
 dated inside an in-target period of the citing channel (``channel_cutoff_q``); a
 channel citing itself is not one. The citing channel counts whatever its state — lost,
 private, or a type outside ``DEFAULT_CHANNEL_TYPES``: the stored ``in_degree`` is the

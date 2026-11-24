@@ -870,7 +870,7 @@ def _run_option_topics(opts: Any, facts: RunFacts, scopes: set[str]) -> tuple[li
                     "Mentions as citations",
                     _yes(opts.include_mentions),
                     _code("--mentions"),
-                    "Whether t.me/ links count as citations alongside forwards.",
+                    "Whether mentions (t.me/ links and @handles) count as citations alongside forwards.",
                 ),
                 (
                     "Self-references",

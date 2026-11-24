@@ -16,7 +16,7 @@ Weeks run Monday to Sunday in local calendar days (`TIME_ZONE`), the convention 
 | Forwards posted | messages with a forward header | log(1 + count) |
 | Active channels | channels posting that week | log(1 + count) |
 | New channels | channels posting their first in-scope message | log(1 + count) |
-| In-scope citations | forwards (and, with `--mentions`, `t.me/` mentions) between observed channels — the events the citation graph is built from | log(1 + count) |
+| In-scope citations | forwards (and, with `--mentions`, `t.me/` links and @handles) between observed channels — the events the citation graph is built from | log(1 + count) |
 | Imported share | forwards whose source is outside the scope | share |
 | Citation concentration | Herfindahl index of the week's citations over the cited channels (1 = every citation to one channel) | share |
 | Cross-label share (one per partition label group) | citations whose citing and cited channels hold different labels in the group at that date — e.g. the cross-border share for a Nation group | share |
