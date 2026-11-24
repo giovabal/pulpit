@@ -30,6 +30,15 @@ def _month_spine(q: models.Q) -> list[str]:
     )
 
 
+def in_scope_messages(channels: models.QuerySet[Channel]) -> models.QuerySet[Message]:
+    """The messages the home charts count for *channels*: alive, dated, inside the in-target periods."""
+    from network.utils import channel_cutoff_q
+
+    return (
+        Message.objects.alive().filter(channel__in=channels.values("pk"), date__isnull=False).filter(channel_cutoff_q())
+    )
+
+
 def global_month_spine() -> list[str]:
     """Return a sorted list of all YYYY-MM strings from the earliest to the latest message across in-target channels."""
     from webapp.models import Channel

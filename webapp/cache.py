@@ -37,12 +37,13 @@ from webapp.commenters import account_replies, audience_replies, excluded_sender
 from webapp.models import Channel, Message, MessageReply
 from webapp.utils.dates import fmt_date
 
-# Suffix bumped to :v4 when the views card gained "subscriptions" + "unique
+# Suffix bumped to :v5 when the cards gained a "key" (webapp.home_split hangs a split
+# card's table on it); :v4 when the views card gained "subscriptions" + "unique
 # commenters" (with tooltips); :v3 when the card layout changed (the two
 # "received" cards were dropped and the date range moved to row 2); :v2 had
 # marked the list[dict] -> list[list[dict]] shape change. Old entries become
 # orphans and the FileBasedCache evicts them on its own schedule.
-HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v4"
+HOME_SUMMARY_CACHE_KEY = "pulpit:home:summary:v5"
 HOME_SUMMARY_CACHE_TIMEOUT = 3600  # 1 hour
 
 
@@ -153,12 +154,14 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
     row1 = [
         {
             "icon": "bi-broadcast",
+            "key": "channels",
             "label": "Channels",
             "value": f"{in_target_channels:,}",
             "secondary": ([{"value": f"{to_inspect_count:,}", "label": "to inspect"}] if to_inspect_count else []),
         },
         {
             "icon": "bi-chat-left-text",
+            "key": "messages",
             "label": "Messages collected",
             "value": f"{total_messages:,}",
             "secondary": [
@@ -167,6 +170,7 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
         },
         {
             "icon": "bi-images",
+            "key": "media",
             "label": "Media",
             "value": f"{total_media:,}",
             "inline_secondary": True,
@@ -178,6 +182,7 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
         },
         {
             "icon": "bi-eye",
+            "key": "views",
             "label": "Total views",
             "value": f"{total_views:,}",
             "secondary": [
@@ -212,6 +217,7 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
     row2 = [
         {
             "icon": "bi-forward",
+            "key": "forwards",
             "label": "Forwards sent",
             "value": f"{fwd_agg['sent_in_target']:,}",
             "note": _channels_phrase("from", fwd_sent_in_target_channels, "other in-target"),
@@ -225,6 +231,7 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
         },
         {
             "icon": "bi-at",
+            "key": "mentions",
             "label": "Mentions sent",
             "value": f"{ment_agg['sent_in_target']:,}",
             "note": _channels_phrase("of", mentions_sent_in_target_channels, "other in-target"),
@@ -238,6 +245,7 @@ def compute_home_summary(voice=None) -> list[list[dict]]:
         },
         {
             "icon": "bi-calendar-range",
+            "key": "dates",
             "label": "Date range",
             "value": f"{fmt_date(msg_agg['earliest'])} – {fmt_date(msg_agg['latest'])}",
             "note": "first message - last message",

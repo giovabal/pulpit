@@ -10,16 +10,36 @@
   {% include "webapp/_scope_filter.html" %}
 
   {% for row in summary_rows %}
-  <div class="summary-grid">
+  <div class="summary-grid{% if split_group %} summary-grid--split{% endif %}">
     {% for card in row %}
     <div class="summary-card">
       <i class="bi {{ card.icon }} sc-icon" aria-hidden="true"></i>
+      {% if card.split %}
+      <button type="button" class="sc-split-toggle" aria-expanded="false" aria-controls="sc-split-{{ card.key }}"
+              aria-label="{{ card.label }} by {{ split_group.name }}" title="Show or hide the figures by {{ split_group.name }} on every card">
+        <i class="bi bi-diagram-3" aria-hidden="true"></i>
+      </button>
+      {% endif %}
       <span class="sc-label">{{ card.label }}</span>
       <div class="sc-value-row">
         <span class="sc-value">{{ card.value }}</span>
         {% if card.note %}<span class="sc-note">{{ card.note|safe }}</span>{% endif %}
       </div>
       {% if card.inline_secondary %}<span class="sc-secondary">{% for entry in card.secondary %}{% if entry.value %}<strong>{{ entry.value }}</strong> {% endif %}{{ entry.label|safe }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}{% for entry in card.secondary %}<span class="sc-secondary"{% if entry.title %} tabindex="0" data-bs-toggle="tooltip" title="{{ entry.title }}"{% endif %}>{% if entry.value %}<strong>{{ entry.value }}</strong> {% endif %}{{ entry.label|safe }}</span>{% endfor %}{% endif %}
+      {% if card.split %}
+      <div class="sc-split-collapse" id="sc-split-{{ card.key }}"><div class="sc-split-clip"><div class="sc-split-wrap">
+        <table class="sc-split" aria-label="{{ card.label }} by {{ split_group.name }}">
+          <thead{% if card.split.columns|length == 1 %} class="visually-hidden"{% endif %}>
+            <tr><th scope="col"><span class="visually-hidden">{{ split_group.name }}</span></th>{% for column in card.split.columns %}<th scope="col"{% if column.title %} title="{{ column.title }}"{% endif %}>{{ column.label }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for line in card.split.rows %}
+            <tr><th scope="row"><span class="sc-split-dot sc-split-dot--{{ line.color }}" aria-hidden="true"></span>{{ line.label }}</th>{% for cell in line.cells %}<td{% if cell.title and cell.title != cell.text %} title="{{ cell.title }}"{% endif %}>{{ cell.text }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div></div></div>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -104,6 +124,7 @@
 
 </div>
 
+<script src="{% vstatic 'webapp/js/split_cards.js' %}"></script>
 <script src="{% vstatic 'webapp/js/split_charts.js' %}"></script>
 <script>
   // Events are best-effort: a failure must not block chart rendering.

@@ -42,7 +42,7 @@ the split also ``split_group``, ``split_max_labels`` and ``split_min_channels``.
     <strong>{{ filter_voice.group.name }}: {{ filter_voice.name }}</strong>.</span>
   {% endif %}
   {% if split_group %}
-  <span class="home-filter-note">Charts show up to {{ split_max_labels }} <strong>{{ split_group.name }}</strong> labels, those with the most active channels, and the others together. Views per post and the reaction rate show the median channel, with a gap where fewer than {{ split_min_channels }} channels were active.</span>
+  <span class="home-filter-note">Cards and charts show up to {{ split_max_labels }} <strong>{{ split_group.name }}</strong> labels, those with the most active channels, and the others together; <i class="bi bi-diagram-3" aria-hidden="true"></i><span class="visually-hidden">the split button</span> on any card opens the cards' figures. The views-per-post and reaction-rate charts show the median channel, with a gap where fewer than {{ split_min_channels }} channels were active.</span>
   {% endif %}
   <noscript><button type="submit" class="search-btn">Apply</button></noscript>
 </form>

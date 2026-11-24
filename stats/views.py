@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views import View
 
-from stats.queries import channel_month_spine, global_month_spine, reindex_to_spine
+from stats.queries import channel_month_spine, global_month_spine, in_scope_messages, reindex_to_spine
 from stats.split import LabelSplit
 from webapp.models import Channel, LabelGroup, Message, MessageReaction
 from webapp.utils.emoji import emoji_present
@@ -83,15 +83,7 @@ class _GlobalScopeView(View):
 
     def get_queryset(self, request: HttpRequest) -> models.QuerySet[Message]:
         """The in-scope messages, with their local ``month``."""
-        from network.utils import channel_cutoff_q
-
-        in_target_pks = _scoped_in_target_channels(request).values("pk")
-        return (
-            Message.objects.alive()
-            .filter(channel__in=in_target_pks, date__isnull=False)
-            .filter(channel_cutoff_q())
-            .annotate(month=TruncMonth("date"))
-        )
+        return in_scope_messages(_scoped_in_target_channels(request)).annotate(month=TruncMonth("date"))
 
 
 class _TwoLines:

@@ -1221,6 +1221,143 @@ body {
   margin-bottom: 2rem;
 }
 
+/* Cards split by label: one row per label under the card's own figure, shown on every card at once by any
+   card's split button (split_cards.js). The grid row opens from 0fr to 1fr, so the height needs no measuring. */
+.home-page .summary-card {
+  position: relative;
+}
+
+.home-page.split-open .summary-grid--split {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+
+.sc-split-toggle {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .9rem;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.sc-split-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.sc-split-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sc-split-toggle[aria-expanded="true"] {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.sc-split-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  opacity: 0;
+  transition: grid-template-rows .25s ease, opacity .2s ease, visibility 0s linear .25s;
+}
+
+.split-open .sc-split-collapse {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+  transition: grid-template-rows .25s ease, opacity .25s ease;
+}
+
+.sc-split-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .sc-split-toggle,
+  .sc-split-collapse,
+  .split-open .sc-split-collapse {
+    transition: none;
+  }
+}
+
+.sc-split-wrap {
+  margin-top: .75rem;
+  padding-top: .625rem;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.sc-split {
+  width: 100%;
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-split th,
+.sc-split td {
+  padding: .1rem 0 .1rem .5rem;
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.sc-split th:first-child {
+  padding-left: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.sc-split thead th {
+  color: var(--text-muted);
+  font-size: .68rem;
+}
+
+.sc-split td:first-of-type {
+  font-weight: 600;
+}
+
+.sc-split-dot {
+  display: inline-block;
+  width: .55rem;
+  height: .55rem;
+  margin-right: .375rem;
+  border-radius: 50%;
+  background: var(--split-rest);
+}
+
+.sc-split-dot--1 {
+  background: var(--split-1);
+}
+
+.sc-split-dot--2 {
+  background: var(--split-2);
+}
+
+.sc-split-dot--3 {
+  background: var(--split-3);
+}
+
+.sc-split-dot--4 {
+  background: var(--split-4);
+}
+
+.sc-split-dot--5 {
+  background: var(--split-5);
+}
+
 /* ---------- Channel detail ---------- */
 .ch-summary-grid {
   display: grid;

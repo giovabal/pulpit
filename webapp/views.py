@@ -49,6 +49,7 @@ from network.vacancy_analysis import (
 from stats.split import SPLIT_MAX_LABELS, SPLIT_MIN_CHANNELS
 from webapp import audience, emoji_usage
 from webapp.audience import tables as audience_tables
+from webapp.home_split import compute_home_split
 from webapp.paginator import DiggPaginator
 
 from .models import (
@@ -576,6 +577,11 @@ class HomeView(ListView):
         from webapp.cache import get_home_summary
 
         ctx["summary_rows"] = get_home_summary(voice)
+        if split is not None:
+            tables = compute_home_split(voice, split)
+            ctx["summary_rows"] = [
+                [{**card, "split": tables.get(card["key"])} for card in row] for row in ctx["summary_rows"]
+            ]
         ctx["panels"] = [
             {
                 "id": "messages-history",
