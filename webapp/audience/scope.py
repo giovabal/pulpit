@@ -115,7 +115,7 @@ def coverage(scope: Scope | None = None) -> dict:
 
 
 #: A partition label group is reported only when its labels cover at least this share of the replies:
-#: below it the group describes a minority of the commenters (on a real corpus, *Type* covered 21%).
+#: below it the group describes a minority of the commenters.
 MIN_GROUP_COVERAGE = 0.5
 
 FIXED_PARAMETERS: tuple[FixedParameter, ...] = (

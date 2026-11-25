@@ -8460,7 +8460,7 @@ class WriteDominanceOutputsTests(TestCase):
 
 _NC_T0 = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC)
 _NC_TEXT = (
-    "Mountain life is beautiful not because of summits or sunsets"
+    "Mountain life is beautiful not because of summits or sunsets "
     "but because of the quiet friendship which binds all of us together"
 )
 
@@ -8488,12 +8488,12 @@ class NearCopyDetectionTests(TestCase):
         self.assertFalse(link.is_self_copy)
 
     def test_template_with_substitution_is_not_a_copy_at_default_threshold(self) -> None:
-        alberta = (
-            "What is Northern Hiking Club? Northern Hiking Club is a volunteer organization"
+        northern = (
+            "What is Northern Hiking Club? Northern Hiking Club is a volunteer organization "
             "in Northern Region promoting purpose and discipline"
         )
-        manitoba = alberta.replace("Northern", "Southern")
-        docs = [(1, 10, _nc_day(0), alberta), (2, 20, _nc_day(1), manitoba)]
+        southern = northern.replace("Northern", "Southern")
+        docs = [(1, 10, _nc_day(0), northern), (2, 20, _nc_day(1), southern)]
         self.assertEqual(find_near_copies(docs), [])
         # 3 substituted words kill 9 of 17 shingles: the resemblance is 8/26 — a loose threshold does link them.
         self.assertEqual(len(find_near_copies(docs, threshold=0.2)), 1)

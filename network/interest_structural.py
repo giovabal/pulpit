@@ -11,9 +11,7 @@ analogue) by walking the ``(forwarded_from, fwd_from_channel_post)`` join.
 
 Output is a JSON-serialisable dict written to
 ``exports/<name>/data/interest_structural.json`` by
-``network.exporter.write_interest_structural_json``. See the plan at
-``/home/user/.claude/plans/i-want-to-implement-radiant-lovelace.md`` §4 for the
-edge cases (out-of-target forwarders, self-forwards, album heads, window).
+``network.exporter.write_interest_structural_json``.
 """
 
 from __future__ import annotations

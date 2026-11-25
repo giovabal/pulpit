@@ -181,7 +181,7 @@ class GetLogLinesTests(_TmpMixin, TestCase):
         from runner.tasks import get_log_lines
 
         # Per-channel progress lines embed the channel's own title, which is
-        # free text: a channel literally named "COMEDY OF ERRORS | fans" must not
+        # free text: a channel named "COMEDY OF ERRORS | fans" must not
         # paint its whole crawl red. Only the status after the last " | "
         # counts; lines without a title are still read in full.
         self._write_log(

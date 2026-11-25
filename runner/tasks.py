@@ -36,7 +36,7 @@ def _keyword_scope(text: str) -> str:
 
     Per-channel progress lines are ``[i/N] [id=X] <title> | <status>`` (see
     ``ProgressPrinter`` in crawl_channels). The title is free text chosen by
-    the channel's owner — one is literally "COMEDY OF ERRORS | fans" — so only the
+    the channel's owner — it may read "COMEDY OF ERRORS | fans" — so only the
     status after the last separator says anything about the run. Titles may
     themselves contain " | "; statuses never do.
     """

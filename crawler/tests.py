@@ -3672,7 +3672,7 @@ class TelethonUnraisableFilterTests(TestCase):
         self.forwarded: list = []
         self.hook = _make_telethon_unraisable_filter(self.forwarded.append)
         self.telethon = self._coro_from(f"/x/site-packages{_TELETHON_PKG_PATH}network/connection/connection.py")
-        self.ours = self._coro_from("/home/user/job/crawler/channel_crawler.py")
+        self.ours = self._coro_from("/home/user/pulpit/crawler/channel_crawler.py")
 
     def test_telethon_ignored_generator_exit_is_swallowed(self) -> None:
         self.hook(self._unraisable(self.telethon, RuntimeError("coroutine ignored GeneratorExit")))
