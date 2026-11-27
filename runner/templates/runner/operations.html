@@ -28,9 +28,9 @@
         </div>
       </div>
       <div class="ops-card-actions">
-        <span class="ops-badge ops-badge--{{ task.status }}" id="badge-{{ task.name }}" aria-live="polite" aria-atomic="true" aria-label="Task status: {{ task.status }}">
-          {% if task.status == "running" %}<span class="dot" aria-hidden="true"></span>{% endif %}
-          {{ task.status }}
+        <span class="ops-badge ops-badge--{{ task.badge }}" id="badge-{{ task.name }}" aria-live="polite" aria-atomic="true" aria-label="Task status: {{ task.badge }}">
+          {% if task.badge == "running" %}<span class="dot" aria-hidden="true"></span>{% endif %}
+          {{ task.badge }}
         </span>
         <button class="btn btn-sm btn-outline-secondary"
                 type="button"
@@ -48,6 +48,18 @@
                 {% if task.status != "failed" and task.status != "done" %}style="display:none"{% endif %}>
           <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reset
         </button>
+        {% if task.pausable %}
+        {# Label, icon and state are set by TaskMonitor._setPauseControls from data-pause / data-running. #}
+        <button class="btn btn-sm btn-outline-secondary" id="pause-{{ task.name }}" type="button"
+                data-pause="{{ task.pause }}" data-running="{% if task.status == 'running' %}1{% endif %}"
+                title="Pause at the next safe point (between two channels or two phases), releasing the database and the Telegram connection until resumed"
+                {% if task.status != "running" %}disabled{% endif %}>
+          <i class="bi bi-pause-fill me-1" aria-hidden="true"></i>Request pause
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" id="pause-cancel-{{ task.name }}" type="button" style="display:none">
+          <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Cancel pause
+        </button>
+        {% endif %}
         <button class="btn btn-sm btn-outline-danger" id="abort-{{ task.name }}"
                 {% if task.status != "running" %}disabled{% endif %}>
           <i class="bi bi-stop-fill me-1" aria-hidden="true"></i>Abort
@@ -1439,17 +1451,28 @@ function showToast(msg, type) {
       this.logMeta  = document.getElementById('log-meta-' + name);
       this.form     = document.getElementById('form-' + name);
       this.lastRunEl = document.getElementById('last-run-' + name);
+      // Only pausable tasks (runner.tasks.PAUSABLE_TASKS) render the two pause buttons.
+      this.pauseBtn = document.getElementById('pause-' + name);
+      this.pauseCancelBtn = document.getElementById('pause-cancel-' + name);
+      this._pauseRendered = null;
 
       this.runBtn.addEventListener('click', () => this.run());
       this.abortBtn.addEventListener('click', () => this.abort());
       this.resetBtn.addEventListener('click', () => this.reset());
+      if (this.pauseBtn) {
+        this.pauseBtn.addEventListener('click', () => this.requestPause());
+        this.pauseCancelBtn.addEventListener('click', () => this.cancelPause());
+        this._setPauseControls(this.pauseBtn.dataset.pause, this.pauseBtn.dataset.running === '1');
+      }
       this.logEl.addEventListener('scroll', () => {
         const el = this.logEl;
         this.autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       });
     }
 
-    _setBadge(status) {
+    _setBadge(taskStatus, pause = 'none') {
+      // A paused run is still running (its process is alive): only the badge says so.
+      const status = taskStatus === 'running' && pause === 'paused' ? 'paused' : taskStatus;
       const prev = (this.badge.dataset.status || '').trim();
       this.badge.className = 'ops-badge ops-badge--' + status;
       // Build via DOM nodes — `status` comes from the runner's status endpoint,
@@ -1471,12 +1494,96 @@ function showToast(msg, type) {
       }
     }
 
-    _setButtons(status) {
+    _setButtons(status, pause = 'none') {
       const running = status === 'running';
       const settled = status === 'failed' || status === 'done';
       this.runBtn.disabled = running;
       this.abortBtn.disabled = !running;
       this.resetBtn.style.display = settled ? '' : 'none';
+      if (this.pauseBtn) this._setPauseControls(running ? pause : 'none', running);
+    }
+
+    /* Pause states (runner.tasks._pause_state): none → requested (waiting for the run's next
+       checkpoint) → paused → resuming (reconnecting after Resume) → none. The dedicated button
+       withdraws the request: before the checkpoint nothing happens, once paused the run resumes. */
+    _setPauseControls(pause, running) {
+      const labels = {
+        none: 'Request pause',
+        requested: 'Waiting to pause',
+        paused: 'Paused',
+        resuming: 'Resuming',
+      };
+      const state = Object.prototype.hasOwnProperty.call(labels, pause) ? pause : 'none';
+      const key = state + (running ? ':running' : '');
+      if (key === this._pauseRendered) return;
+      const prev = this._pauseRendered;
+      this._pauseRendered = key;
+
+      let icon;
+      if (state === 'requested' || state === 'resuming') {
+        icon = document.createElement('span');
+        icon.className = 'spinner-border spinner-border-sm me-1';
+      } else {
+        icon = document.createElement('i');
+        icon.className = 'bi me-1 ' + (state === 'paused' ? 'bi-pause-circle-fill' : 'bi-pause-fill');
+      }
+      icon.setAttribute('aria-hidden', 'true');
+      this.pauseBtn.replaceChildren(icon, document.createTextNode(labels[state]));
+      this.pauseBtn.disabled = !running || state !== 'none';
+
+      const cancellable = running && (state === 'requested' || state === 'paused');
+      this.pauseCancelBtn.style.display = cancellable ? '' : 'none';
+      if (cancellable) {
+        const cancelIcon = document.createElement('i');
+        cancelIcon.className = 'bi me-1 ' + (state === 'paused' ? 'bi-play-fill' : 'bi-x-lg');
+        cancelIcon.setAttribute('aria-hidden', 'true');
+        this.pauseCancelBtn.replaceChildren(
+          cancelIcon,
+          document.createTextNode(state === 'paused' ? 'Resume' : 'Cancel pause'),
+        );
+      }
+      // "paused" and the return to "running" are announced by the badge.
+      if (window.PulpitA11y && prev !== null && running) {
+        let said = null;
+        if (state === 'requested' || state === 'resuming') said = labels[state].toLowerCase();
+        else if (state === 'none' && prev.startsWith('requested')) said = 'pause cancelled';
+        if (said) window.PulpitA11y.announce(this.name + ' ' + said, 'polite');
+      }
+    }
+
+    async _postPause(url) {
+      let resp;
+      try {
+        resp = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } });
+      } catch (e) {
+        showToast('Network error: ' + e, 'error');
+        return null;
+      }
+      if (!resp.ok) {
+        if (resp.status === 403) {
+          showToast('Session token rejected — reload the page and try again.', 'error');
+          return null;
+        }
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        showToast('Error: ' + (err.error || resp.statusText), 'error');
+        return null;
+      }
+      return resp.json().catch(() => null);
+    }
+
+    async requestPause() {
+      const data = await this._postPause('/operations/pause/' + this.name + '/');
+      if (!data) return;
+      if (!data.requested) {
+        showToast('The task is no longer running.', 'error');
+        return;
+      }
+      this._setPauseControls(data.pause, true);
+    }
+
+    async cancelPause() {
+      const data = await this._postPause('/operations/pause/' + this.name + '/cancel/');
+      if (data) this._setPauseControls(data.pause, true);
     }
 
     _appendLines(lines) {
@@ -1541,8 +1648,8 @@ function showToast(msg, type) {
       if (data.lines && data.lines.length) this._appendLines(data.lines);
       this.offset = data.next_offset;
       this.startTime = data.start_time || null;
-      this._setBadge(data.status);
-      this._setButtons(data.status);
+      this._setBadge(data.status, data.pause);
+      this._setButtons(data.status, data.pause);
 
       if (data.start_time) {
         let meta = 'started ' + formatTimestamp(data.start_time);
@@ -1671,7 +1778,7 @@ function showToast(msg, type) {
 
     /* On page load, resume monitoring if the task is already running. */
     resumeIfRunning(initialStatus) {
-      if (initialStatus === 'running') {
+      if (initialStatus === 'running' || initialStatus === 'paused') {
         this.logWrap.style.display = '';
         this.startPolling();
       }

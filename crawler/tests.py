@@ -4703,3 +4703,26 @@ class EnvironmentCommandTests(TestCase):
 
         with self.assertRaises(CommandError):
             call_command("crawl_channels", environment=True, environment_depth=0, stdout=io.StringIO())
+
+
+class IterChannelsCheckpointTests(TestCase):
+    """The crawl's pause checkpoint runs before each channel is loaded, so an edit made while paused is read."""
+
+    def test_checkpoint_runs_before_each_load(self):
+        from crawler.management.commands.crawl_channels import _iter_channels
+
+        first = Channel.objects.create(telegram_id=901, title="First")
+        second = Channel.objects.create(telegram_id=902, title="Second")
+        calls = []
+
+        def checkpoint():
+            calls.append(len(calls))
+            if len(calls) == 2:  # "while paused": rename the channel not loaded yet
+                Channel.objects.filter(pk=second.pk).update(title="Renamed")
+
+        titles = [
+            c.title
+            for c in _iter_channels(Channel.objects.filter(pk__in=[first.pk, second.pk]).order_by("pk"), checkpoint)
+        ]
+        self.assertEqual(titles, ["First", "Renamed"])
+        self.assertEqual(len(calls), 2)

@@ -12,6 +12,7 @@ from crawler.channel_crawler import ChannelCrawler
 from crawler.client import TelegramAPIClient
 from crawler.media_handler import MediaHandler
 from crawler.reference_resolver import ReferenceResolver
+from runner.control import PauseGate, sigterm_exits
 from webapp.models import Channel, SearchTerm
 from webapp_engine.command_logging import styled_warning_logs
 
@@ -72,6 +73,9 @@ class Command(BaseCommand):
     args = ""
     help = "crawling Telegram groups"
 
+    # Replaced in handle() by the run's gate; a disabled one for methods called on their own (tests).
+    _pause = PauseGate()
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--amount",
@@ -107,7 +111,9 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         # Route logger.warning/error lines (own modules, telethon) through
         # self.style so they carry severity colour in the Operations panel.
-        with styled_warning_logs(self.style):
+        # sigterm_exits: an abort from the Operations panel disconnects from Telegram on the way out.
+        with styled_warning_logs(self.style), sigterm_exits():
+            self._pause = PauseGate.from_env(stdout=self.stdout, style=self.style)
             self._handle(*args, **options)
 
     def _handle(self, *args: Any, **options: Any) -> None:
@@ -119,14 +125,17 @@ class Command(BaseCommand):
         terms_run = 0
         total_found = 0
         total_new = 0
-        with TelegramClient(
-            settings.TELEGRAM_SESSION_NAME,
-            settings.TELEGRAM_API_ID,
-            settings.TELEGRAM_API_HASH,
-            connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
-            retry_delay=settings.TELEGRAM_RETRY_DELAY,
-            flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
-        ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
+        with (
+            TelegramClient(
+                settings.TELEGRAM_SESSION_NAME,
+                settings.TELEGRAM_API_ID,
+                settings.TELEGRAM_API_HASH,
+                connection_retries=settings.TELEGRAM_CONNECTION_RETRIES,
+                retry_delay=settings.TELEGRAM_RETRY_DELAY,
+                flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
+            ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client,
+            self._pause.holding(client.disconnect, client.connect, label="the Telegram connection"),
+        ):
             api_client = TelegramAPIClient(client)
             media_handler = MediaHandler(api_client, download_timeout=settings.TELEGRAM_CRAWLER_DOWNLOAD_TIMEOUT)
             reference_resolver = ReferenceResolver(api_client)
@@ -136,6 +145,7 @@ class Command(BaseCommand):
             if identifiers:
                 add_counts = {"added": 0, "present": 0, "failed": 0}
                 for raw in identifiers:
+                    self._pause.checkpoint()
                     add_counts[self._add_one_channel(crawler, raw)] += 1
                 tested = len(identifiers)
                 summary = (
@@ -146,7 +156,8 @@ class Command(BaseCommand):
                 style = self.style.WARNING if add_counts["failed"] else self.style.SUCCESS
                 self.stdout.write(style(summary))
             searched_words: set[str] = set()
-            for term in qs:
+            for term in qs:  # evaluated in full on the first turn: no cursor left open across a pause
+                self._pause.checkpoint()
                 terms_run += 1
                 result = self._run_search(crawler, term.word, "Searching: ")
                 searched_words.add(term.word)  # term.word is already normalised by SearchTerm.save()
@@ -163,6 +174,7 @@ class Command(BaseCommand):
                 # searched twice in the same run. Normalise to match SearchTerm.save().
                 if " ".join(word.split()).lower() in searched_words:
                     continue
+                self._pause.checkpoint()
                 terms_run += 1
                 result = self._run_search(crawler, word, "Searching (extra): ")
                 if result is None:

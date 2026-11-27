@@ -71,7 +71,9 @@ class OperationsView(View):
         task_info = []
         for name, defn in TASK_DEFINITIONS.items():
             status = tasks.get_status(name)
-            task_info.append({**defn, "name": name, **status})
+            # A paused run is still running (its process is alive): only the badge says "paused".
+            badge = "paused" if status["pause"] == "paused" else status["status"]
+            task_info.append({**defn, "name": name, **status, "badge": badge, "pausable": name in tasks.PAUSABLE_TASKS})
         has_vacancies = ChannelVacancy.objects.exists()
         # Environment level field of the Structural Analysis form (Outputs): capped at the deepest
         # channel the crawler's environment pass has registered (0 when it never ran).
@@ -299,6 +301,30 @@ class AbortTaskView(View):
             return JsonResponse({"error": "Unknown task"}, status=404)
         sent = tasks.abort(task)
         return JsonResponse({"sent": sent})
+
+
+class PauseTaskView(View):
+    """Ask a running crawl / search to pause at its next checkpoint (see runner.control)."""
+
+    def post(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFINITIONS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        if task not in tasks.PAUSABLE_TASKS:
+            return JsonResponse({"error": "This task cannot be paused"}, status=400)
+        requested = tasks.request_pause(task)
+        return JsonResponse({"requested": requested, "pause": tasks.get_status(task)["pause"]})
+
+
+class CancelPauseTaskView(View):
+    """Withdraw a pause request: before the checkpoint nothing happens, once paused the run resumes."""
+
+    def post(self, request: HttpRequest, task: str) -> JsonResponse:
+        if task not in TASK_DEFINITIONS:
+            return JsonResponse({"error": "Unknown task"}, status=404)
+        if task not in tasks.PAUSABLE_TASKS:
+            return JsonResponse({"error": "This task cannot be paused"}, status=400)
+        cancelled = tasks.cancel_pause(task)
+        return JsonResponse({"cancelled": cancelled, "pause": tasks.get_status(task)["pause"]})
 
 
 class ResetTaskView(View):

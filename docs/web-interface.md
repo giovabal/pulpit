@@ -156,12 +156,28 @@ The operations panel presents the four pipeline tasks as numbered cards:
 For each task:
 
 - **Run** — starts the task as a subprocess; the log streams in real time in the panel
-- **Abort** — sends SIGTERM to the running process
+- **Abort** — stops the running process (SIGTERM). The command unwinds before exiting: its temporary download folder is removed, the Telegram connection closes, a write in progress rolls back, and a message walk cut short keeps the days it finished. A second *Abort* kills it outright
+- **Request pause** — Crawl Channels and Search Channels only: pause the run and release the database (see [Pausing a run](#pausing-a-run))
 - **Options** — expand to set task-specific parameters (see [Workflow](workflow.md) for a full reference)
-- **Status indicator** — idle / running / done / failed
+- **Status indicator** — idle / running / paused / done / failed
 - **Import from export** — pre-fill the Structural Analysis options from a previous export's `summary.json` to reproduce or extend it
 - **Retry lost messages** — a Crawl Channels option that bulk-refetches every message currently marked as lost; rows Telegram returns are unmarked and their stats refreshed
 - **Export name overwrite confirmation** — when the typed export name collides with an export already on disk, clicking *Run* on Structural Analysis opens a confirmation modal before launching the task; cancelling leaves the form untouched
+
+### Pausing a run
+
+A crawl or a search keeps the database open while it runs. To vacuum it (**Manage → Maintenance**), copy the raw `db.sqlite3`, or let another program write without lock errors, pause the run instead of aborting it:
+
+1. **Request pause.** The run cannot stop just anywhere: in the middle of a channel it may be inside a write. So it finishes what it is doing and stops at its next safe point, between two channels (or two search terms) or between two phases. Meanwhile the button reads **Waiting to pause**, and **Cancel pause** withdraws the request.
+2. **Paused.** The run has closed its database connections and its Telegram connection (which also closes the Telegram session file) and says so in the log. The status badge reads *paused*. Nothing of the run is lost: the process waits with its channel list, its caches and its progress counter.
+3. **Resume** reconnects to Telegram and carries on with the next channel, without redoing any. If Telegram cannot be reached, the run stays paused and says why; click *Resume* again.
+
+Abort works while paused. How long the pause takes to happen depends on where the run is. A channel's crawl runs to its end first: a long first crawl, its comments, a flood wait. *Retry references*, *Refresh degrees*, *Hash images* and *Index domains* each run to their end once started, so they pause only before or after. A few things to keep in mind:
+
+- The channel list was read when the run started: channels added while paused are not crawled, but a channel edited while paused is read as edited.
+- Don't update Pulpit's code or run migrations while paused. The run would resume with the old code on a changed database. Abort, update, and launch again: crawls are incremental, so the work done is kept.
+- A backup with `export_installation.py` doesn't need a pause: its `VACUUM INTO` copies the database while a crawl is writing to it.
+- Pausing is for runs launched from this panel; a command started in a terminal has no pause, so stop it with Ctrl-C.
 
 ---
 

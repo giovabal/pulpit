@@ -26,6 +26,7 @@ from crawler.hole_fixer import fix_message_holes
 from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, ReferenceResolver, extract_text_references
 from network.utils import channel_cutoff_q, make_date_q
+from runner.control import PauseGate, sigterm_exits
 from webapp.models import (
     Channel,
     ChannelLabel,
@@ -163,17 +164,20 @@ def _recover_db_lock(stdout: Any, style: Any, *, action: str, channel: Any) -> N
         connection.close()
 
 
-def _iter_channels(channels_qs: Any) -> Iterator[Channel]:
+def _iter_channels(channels_qs: Any, checkpoint: Any = None) -> Iterator[Channel]:
     """Yield the channels of ``channels_qs``, in its order, without holding a cursor open between them.
 
     The per-channel loops must not stream from ``queryset.iterator()``: on SQLite that is a
-    live chunked cursor, and ``_recover_db_lock`` closes the connection mid-loop, so fetching
-    the next chunk would raise "Cannot operate on a closed database" outside every
+    live chunked cursor, and ``_recover_db_lock`` (like a pause) closes the connection mid-loop,
+    so fetching the next chunk would raise "Cannot operate on a closed database" outside every
     per-channel guard and abort the whole run. The pks are read up front instead and each
     channel is loaded just before its turn (as fresh as a chunked row was); one deleted in
-    the meantime is skipped.
+    the meantime is skipped. ``checkpoint`` (a ``PauseGate.checkpoint``) runs before each
+    load, so a channel edited while the run was paused is read as edited.
     """
     for pk in list(channels_qs.values_list("pk", flat=True)):
+        if checkpoint is not None:
+            checkpoint()
         channel = Channel.objects.filter(pk=pk).first()
         if channel is not None:
             yield channel
@@ -383,6 +387,8 @@ class ProgressPrinter:
 class Command(BaseCommand):
     args = ""
     help = "crawling Telegram groups"
+    # Replaced in handle() by the run's gate; a disabled one for methods called on their own (tests).
+    _pause = PauseGate()
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         # ── Channels ──────────────────────────────────────────────────────────
@@ -1255,6 +1261,7 @@ class Command(BaseCommand):
             updates.clear()
 
         for ch_idx, (channel_pk, msg_list) in enumerate(channel_to_msgs.items(), start=1):
+            self._pause.checkpoint()
             channel = channels_by_pk[channel_pk]
             channel_label = f"[id={channel.id}] {channel}"
             telegram_ids = [tid for _, tid, _ in msg_list]
@@ -1668,6 +1675,7 @@ class Command(BaseCommand):
             # live channel. Only they are stamped, and only their messages seed the next level.
             reached: list[int] = []
             for index, channel in enumerate(candidates, start=1):
+                self._pause.checkpoint()
                 crawl_ok = False
                 with per_channel_step(
                     self.stdout, self.style, printer, action="crawling environment channel", channel=channel
@@ -1780,7 +1788,9 @@ class Command(BaseCommand):
                 flood_sleep_threshold=settings.TELEGRAM_FLOOD_SLEEP_THRESHOLD,
             ).start(phone=settings.TELEGRAM_PHONE_NUMBER) as client:
                 self.stdout.write(" done")
-                yield client
+                # A pause disconnects (closing the session file too) and reconnects on resume.
+                with self._pause.holding(client.disconnect, client.connect, label="the Telegram connection"):
+                    yield client
         finally:
             # Cancel any tasks still pending after disconnect — typically the
             # leftover send/recv loops from the last reconnect — and let them
@@ -1852,6 +1862,13 @@ class Command(BaseCommand):
             self.stdout.write(f"Message tags: linked {added} more message(s) to their post's tags.")
 
     def handle(self, *args: Any, **options: Any) -> None:
+        # An abort from the Operations panel (SIGTERM) unwinds like Ctrl-C: the temporary download
+        # directory goes, the Telegram client disconnects, an interrupted walk keeps its finished days.
+        with sigterm_exits():
+            self._pause = PauseGate.from_env(stdout=self.stdout, style=self.style)
+            self._handle(*args, **options)
+
+    def _handle(self, *args: Any, **options: Any) -> None:
         from django.core.management.base import CommandError
 
         # The home-page ecosystem summary is cached for an hour; drop it now so
@@ -1921,7 +1938,7 @@ class Command(BaseCommand):
                     # ── CHANNELS LOOP ──────────────────────────────────────────
                     if get_channels_info or mine_about_texts or fetch_recommended:
                         if get_channels_info:
-                            for index, channel in enumerate(_iter_channels(channels), start=1):
+                            for index, channel in enumerate(_iter_channels(channels, self._pause.checkpoint), start=1):
                                 self._refresh_channel_info_for_channel(channel, crawler, index, printer)
                             printer.newline()
 
@@ -1948,7 +1965,9 @@ class Command(BaseCommand):
                             n_excluded = excluded_by_type.count()
                             if n_excluded:
                                 printer.announce(f"\nUpdating metadata for {n_excluded} type-excluded channel(s)")
-                                for i, meta_ch in enumerate(_iter_channels(excluded_by_type), start=1):
+                                for i, meta_ch in enumerate(
+                                    _iter_channels(excluded_by_type, self._pause.checkpoint), start=1
+                                ):
                                     printer.progress(f"Metadata [{i}/{n_excluded}] {meta_ch}")
                                     try:
                                         ch_obj, tg_ch, status = crawler.resolve_channel_or_classify(meta_ch.telegram_id)
@@ -2009,6 +2028,7 @@ class Command(BaseCommand):
                                     printer.announce(f"\nFetching {n_about} channels referenced in about texts")
                                     fetched_about = 0
                                     for i, ref in enumerate(new_about_refs, start=1):
+                                        self._pause.checkpoint()
                                         printer.progress(f"About texts [{i}/{n_about}] {ref}")
                                         try:
                                             ch_ref, _ = crawler.get_basic_channel(ref)
@@ -2041,6 +2061,7 @@ class Command(BaseCommand):
                             rec_total = 0
                             rec_new = 0
                             for i, ch_rec in enumerate(in_target_channels, start=1):
+                                self._pause.checkpoint()
                                 printer.progress(f"Recommended channels [{i}/{n_rec}] {ch_rec}")
                                 try:
                                     found, new = crawler.get_recommended_channels(ch_rec)
@@ -2079,7 +2100,7 @@ class Command(BaseCommand):
                             get_new_messages or do_refresh or fix_holes or retry_lost_messages or fetch_replies
                         )
                         if per_channel_ops:
-                            for index, channel in enumerate(_iter_channels(channels), start=1):
+                            for index, channel in enumerate(_iter_channels(channels, self._pause.checkpoint), start=1):
                                 pre_crawl_max_id = 0
 
                                 if get_new_messages:
@@ -2179,6 +2200,8 @@ class Command(BaseCommand):
                             self._resolve_custom_emoji(crawler)
 
                         if retry_references:
+                            # Streams the messages from an open cursor: pausable before, not during.
+                            self._pause.checkpoint()
                             if force_retry:
                                 n_missing = Message.objects.exclude(missing_references="").count()
                             else:
@@ -2225,6 +2248,7 @@ class Command(BaseCommand):
                     # ── ENVIRONMENT ────────────────────────────────────────────
                     # After the messages loop, so the citations this run just resolved seed it.
                     if opts.environment:
+                        self._pause.checkpoint()
                         self._crawl_environment(
                             channels, api_client, reference_resolver, download_temp_dir, opts, fix_holes=fix_holes
                         )
@@ -2237,6 +2261,8 @@ class Command(BaseCommand):
             shutil.rmtree(download_temp_dir, ignore_errors=True)
 
         # ── DEGREES (no Telegram client needed) ───────────────────────────────
+        # Each phase below runs to its end once started: pausable between them only.
+        self._pause.checkpoint()
         if in_degrees or out_degrees:
             # Network-wide, not crawl-scoped, counted in distinct channels: the rule
             # lives in crawler/degrees.py.
@@ -2252,8 +2278,10 @@ class Command(BaseCommand):
 
         # ── MEDIA AND LINKS (no Telegram client needed) ───────────────────────
         if opts.hash_images:
+            self._pause.checkpoint()
             self._hash_images()
         if opts.index_domains:
+            self._pause.checkpoint()
             self._index_domains()
 
         self.stdout.write(self.style.SUCCESS("\nCrawl complete."))

@@ -12,6 +12,8 @@ urlpatterns = [
         name="operations-write-cli-command",
     ),
     path("abort/<str:task>/", views.AbortTaskView.as_view(), name="operations-abort"),
+    path("pause/<str:task>/", views.PauseTaskView.as_view(), name="operations-pause"),
+    path("pause/<str:task>/cancel/", views.CancelPauseTaskView.as_view(), name="operations-pause-cancel"),
     path("reset/<str:task>/", views.ResetTaskView.as_view(), name="operations-reset"),
     path("status/<str:task>/", views.TaskStatusView.as_view(), name="operations-status"),
     path("graph-dirs/", views.GraphDirsView.as_view(), name="operations-graph-dirs"),

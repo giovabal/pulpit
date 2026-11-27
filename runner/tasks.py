@@ -11,9 +11,13 @@ from pathlib import Path
 
 from django.conf import settings
 
+from runner.control import PAUSE_REQUEST_ENV, PAUSED_ENV
+
 logger = logging.getLogger(__name__)
 
 TASK_NAMES = ("crawl_channels", "search_channels", "structural_analysis", "compare_analysis")
+# The commands that honour a pause request (runner.control.PauseGate checkpoints).
+PAUSABLE_TASKS = frozenset({"crawl_channels", "search_channels"})
 
 _MANAGE_PY = str(settings.BASE_DIR / "manage.py")
 _TMP_DIR = settings.BASE_DIR / "tmp"
@@ -83,6 +87,30 @@ def _log_path(task: str) -> Path:
     return _tmp(task, ".log")
 
 
+def _pause_request_path(task: str) -> Path:
+    """Exists while a pause is requested; the panel creates it, deleting it resumes the run."""
+    return _tmp(task, ".pause")
+
+
+def _paused_path(task: str) -> Path:
+    """Exists while the command is paused; written and removed by the command itself."""
+    return _tmp(task, ".paused")
+
+
+def _clear_pause_files(task: str) -> None:
+    _pause_request_path(task).unlink(missing_ok=True)
+    _paused_path(task).unlink(missing_ok=True)
+
+
+def _pause_state(task: str) -> str:
+    """``none``, ``requested`` (not reached a checkpoint yet), ``paused``, or ``resuming`` (reconnecting)."""
+    requested = _pause_request_path(task).exists()
+    paused = _paused_path(task).exists()
+    if paused:
+        return "paused" if requested else "resuming"
+    return "requested" if requested else "none"
+
+
 def _is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -95,17 +123,29 @@ def _is_running(pid: int) -> bool:
         return True
 
 
+def _idle_status() -> dict:
+    return {
+        "status": "idle",
+        "start_time": None,
+        "end_time": None,
+        "args": [],
+        "exit_code": None,
+        "pid": None,
+        "pause": "none",
+    }
+
+
 def get_status(task: str) -> dict:
     """Return the current status dict for a task."""
     meta_path = _meta_path(task)
     if not meta_path.exists():
-        return {"status": "idle", "start_time": None, "end_time": None, "args": [], "exit_code": None, "pid": None}
+        return _idle_status()
 
     try:
         meta = json.loads(meta_path.read_text())
     except (ValueError, OSError) as e:
         logger.warning("Cannot read task meta for %s: %s", task, e)
-        return {"status": "idle", "start_time": None, "end_time": None, "args": [], "exit_code": None, "pid": None}
+        return _idle_status()
 
     pid = meta.get("pid")
     exit_code = meta.get("exit_code")
@@ -138,6 +178,8 @@ def get_status(task: str) -> dict:
         "args": meta.get("args", []),
         "exit_code": exit_code,
         "pid": pid,
+        # Pause files left by a run that ended (or a request sent as it ended) mean nothing.
+        "pause": _pause_state(task) if status == "running" and task in PAUSABLE_TASKS else "none",
     }
 
 
@@ -275,6 +317,8 @@ def launch(task: str, args: list[str]) -> None:
         _TMP_DIR.mkdir(exist_ok=True)
         log_path = _log_path(task)
         meta_path = _meta_path(task)
+        # A request sent as the previous run ended would pause this one at its first checkpoint.
+        _clear_pause_files(task)
 
         meta: dict = {
             "start_time": datetime.now(timezone.utc).isoformat(),
@@ -297,6 +341,9 @@ def launch(task: str, args: list[str]) -> None:
             # _classify_line is stable regardless of the server's environment.
             "DJANGO_COLORS": "dark",
         }
+        if task in PAUSABLE_TASKS:
+            env[PAUSE_REQUEST_ENV] = str(_pause_request_path(task))
+            env[PAUSED_ENV] = str(_paused_path(task))
         # --force-color: stdout is a pipe, so Django would otherwise emit the
         # self.style.* markup as plain text and get_log_lines() could not
         # classify line severity from the ANSI codes.
@@ -351,6 +398,28 @@ def abort(task: str) -> bool:
         return False
 
 
+def request_pause(task: str) -> bool:
+    """Ask a running pausable task to pause at its next checkpoint. Returns True if the request was filed."""
+    if task not in PAUSABLE_TASKS or get_status(task)["status"] != "running":
+        return False
+    _pause_request_path(task).touch()
+    return True
+
+
+def cancel_pause(task: str) -> bool:
+    """Withdraw a pause request: a run still on its way to a checkpoint never pauses, a paused one resumes.
+
+    Returns True if there was a request to withdraw.
+    """
+    if task not in PAUSABLE_TASKS:
+        return False
+    request = _pause_request_path(task)
+    if not request.exists():
+        return False
+    request.unlink(missing_ok=True)
+    return True
+
+
 def reset(task: str) -> bool:
     """Delete the meta file so the task status returns to idle. Returns True if reset."""
     if task not in TASK_NAMES:
@@ -360,4 +429,5 @@ def reset(task: str) -> bool:
     meta = _meta_path(task)
     if meta.exists():
         meta.unlink()
+    _clear_pause_files(task)
     return True

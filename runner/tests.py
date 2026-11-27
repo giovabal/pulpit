@@ -1972,3 +1972,345 @@ class PaletteColorsViewTests(TestCase):
     def test_unknown_palette_returns_404(self) -> None:
         resp = self.client.get(reverse("operations-palette", args=["NOT_A_REAL_PALETTE"]))
         self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Pause: runner/tasks.py state + requests, runner/views.py endpoints
+# ---------------------------------------------------------------------------
+
+
+class PauseStateTests(_TmpMixin, TestCase):
+    def _running(self, task: str = "crawl_channels") -> None:
+        import os
+
+        _write_meta(self.tmp_dir, task, pid=os.getpid())
+
+    def _touch(self, task: str, suffix: str) -> None:
+        (self.tmp_dir / f"runner_{task}{suffix}").touch()
+
+    def _pause(self, task: str = "crawl_channels") -> str:
+        from runner.tasks import get_status
+
+        return get_status(task)["pause"]
+
+    def test_idle_task_has_no_pause(self):
+        self.assertEqual(self._pause(), "none")
+
+    def test_running_without_files_is_none(self):
+        self._running()
+        self.assertEqual(self._pause(), "none")
+
+    def test_request_file_alone_is_requested(self):
+        self._running()
+        self._touch("crawl_channels", ".pause")
+        self.assertEqual(self._pause(), "requested")
+
+    def test_both_files_is_paused(self):
+        self._running()
+        self._touch("crawl_channels", ".pause")
+        self._touch("crawl_channels", ".paused")
+        self.assertEqual(self._pause(), "paused")
+
+    def test_paused_file_without_request_is_resuming(self):
+        self._running()
+        self._touch("crawl_channels", ".paused")
+        self.assertEqual(self._pause(), "resuming")
+
+    def test_finished_run_ignores_leftover_files(self):
+        _write_meta(self.tmp_dir, "crawl_channels", exit_code=143)
+        self._touch("crawl_channels", ".pause")
+        self._touch("crawl_channels", ".paused")
+        self.assertEqual(self._pause(), "none")
+
+    def test_non_pausable_task_ignores_files(self):
+        self._running("structural_analysis")
+        self._touch("structural_analysis", ".pause")
+        self.assertEqual(self._pause("structural_analysis"), "none")
+
+
+class PauseRequestTests(_TmpMixin, TestCase):
+    def _request(self, task: str = "crawl_channels") -> Path:
+        return self.tmp_dir / f"runner_{task}.pause"
+
+    def test_request_on_running_task_creates_the_file(self):
+        import os
+
+        from runner.tasks import request_pause
+
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
+        self.assertTrue(request_pause("crawl_channels"))
+        self.assertTrue(self._request().exists())
+
+    def test_request_on_finished_task_is_refused(self):
+        from runner.tasks import request_pause
+
+        _write_meta(self.tmp_dir, "crawl_channels", exit_code=0)
+        self.assertFalse(request_pause("crawl_channels"))
+        self.assertFalse(self._request().exists())
+
+    def test_request_on_non_pausable_task_is_refused(self):
+        import os
+
+        from runner.tasks import request_pause
+
+        _write_meta(self.tmp_dir, "structural_analysis", pid=os.getpid())
+        self.assertFalse(request_pause("structural_analysis"))
+        self.assertFalse(self._request("structural_analysis").exists())
+
+    def test_cancel_removes_the_request(self):
+        from runner.tasks import cancel_pause
+
+        self._request().touch()
+        self.assertTrue(cancel_pause("crawl_channels"))
+        self.assertFalse(self._request().exists())
+
+    def test_cancel_without_request_returns_false(self):
+        from runner.tasks import cancel_pause
+
+        self.assertFalse(cancel_pause("crawl_channels"))
+
+    def test_cancel_leaves_the_paused_file_to_the_command(self):
+        from runner.tasks import cancel_pause
+
+        self._request().touch()
+        paused = self.tmp_dir / "runner_crawl_channels.paused"
+        paused.touch()
+        cancel_pause("crawl_channels")
+        self.assertTrue(paused.exists())  # the command removes it once it has reconnected
+
+    def test_reset_clears_pause_files(self):
+        from runner.tasks import reset
+
+        _write_meta(self.tmp_dir, "crawl_channels", exit_code=143)
+        self._request().touch()
+        (self.tmp_dir / "runner_crawl_channels.paused").touch()
+        self.assertTrue(reset("crawl_channels"))
+        self.assertEqual(list(self.tmp_dir.glob("runner_crawl_channels.paus*")), [])
+
+    def test_launch_clears_stale_files_and_passes_their_paths(self):
+        from runner.control import PAUSE_REQUEST_ENV, PAUSED_ENV
+        from runner.tasks import launch
+
+        self._request().touch()
+        (self.tmp_dir / "runner_crawl_channels.paused").touch()
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        with patch("runner.tasks.subprocess.Popen", return_value=mock_proc) as mock_popen:
+            launch("crawl_channels", [])
+        self.assertEqual(list(self.tmp_dir.glob("runner_crawl_channels.paus*")), [])
+        env = mock_popen.call_args.kwargs["env"]
+        self.assertEqual(env[PAUSE_REQUEST_ENV], str(self._request()))
+        self.assertEqual(env[PAUSED_ENV], str(self.tmp_dir / "runner_crawl_channels.paused"))
+
+    def test_launch_of_non_pausable_task_passes_no_paths(self):
+        import os
+
+        from runner.control import PAUSE_REQUEST_ENV
+        from runner.tasks import launch
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        environ = {k: v for k, v in os.environ.items() if k != PAUSE_REQUEST_ENV}
+        with (
+            patch.dict("os.environ", environ, clear=True),
+            patch("runner.tasks.subprocess.Popen", return_value=mock_proc) as mock_popen,
+        ):
+            launch("structural_analysis", [])
+        self.assertNotIn(PAUSE_REQUEST_ENV, mock_popen.call_args.kwargs["env"])
+
+
+class PauseViewTests(TestCase):
+    def test_unknown_task_returns_404(self):
+        for name in ("operations-pause", "operations-pause-cancel"):
+            resp = self.client.post(reverse(name, args=["no_such_task"]))
+            self.assertEqual(resp.status_code, 404)
+
+    def test_non_pausable_task_returns_400(self):
+        for name in ("operations-pause", "operations-pause-cancel"):
+            resp = self.client.post(reverse(name, args=["structural_analysis"]))
+            self.assertEqual(resp.status_code, 400)
+
+    def test_request_returns_the_new_state(self):
+        with (
+            patch("runner.views.tasks.request_pause", return_value=True),
+            patch("runner.views.tasks.get_status", return_value={"pause": "requested"}),
+        ):
+            resp = self.client.post(reverse("operations-pause", args=["crawl_channels"]))
+        self.assertEqual(resp.json(), {"requested": True, "pause": "requested"})
+
+    def test_cancel_returns_the_new_state(self):
+        with (
+            patch("runner.views.tasks.cancel_pause", return_value=True),
+            patch("runner.views.tasks.get_status", return_value={"pause": "resuming"}),
+        ):
+            resp = self.client.post(reverse("operations-pause-cancel", args=["search_channels"]))
+        self.assertEqual(resp.json(), {"cancelled": True, "pause": "resuming"})
+
+    def test_panel_renders_pause_buttons_on_pausable_cards_only(self):
+        resp = self.client.get(reverse("operations"))
+        self.assertContains(resp, 'id="pause-crawl_channels"')
+        self.assertContains(resp, 'id="pause-cancel-search_channels"')
+        self.assertNotContains(resp, 'id="pause-structural_analysis"')
+
+    def test_panel_badge_reads_paused(self):
+        def fake_status(name):
+            from runner.tasks import _idle_status
+
+            if name == "crawl_channels":
+                return {**_idle_status(), "status": "running", "pid": 1, "pause": "paused"}
+            return _idle_status()
+
+        with patch("runner.views.tasks.get_status", side_effect=fake_status):
+            resp = self.client.get(reverse("operations"))
+        self.assertContains(resp, 'class="ops-badge ops-badge--paused" id="badge-crawl_channels"')
+        self.assertContains(resp, 'data-pause="paused" data-running="1"')
+
+
+# ---------------------------------------------------------------------------
+# runner/control.py — the command side
+# ---------------------------------------------------------------------------
+
+
+class _FakeConnections:
+    def __init__(self, in_atomic_block: bool = False) -> None:
+        self.closed = 0
+        self._conn = MagicMock(in_atomic_block=in_atomic_block)
+
+    def all(self, initialized_only: bool = False):
+        return [self._conn]
+
+    def close_all(self) -> None:
+        self.closed += 1
+
+
+class PauseGateTests(_TmpMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.request = self.tmp_dir / "req"
+        self.paused = self.tmp_dir / "ack"
+        self.events: list[str] = []
+        self.out = MagicMock()
+
+    def _gate(self, sleep=None):
+        from runner.control import PauseGate
+
+        return PauseGate(self.request, self.paused, stdout=self.out, sleep=sleep or self._resume_on_first_sleep)
+
+    def _resume_on_first_sleep(self, _seconds):
+        self.events.append(f"sleep paused_file={self.paused.exists()}")
+        self.request.unlink()
+
+    def _lines(self) -> str:
+        return "\n".join(str(call.args[0]) for call in self.out.write.call_args_list)
+
+    def test_disabled_gate_is_a_no_op(self):
+        from runner.control import PauseGate
+
+        gate = PauseGate()
+        self.assertFalse(gate.enabled)
+        with gate.holding(lambda: self.events.append("release"), lambda: None, label="x"):
+            self.assertFalse(gate.checkpoint())
+        self.assertEqual(gate._holds, [])
+        self.assertEqual(self.events, [])
+
+    def test_from_env(self):
+        from runner.control import PAUSE_REQUEST_ENV, PAUSED_ENV, PauseGate
+
+        with patch.dict("os.environ", {PAUSE_REQUEST_ENV: str(self.request), PAUSED_ENV: str(self.paused)}):
+            gate = PauseGate.from_env()
+        self.assertEqual((gate.request_path, gate.paused_path), (self.request, self.paused))
+        with patch.dict("os.environ", {PAUSE_REQUEST_ENV: "", PAUSED_ENV: ""}):
+            self.assertFalse(PauseGate.from_env().enabled)
+
+    def test_no_request_does_nothing(self):
+        gate = self._gate()
+        fake = _FakeConnections()
+        with patch("runner.control.connections", fake):
+            self.assertFalse(gate.checkpoint())
+        self.assertEqual(fake.closed, 0)
+
+    def test_pause_releases_waits_and_restores(self):
+        gate = self._gate()
+        self.request.touch()
+        fake = _FakeConnections()
+        with (
+            patch("runner.control.connections", fake),
+            gate.holding(lambda: self.events.append("release A"), lambda: self.events.append("restore A"), label="A"),
+            gate.holding(lambda: self.events.append("release B"), lambda: self.events.append("restore B"), label="B"),
+        ):
+            self.assertTrue(gate.checkpoint())
+        # Released last-in first-out, the paused file written before the wait, restored in order.
+        self.assertEqual(self.events, ["release B", "release A", "sleep paused_file=True", "restore A", "restore B"])
+        self.assertEqual(fake.closed, 1)
+        self.assertFalse(self.paused.exists())
+        self.assertIn("Paused: released the database and A and B.", self._lines())
+        self.assertIn("Resumed after", self._lines())
+
+    def test_inside_a_transaction_waits_for_the_next_checkpoint(self):
+        gate = self._gate()
+        self.request.touch()
+        fake = _FakeConnections(in_atomic_block=True)
+        with patch("runner.control.connections", fake):
+            self.assertFalse(gate.checkpoint())
+        self.assertEqual(fake.closed, 0)
+        self.assertFalse(self.paused.exists())
+        self.assertTrue(self.request.exists())
+
+    def test_real_atomic_block_is_detected(self):
+        # TestCase wraps the test in a transaction: the real guard must refuse to close it.
+        gate = self._gate()
+        self.request.touch()
+        SearchTerm.objects.exists()  # initialise the connection inside the test transaction
+        self.assertFalse(gate.checkpoint())
+        self.assertFalse(self.paused.exists())
+
+    def test_failed_restore_stays_paused_until_the_next_resume(self):
+        attempts = []
+
+        def restore():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise ConnectionError("network down")
+
+        def sleep(_seconds):
+            self.request.unlink()
+
+        gate = self._gate(sleep=sleep)
+        self.request.touch()
+        with patch("runner.control.connections", _FakeConnections()), gate.holding(lambda: None, restore, label="T"):
+            self.assertTrue(gate.checkpoint())
+        self.assertEqual(len(attempts), 2)
+        self.assertIn("Could not resume (network down): still paused.", self._lines())
+        self.assertFalse(self.paused.exists())
+
+    def test_abort_while_paused_removes_the_paused_file_without_restoring(self):
+        def sleep(_seconds):
+            raise SystemExit(143)
+
+        gate = self._gate(sleep=sleep)
+        self.request.touch()
+        with (
+            patch("runner.control.connections", _FakeConnections()),
+            gate.holding(lambda: None, lambda: self.events.append("restore"), label="T"),
+            self.assertRaises(SystemExit),
+        ):
+            gate.checkpoint()
+        self.assertEqual(self.events, [])
+        self.assertFalse(self.paused.exists())
+
+
+class SigtermExitsTests(TestCase):
+    def test_sigterm_raises_system_exit_and_handler_is_restored(self):
+        import os
+        import signal
+        import time
+
+        from runner.control import sigterm_exits
+
+        before = signal.getsignal(signal.SIGTERM)
+        with self.assertRaises(SystemExit) as caught, sigterm_exits():
+            os.kill(os.getpid(), signal.SIGTERM)
+            for _ in range(100):  # the handler runs at the next bytecode boundary
+                time.sleep(0.01)
+        self.assertEqual(caught.exception.code, 143)
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)

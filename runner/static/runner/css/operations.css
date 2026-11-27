@@ -129,6 +129,11 @@
   color: var(--danger-hover);
 }
 
+.ops-badge--paused {
+  background: var(--warning-bg-soft);
+  color: var(--warning);
+}
+
 @keyframes pulse-dot {
 
   0%,
