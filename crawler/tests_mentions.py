@@ -16,7 +16,7 @@ from webapp.models import Channel, Message
 from webapp.test_helpers import make_channel, make_label
 
 from telethon import errors
-from telethon.tl.types import User
+from telethon.tl.types import ChannelForbidden, User, Username
 
 _CMD = "crawler.management.commands.backfill_mentions"
 _DATE = datetime.datetime(2026, 11, 15, tzinfo=datetime.timezone.utc)
@@ -82,6 +82,22 @@ class MentionParsingTests(SimpleTestCase):
         self.assertIsNone(reference_from_url("https://t.me/@"))
 
 
+class ExtraUsernamesTests(SimpleTestCase):
+    def test_active_handles_besides_the_username(self) -> None:
+        channel = Channel(username="Main")
+        handles = [Username(username="MAIN", active=True), Username(username="other", active=True)]
+        channel.set_extra_usernames(MagicMock(usernames=[*handles, Username(username="old", active=False)]))
+        self.assertEqual(channel.extra_usernames, ["other"])
+        self.assertEqual(Channel.handles_of(channel.username, channel.extra_usernames), ["main", "other"])
+
+    def test_none_without_other_handles(self) -> None:
+        channel = Channel(username="Main")
+        for usernames in (None, [], [Username(username="main", active=True)]):
+            channel.set_extra_usernames(MagicMock(usernames=usernames))
+            self.assertIsNone(channel.extra_usernames)
+        self.assertEqual(Channel.handles_of("", None), [])
+
+
 class MentionResolutionTests(TestCase):
     def setUp(self) -> None:
         self.channel = make_channel(
@@ -105,6 +121,40 @@ class MentionResolutionTests(TestCase):
         self._resolve(resolver, "@NewChan")
         resolver.api_client.client.get_entity.assert_called_once_with("newchan")
         self.assertEqual([c.telegram_id for c in self.message.references.all()], [500])
+
+    def test_a_channel_holding_several_handles_answers_to_each(self) -> None:
+        target = make_channel(telegram_id=2, username="", extra_usernames=["FirstName", "second_name"])
+        make_channel(telegram_id=3, username="", extra_usernames=["firstnamelonger"])
+        resolver = _resolver()
+        self._resolve(resolver, "@firstname @SECOND_NAME")
+        self.assertEqual(list(self.message.references.all()), [target])
+        resolver.api_client.client.get_entity.assert_not_called()
+
+    def test_a_looked_up_channel_keeps_its_several_handles(self) -> None:
+        entity = _telegram_channel(500, None)  # several handles: Telegram sends no username
+        entity.title = "New"
+        entity.usernames = [Username(username="NewChan", active=True), Username(username="gone", active=False)]
+        self._resolve(_resolver({"newchan": entity}), "@NewChan")
+        stored = Channel.objects.get(telegram_id=500)
+        self.assertEqual((stored.username, stored.extra_usernames), ("", ["NewChan"]))
+        next_run = _resolver()
+        self.assertEqual(next_run._resolve_one("@newchan"), (stored, False))
+        next_run.api_client.client.get_entity.assert_not_called()
+
+    def test_a_forbidden_channel_keeps_the_handle_it_was_found_by(self) -> None:
+        entity = ChannelForbidden(id=600, access_hash=1, title="Closed", broadcast=True, megagroup=False)  # no handle
+        self._resolve(_resolver({"closedchan": entity}), "@ClosedChan")
+        stored = Channel.objects.get(telegram_id=600)
+        self.assertEqual(stored.username, "closedchan")
+        self.assertEqual(list(self.message.references.all()), [stored])
+        next_run = _resolver()
+        self.assertEqual(next_run._resolve_one("@closedchan"), (stored, False))
+        next_run.api_client.client.get_entity.assert_not_called()
+
+    def test_a_handle_already_held_is_not_overwritten(self) -> None:
+        make_channel(telegram_id=700, username="CurrentName", title="Renamed")
+        self._resolve(_resolver({"oldname": _telegram_channel(700, "CurrentName")}), "@oldname")
+        self.assertEqual(Channel.objects.get(telegram_id=700).username, "CurrentName")
 
     def test_own_and_forwarded_handles_are_signatures(self) -> None:
         source = make_channel(telegram_id=3, username="sourcechan")
@@ -179,6 +229,13 @@ class MentionBackfillTests(TestCase):
         self.assertEqual(plan.references, [(post.pk, self.target.pk)])
         self.assertEqual(plan.unknown, {"unknown1": [post.pk]})
         self.assertEqual(plan.skipped, {"signatures": 1, "people": 1, "already stored": 1})
+
+    def test_extra_usernames_are_known_handles(self) -> None:
+        several = make_channel(telegram_id=5, username="", extra_usernames=["MultiOne", "multitwo"])
+        first, second = self._post(1, "@multione"), self._post(2, "@MultiTwo")
+        plan = plan_backfill()
+        self.assertEqual(plan.references, [(first.pk, several.pk), (second.pk, several.pk)])
+        self.assertEqual(plan.unknown, {})
 
     def test_apply_is_repeatable_and_keeps_other_pending_references(self) -> None:
         post = self._post(1, "@targetchan @unknown1", missing_references="waiting")

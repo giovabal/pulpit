@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from webapp.utils.channel_types import channel_type_filter
 
@@ -43,6 +43,18 @@ class ChannelQuerySet(models.QuerySet["Channel"]):
             return self.in_container_label(label)
         return self.filter(Exists(ChannelLabel.objects.filter(channel=OuterRef("pk"), label=label)))
 
+    def holding_handle(self, handle: str) -> ChannelQuerySet:
+        """Rows answering to *handle*, ignoring case: as their ``username`` or among their ``extra_usernames``.
+
+        A channel holding several handles has no username at all — Telegram lists them all in ``usernames``
+        instead — so the username alone misses it. The JSON list is matched on its text, quotes included.
+        """
+        return self.filter(Q(username__iexact=handle) | Q(extra_usernames__icontains=f'"{handle}"'))
+
+    def with_a_handle(self) -> ChannelQuerySet:
+        """Rows holding a username or extra usernames (``Channel.handles_of`` reads them)."""
+        return self.exclude(username="", extra_usernames__isnull=True)
+
 
 class ChannelManager(models.Manager["Channel"]):
     def get_queryset(self) -> ChannelQuerySet:
@@ -50,6 +62,12 @@ class ChannelManager(models.Manager["Channel"]):
 
     def in_target(self) -> ChannelQuerySet:
         return self.get_queryset().in_target()
+
+    def holding_handle(self, handle: str) -> ChannelQuerySet:
+        return self.get_queryset().holding_handle(handle)
+
+    def with_a_handle(self) -> ChannelQuerySet:
+        return self.get_queryset().with_a_handle()
 
 
 class MessageQuerySet(models.QuerySet["Message"]):

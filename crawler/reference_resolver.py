@@ -227,12 +227,11 @@ class ReferenceResolver:
         # channel that took over the handle. Prefer a live (non-lost) row, i.e. the
         # current owner, over a stale/lost one that merely used to hold it; fall back to
         # a lost row only when the handle has no live owner stored.
-        # iexact: references are lowercased upstream, but Channel.username stores
-        # Telegram's display casing ("Some_Channel"), and `=` is case-sensitive on both
-        # SQLite and PostgreSQL — an exact match would always miss mixed-case handles
-        # and fall through to a (flood-wait-prone, and for dead channels permanently
-        # failing) get_entity call.
-        channel = Channel.objects.filter(username__iexact=handle).order_by("is_lost", "pk").first()
+        # Case-insensitive: references are lowercased upstream, but Channel.username stores
+        # Telegram's display casing ("Some_Channel"); and extra usernames too, a channel
+        # holding several handles having no username. A miss falls through to a
+        # (flood-wait-prone, and for dead channels permanently failing) get_entity call.
+        channel = Channel.objects.holding_handle(handle).order_by("is_lost", "pk").first()
         if channel:
             if is_mention and channel.is_user_account and not channel.is_bot:
                 return None, False
@@ -249,6 +248,12 @@ class ReferenceResolver:
             entity = self.api_client.client.get_entity(handle)
             if not isinstance(entity, User):
                 channel = Channel.from_telegram_object(entity, force_update=True)
+                channel.set_extra_usernames(entity)
+                if not channel.username and not channel.extra_usernames:
+                    # A channel this account may not open comes as a ChannelForbidden, with no
+                    # handle at all: it still holds the one just looked up.
+                    channel.username = handle
+                channel.save(update_fields=["username", "extra_usernames"])
             elif is_mention and entity.bot is not True:
                 channel = None
             else:

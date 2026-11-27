@@ -1997,8 +1997,11 @@ class Command(BaseCommand):
                                 about_refs.update(extract_text_references(about_text))
                             if about_refs:
                                 known_lower = {
-                                    u.lower()
-                                    for u in Channel.objects.exclude(username="").values_list("username", flat=True)
+                                    handle
+                                    for username, extra in Channel.objects.with_a_handle().values_list(
+                                        "username", "extra_usernames"
+                                    )
+                                    for handle in Channel.handles_of(username, extra)
                                 }
                                 new_about_refs = sorted(about_refs - known_lower)
                                 if new_about_refs:

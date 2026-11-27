@@ -365,11 +365,7 @@ class ChannelCrawler:
             [{"platform": r.platform, "reason": r.reason, "text": r.text} for r in rr] if rr else None
         )
         channel.message_ttl = getattr(full, "ttl_period", None) or None
-        raw_usernames = getattr(telegram_channel, "usernames", None)
-        primary = channel.username.lower() if channel.username else None
-        channel.extra_usernames = (
-            [u.username for u in raw_usernames if u.active and u.username.lower() != primary] if raw_usernames else None
-        ) or None
+        channel.set_extra_usernames(telegram_channel)
         linked_chat_id = getattr(full, "linked_chat_id", None) or None
         channel.linked_chat_id = linked_chat_id
         if linked_chat_id and not Channel.objects.filter(telegram_id=linked_chat_id).exists():

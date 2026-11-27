@@ -303,6 +303,23 @@ class Channel(TelegramBaseModel):
         self.username = self.username or ""
         super().save(*args, **kwargs)
 
+    @staticmethod
+    def handles_of(username: str, extra_usernames: list[str] | None) -> list[str]:
+        """The handles a row answers to, lower-cased: its username, then its extra usernames."""
+        return [handle.lower() for handle in (username, *(extra_usernames or ())) if handle]
+
+    def set_extra_usernames(self, telegram_channel: Any) -> None:
+        """Keep the active handles Telegram lists besides the username (``usernames``; None when absent).
+
+        A channel holding several handles comes with no ``username``, only this list, and without it the
+        stored row would answer to none of them (``ChannelQuerySet.holding_handle``).
+        """
+        raw = getattr(telegram_channel, "usernames", None)
+        primary = self.username.lower() if self.username else None
+        self.extra_usernames = (
+            [u.username for u in raw if u.active and u.username.lower() != primary] if raw else None
+        ) or None
+
 
 class Message(TelegramBaseModel):
     TELEGRAM_OBJECT_PROPERTIES: ClassVar[tuple[str, ...]] = (

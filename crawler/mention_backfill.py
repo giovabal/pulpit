@@ -51,9 +51,11 @@ class BackfillPlan:
 def _known_handles() -> dict[str, tuple[int, bool]]:
     """Handle -> (channel pk, is a person). Same preference as ``ReferenceResolver._resolve_one``."""
     known: dict[str, tuple[int, bool]] = {}
-    rows = Channel.objects.exclude(username="").order_by("is_lost", "pk")
-    for pk, username, is_user, is_bot in rows.values_list("pk", "username", "is_user_account", "is_bot"):
-        known.setdefault(username.lower(), (pk, is_user and not is_bot))
+    rows = Channel.objects.with_a_handle().order_by("is_lost", "pk")
+    fields = ("pk", "username", "extra_usernames", "is_user_account", "is_bot")
+    for pk, username, extra_usernames, is_user, is_bot in rows.values_list(*fields):
+        for handle in Channel.handles_of(username, extra_usernames):
+            known.setdefault(handle, (pk, is_user and not is_bot))
     return known
 
 

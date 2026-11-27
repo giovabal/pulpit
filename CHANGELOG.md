@@ -18,6 +18,9 @@
 - **Filter messages by comments and reactions.** The *Options* menu of every message list has two new choices, *Comments* and *Reactions*, each Both / With / Without, to find the posts that drew a discussion or a reaction, or the ones that drew none. An album counts as one post.
 - **The home page no longer calls summed subscriber counts "subscribers".** The figure under *Total views* now reads *subscriptions*: someone following several channels counts once per channel, and Telegram doesn't show who subscribes to a broadcast channel, so distinct subscribers can't be counted. A new *unique commenters* figure next to it counts the distinct accounts replying in the channels' discussion groups, each once. Tooltips explain both.
 
+### Fixes
+- **Channels with several handles are recognised.** Telegram gives a channel holding several handles no single username, so Pulpit matched none of them: each crawl looked it up again for every `t.me/` link or `@handle` naming it, spending Telegram's strictest rate limit, and `backfill_mentions` queued it on every run. The same happened to a channel Telegram returns without any handle, as it does for one this account may not open. All of a channel's handles now count, and a channel found through a lookup keeps them, or the handle it was found by.
+
 ## [0.29] - 2026-11-09
 *Methodology review of the measures and community detection, with homophily and significance. Bots detection. Emoji packs. Finer timelines and event tests. Image copies and outbound links.*
 
