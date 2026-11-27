@@ -705,6 +705,41 @@ class UserViewSetTests(_ApiTestCase):
 
 
 # ---------------------------------------------------------------------------
+# backoffice/api/maintenance — tmp/ scan and clear (logic tested in runner.tests.TmpDirTests)
+# ---------------------------------------------------------------------------
+
+
+class MaintenanceTmpApiTests(_ApiTestCase):
+    @override_settings(WEB_ACCESS="ALL")
+    def test_info_returns_the_scan(self):
+        scan = {"path": "tmp", "exists": True, "total_bytes": 5, "groups": [], "blockers": [], "clearable": True}
+        with mock.patch("runner.tmp_dir.scan", return_value=scan):
+            resp = self.jget(_api("maintenance/tmp/"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), scan)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_clear_returns_409_while_in_use(self):
+        from runner.tmp_dir import TmpInUseError
+
+        blockers = ["Crawl Channels is running in the Operations panel."]
+        with mock.patch("runner.tmp_dir.clear", side_effect=TmpInUseError(blockers)):
+            resp = self.jpost(_api("maintenance/tmp/clear/"), {})
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.json()["blockers"], blockers)
+
+    @override_settings(WEB_ACCESS="ALL")
+    def test_clear_reports_what_it_freed(self):
+        from runner.tmp_dir import ClearReport
+
+        report = ClearReport(removed_entries=3, freed_bytes=1024, cache_cleared=True)
+        with mock.patch("runner.tmp_dir.clear", return_value=report):
+            body = self.jpost(_api("maintenance/tmp/clear/"), {}).json()
+        self.assertEqual((body["removed_entries"], body["freed_bytes"], body["cache_cleared"]), (3, 1024, True))
+        self.assertEqual((body["skipped"], body["errors"]), ([], []))
+
+
+# ---------------------------------------------------------------------------
 # backoffice/api/maintenance — purge_preview and purge_run
 # ---------------------------------------------------------------------------
 

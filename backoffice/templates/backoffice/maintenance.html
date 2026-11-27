@@ -164,6 +164,40 @@
       <p class="bo-maint-result-summary" id="bo-orphan-result-summary"></p>
     </div>
   </div>
+
+  <div class="bo-panel">
+    <div class="bo-section-header">
+      <h2 class="bo-section-title">Temporary files</h2>
+    </div>
+
+    <p class="bo-maint-intro">
+      Empty the <code>tmp/</code> folder. It holds each crawl's download folder, which an
+      interrupted crawl can leave behind full of half-downloaded media, the Operations panel's
+      logs of the last runs, and the page cache. Deleting it removes those logs too, and the
+      pages rebuild their cache on the next visit. It can only be done while nothing writes
+      there: no task running in the Operations panel and no crawl started from a terminal.
+    </p>
+
+    <div class="bo-maint-status">
+      <div><span class="bo-maint-status-label">Size on disk:</span> <span id="bo-tmp-total">…</span></div>
+      <div id="bo-tmp-groups"></div>
+    </div>
+
+    <div class="bo-maint-actions">
+      <button class="bo-btn" id="bo-tmp-refresh" type="button">
+        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+      </button>
+      <button class="bo-btn bo-btn--danger" id="bo-tmp-clear" type="button" disabled>
+        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Delete tmp contents
+      </button>
+      <span class="bo-maint-hint" id="bo-tmp-hint" aria-live="polite"></span>
+    </div>
+
+    <div id="bo-tmp-result" class="bo-maint-result d-none">
+      <h3 class="bo-maint-result-title">Last cleanup</h3>
+      <p class="bo-maint-result-summary" id="bo-tmp-result-summary"></p>
+    </div>
+  </div>
 </div>
 {% endblock bo_content %}
 

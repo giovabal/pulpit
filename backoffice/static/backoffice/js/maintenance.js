@@ -321,6 +321,108 @@
     // Preview is opt-in (the scan walks the whole media tree and can take many
     // seconds on a large install); user clicks "Preview" to start it.
 
+    // ── Temporary files (tmp/) ───────────────────────────────────────────────
+    // runner/tmp_dir.py: the button is enabled only while nothing writes in tmp/
+    // (no Operations task running, no crawl downloading into it); the server checks
+    // again on the click. While blocked, the scan is repeated so the button turns on
+    // once the run ends.
+    var TMP_INFO = "/manage/api/maintenance/tmp/";
+    var TMP_CLEAR = "/manage/api/maintenance/tmp/clear/";
+    var TMP_RECHECK_MS = 10000;
+
+    var $tmpTotal = document.getElementById("bo-tmp-total");
+    var $tmpGroups = document.getElementById("bo-tmp-groups");
+    var $tmpRefreshBtn = document.getElementById("bo-tmp-refresh");
+    var $tmpClearBtn = document.getElementById("bo-tmp-clear");
+    var $tmpHint = document.getElementById("bo-tmp-hint");
+    var $tmpResult = document.getElementById("bo-tmp-result");
+    var $tmpResultSum = document.getElementById("bo-tmp-result-summary");
+    var tmpRecheck = null;
+    var tmpClearing = false;
+
+    function renderTmp(data) {
+        $tmpTotal.textContent = data.exists ? fmtBytes(data.total_bytes) : "no tmp/ folder";
+        $tmpGroups.replaceChildren();
+        data.groups.forEach(function(g) {
+            if (!g.entries) return;
+            var row = document.createElement("div");
+            var label = document.createElement("span");
+            label.className = "bo-maint-status-label";
+            label.textContent = g.label + ":";
+            row.appendChild(label);
+            row.appendChild(document.createTextNode(
+                " " + fmtCount(g.entries) + (g.entries === 1 ? " item" : " items") + " (" + fmtBytes(g.bytes) + ")"
+            ));
+            $tmpGroups.appendChild(row);
+        });
+        $tmpClearBtn.disabled = tmpClearing || !data.clearable;
+        if (data.blockers.length) {
+            $tmpHint.textContent = data.blockers.join(" ");
+        } else if (!data.clearable) {
+            $tmpHint.textContent = "Nothing to delete.";
+        } else {
+            $tmpHint.textContent = "";
+        }
+        clearTimeout(tmpRecheck);
+        tmpRecheck = data.blockers.length ? setTimeout(loadTmp, TMP_RECHECK_MS) : null;
+    }
+
+    function loadTmp() {
+        if (document.hidden) {
+            // Re-scan when the tab is shown again rather than in the background.
+            tmpRecheck = null;
+            document.addEventListener("visibilitychange", loadTmp, { once: true });
+            return;
+        }
+        apiFetch(TMP_INFO).then(renderTmp).catch(function(e) {
+            $tmpHint.textContent = "Scan failed: " + e.message;
+        });
+    }
+
+    function clearTmp() {
+        var size = $tmpTotal.textContent;
+        var msg = "Delete the contents of tmp/ (" + size + ")?\n\n" +
+            "This also removes the Operations panel's logs of the last runs. This cannot be undone.";
+        if (!confirm(msg)) return;
+
+        var originalHtml = $tmpClearBtn.innerHTML;
+        tmpClearing = true;
+        $tmpClearBtn.disabled = true;
+        $tmpClearBtn.innerHTML = '<i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Deleting…';
+        $tmpRefreshBtn.disabled = true;
+
+        apiFetch(TMP_CLEAR, { method: "POST", body: {} })
+            .then(function(data) {
+                $tmpResult.classList.remove("d-none");
+                var parts = [
+                    "Freed " + fmtBytes(data.freed_bytes),
+                    "removed " + fmtCount(data.removed_entries) + (data.removed_entries === 1 ? " item" : " items"),
+                    "in " + fmtDuration(data.total_duration_seconds),
+                ];
+                if (data.cache_cleared) parts.push("page cache emptied");
+                if (data.skipped.length) {
+                    parts.push(fmtCount(data.skipped.length) + " kept: a crawl started using them meanwhile");
+                }
+                if (data.errors.length) {
+                    parts.push(fmtCount(data.errors.length) + " could not be removed (" + data.errors.join("; ") + ")");
+                }
+                $tmpResultSum.textContent = parts.join(" · ");
+                showToast(data.errors.length ? "tmp/ emptied with errors." : "tmp/ emptied.",
+                    data.errors.length ? "error" : "success");
+            })
+            .catch(function(e) { showToast("Could not empty tmp/: " + e.message, "error"); })
+            .finally(function() {
+                tmpClearing = false;
+                $tmpClearBtn.innerHTML = originalHtml;
+                $tmpRefreshBtn.disabled = false;
+                loadTmp();
+            });
+    }
+
+    $tmpRefreshBtn.addEventListener("click", loadTmp);
+    $tmpClearBtn.addEventListener("click", clearTmp);
+    loadTmp(); // a listing of one folder: cheap enough to run on load
+
     // ── New-version banner ───────────────────────────────────────────────────
     // window.pulpitVersion is published by webapp/static/webapp/js/version_check.js
     // (loaded in the page shell before this script). Reuse its single cached

@@ -8,6 +8,8 @@ from .maintenance import (
     orphan_media_run,
     purge_preview,
     purge_run,
+    tmp_clear,
+    tmp_info,
 )
 from .palettes import palette_colors
 from .views import (
@@ -59,6 +61,8 @@ urlpatterns = [
     path("maintenance/optimize/", maintenance_optimize, name="api-maintenance-optimize"),
     path("maintenance/purge-preview/", purge_preview, name="api-maintenance-purge-preview"),
     path("maintenance/purge/", purge_run, name="api-maintenance-purge"),
+    path("maintenance/tmp/", tmp_info, name="api-maintenance-tmp"),
+    path("maintenance/tmp/clear/", tmp_clear, name="api-maintenance-tmp-clear"),
     path(
         "maintenance/orphan-media-preview/",
         orphan_media_preview,

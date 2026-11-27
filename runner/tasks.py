@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ import signal
 import subprocess
 import sys
 import threading
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -296,6 +298,15 @@ except Exception as e:
     print(f"\\x1b[31;1mrunner wrapper: failed to write metadata: {e}\\x1b[0m", file=sys.stderr)
 sys.exit(exit_code)
 """
+
+
+@contextlib.contextmanager
+def launches_held() -> Iterator[None]:
+    """Hold every task's launch lock: no task starts from this process inside the block (tmp/ being emptied)."""
+    with contextlib.ExitStack() as stack:
+        for name in TASK_NAMES:
+            stack.enter_context(_LAUNCH_LOCKS[name])
+        yield
 
 
 def launch(task: str, args: list[str]) -> None:

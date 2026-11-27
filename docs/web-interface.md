@@ -261,6 +261,13 @@ Staff-only database maintenance. The page reports the active engine, the databas
 
 The same catalog and the current database size are available programmatically through `GET /manage/api/maintenance/`; running an optimization is `POST /manage/api/maintenance/optimize/`. Strategies are run in the order listed; the run stops at the first failure and returns the partial timing report.
 
+**Temporary files** shows what the `tmp/` folder holds and how much space it takes, then **Delete tmp contents** empties it. The folder holds:
+- each crawl's download folder. A crawl that was killed, or aborted before this release, leaves its folder behind full of half-downloaded media, and these leftovers can reach hundreds of gigabytes;
+- the Operations panel's logs of the last runs. They go too, and the task cards return to *idle*;
+- the page cache. It is emptied rather than deleted, and pages rebuild it on their next visit.
+
+The button is enabled only while nothing writes there. A task running in the Operations panel blocks it, and so does a crawl started from a terminal: each crawl holds a lock on its download folder for as long as it runs, and the lock dies with the process. The hint names what is blocking, and the page checks again every few seconds, so the button turns on once the run ends. The server checks again on the click, and while it empties the folder no Operations task can be launched. API: `GET /manage/api/maintenance/tmp/` and `POST /manage/api/maintenance/tmp/clear/` (409 while in use).
+
 ---
 
 ## Access control

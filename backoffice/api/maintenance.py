@@ -269,6 +269,37 @@ def purge_run(request: Any) -> Response:
     )
 
 
+@api_view(["GET"])
+def tmp_info(request: Any) -> Response:
+    """What ``tmp/`` holds, group by group, and what keeps it from being emptied (``runner.tmp_dir``)."""
+    from runner.tmp_dir import scan
+
+    return Response(scan())
+
+
+@api_view(["POST"])
+def tmp_clear(request: Any) -> Response:
+    """Empty ``tmp/``; 409 while an Operations task runs or a crawl is downloading into it."""
+    from runner.tmp_dir import TmpInUseError, clear
+
+    overall_t = time.perf_counter()
+    try:
+        report = clear()
+    except TmpInUseError as exc:
+        return Response({"detail": str(exc), "blockers": exc.blockers}, status=status.HTTP_409_CONFLICT)
+    return Response(
+        {
+            "removed_entries": report.removed_entries,
+            "freed_bytes": report.freed_bytes,
+            "cache_cleared": report.cache_cleared,
+            # Crawl folders that turned out to be in use at the last moment (a crawl just started).
+            "skipped": report.skipped,
+            "errors": report.errors,
+            "total_duration_seconds": time.perf_counter() - overall_t,
+        }
+    )
+
+
 @api_view(["POST"])
 def check_updates(request: Any) -> Response:
     """Force a fresh upstream version check, bypassing the once-a-day cache.

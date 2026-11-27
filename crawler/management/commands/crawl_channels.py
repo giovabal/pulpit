@@ -6,7 +6,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 from argparse import ArgumentParser, BooleanOptionalAction
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -27,6 +26,7 @@ from crawler.media_handler import MediaHandler, detect_media_type
 from crawler.reference_resolver import DEAD_PREFIX, ReferenceResolver, extract_text_references
 from network.utils import channel_cutoff_q, make_date_q
 from runner.control import PauseGate, sigterm_exits
+from runner.tmp_dir import crawl_download_dir
 from webapp.models import (
     Channel,
     ChannelLabel,
@@ -1864,8 +1864,10 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         # An abort from the Operations panel (SIGTERM) unwinds like Ctrl-C: the temporary download
         # directory goes, the Telegram client disconnects, an interrupted walk keeps its finished days.
-        with sigterm_exits():
+        # The download directory is locked as in use while the run lives (Maintenance → tmp/ reads it).
+        with sigterm_exits(), crawl_download_dir() as download_temp_dir:
             self._pause = PauseGate.from_env(stdout=self.stdout, style=self.style)
+            self._download_temp_dir = download_temp_dir
             self._handle(*args, **options)
 
     def _handle(self, *args: Any, **options: Any) -> None:
@@ -1902,9 +1904,7 @@ class Command(BaseCommand):
         ids_str = opts.ids_str
         channel_types = opts.channel_types
 
-        temp_root = settings.BASE_DIR / "tmp"
-        temp_root.mkdir(exist_ok=True)
-        download_temp_dir = tempfile.mkdtemp(prefix="crawl_channels_", dir=temp_root)
+        download_temp_dir = self._download_temp_dir
 
         warning_handler: StyledWarningLogHandler | None = None
         try:
@@ -2258,7 +2258,6 @@ class Command(BaseCommand):
         finally:
             if warning_handler is not None:
                 logging.getLogger().removeHandler(warning_handler)
-            shutil.rmtree(download_temp_dir, ignore_errors=True)
 
         # ── DEGREES (no Telegram client needed) ───────────────────────────────
         # Each phase below runs to its end once started: pausable between them only.

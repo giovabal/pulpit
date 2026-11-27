@@ -2314,3 +2314,162 @@ class SigtermExitsTests(TestCase):
                 time.sleep(0.01)
         self.assertEqual(caught.exception.code, 143)
         self.assertIs(signal.getsignal(signal.SIGTERM), before)
+
+
+# ---------------------------------------------------------------------------
+# runner/tmp_dir.py — what writes in tmp/, and emptying it
+# ---------------------------------------------------------------------------
+
+
+class TmpDirTests(_TmpMixin, TestCase):
+    def _old(self, path: Path) -> Path:
+        """Backdate an entry past the fresh-crawl grace period."""
+        import os
+        import time
+
+        old = time.time() - 3600
+        os.utime(path, (old, old), follow_symlinks=False)
+        return path
+
+    def _leftover_crawl(self, name: str = "crawl_channels_dead") -> Path:
+        folder = self.tmp_dir / name
+        folder.mkdir()
+        (folder / "half.jpg").write_bytes(b"x" * 100)
+        (self.tmp_dir / f"{name}.lock").write_bytes(b"")  # its process is gone: nobody holds it
+        self._old(self.tmp_dir / f"{name}.lock")
+        return self._old(folder)
+
+    def _groups(self, data: dict) -> dict:
+        return {g["key"]: (g["entries"], g["bytes"]) for g in data["groups"]}
+
+    def test_lock_is_seen_while_held_and_removed_after(self):
+        from runner.tmp_dir import held_lock, is_locked
+
+        lock = self.tmp_dir / "x.lock"
+        self.assertFalse(is_locked(lock))
+        with held_lock(lock):
+            self.assertTrue(is_locked(lock))
+        self.assertFalse(lock.exists())
+        self.assertFalse(is_locked(lock))
+
+    def test_crawl_download_dir_is_locked_for_the_run_and_removed_after(self):
+        from runner.tmp_dir import crawl_download_dir, is_locked
+
+        with crawl_download_dir() as path:
+            folder = Path(path)
+            self.assertEqual(folder.parent, self.tmp_dir)
+            self.assertTrue(folder.name.startswith("crawl_channels_"))
+            self.assertTrue(is_locked(Path(path + ".lock")))
+        self.assertEqual(list(self.tmp_dir.iterdir()), [])
+
+    def test_scan_groups_the_entries(self):
+        from runner.tmp_dir import scan
+
+        self._leftover_crawl()
+        (self.tmp_dir / "runner_crawl_channels.log").write_bytes(b"y" * 10)
+        (self.tmp_dir / "stray.txt").write_bytes(b"z" * 3)
+        data = scan()
+        groups = self._groups(data)
+        self.assertEqual(groups["crawl"], (2, 100))  # the folder and its dead lock
+        self.assertEqual(groups["tasks"], (1, 10))
+        self.assertEqual(groups["other"], (1, 3))
+        self.assertEqual(data["total_bytes"], 113)
+        self.assertEqual(data["blockers"], [])
+        self.assertTrue(data["clearable"])
+
+    def test_empty_folder_is_not_clearable(self):
+        from runner.tmp_dir import scan
+
+        self.assertFalse(scan()["clearable"])
+
+    def test_running_panel_task_blocks(self):
+        import os
+
+        from runner.tmp_dir import scan
+
+        self._leftover_crawl()
+        _write_meta(self.tmp_dir, "structural_analysis", pid=os.getpid())
+        data = scan()
+        self.assertEqual(data["blockers"], ["Structural Analysis is running in the Operations panel."])
+        self.assertFalse(data["clearable"])
+
+    def test_terminal_crawl_blocks(self):
+        from runner.tmp_dir import held_lock, scan
+
+        folder = self.tmp_dir / "crawl_channels_live"
+        folder.mkdir()
+        self._old(folder)  # old enough that only the lock says it is in use
+        with held_lock(self.tmp_dir / "crawl_channels_live.lock"):
+            data = scan()
+        self.assertEqual(self._groups(data)["crawl_active"][0], 2)
+        self.assertEqual(
+            data["blockers"],
+            [f"A crawl started from a terminal is downloading into {self.tmp_dir.name}/crawl_channels_live/."],
+        )
+        self.assertFalse(data["clearable"])
+
+    def test_a_just_created_crawl_folder_counts_as_in_use(self):
+        from runner.tmp_dir import scan
+
+        (self.tmp_dir / "crawl_channels_new").mkdir()  # its run may not have taken the lock yet
+        self.assertEqual(self._groups(scan())["crawl_active"][0], 1)
+
+    def test_clear_refuses_while_in_use(self):
+        import os
+
+        from runner.tmp_dir import TmpInUseError, clear
+
+        self._leftover_crawl()
+        _write_meta(self.tmp_dir, "crawl_channels", pid=os.getpid())
+        with self.assertRaises(TmpInUseError) as caught:
+            clear()
+        self.assertEqual(caught.exception.blockers, ["Crawl Channels is running in the Operations panel."])
+        self.assertTrue((self.tmp_dir / "crawl_channels_dead").exists())
+
+    def test_clear_empties_the_folder_and_keeps_it(self):
+        from runner.tmp_dir import clear
+
+        self._leftover_crawl()
+        _write_meta(self.tmp_dir, "crawl_channels", exit_code=0)
+        (self.tmp_dir / "runner_crawl_channels.log").write_bytes(b"y" * 10)
+        report = clear()
+        self.assertEqual(list(self.tmp_dir.iterdir()), [])
+        self.assertTrue(self.tmp_dir.is_dir())
+        self.assertEqual(report.removed_entries, 4)
+        self.assertGreaterEqual(report.freed_bytes, 110)
+        self.assertEqual(report.errors, [])
+
+    def test_clear_unlinks_a_symlink_without_following_it(self):
+        from runner.tmp_dir import clear
+
+        with tempfile.TemporaryDirectory() as outside:
+            kept = Path(outside) / "keep.txt"
+            kept.write_text("mine")
+            (self.tmp_dir / "link").symlink_to(outside, target_is_directory=True)
+            clear()
+            self.assertTrue(kept.exists())
+        self.assertFalse((self.tmp_dir / "link").exists())
+
+    def test_clear_empties_the_page_cache_through_the_cache_api(self):
+        from django.core.cache import caches
+
+        from runner.tmp_dir import clear, scan
+
+        location = self.tmp_dir / "django-cache"
+        file_cache = {
+            "default": {"BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": str(location)}
+        }
+        with override_settings(CACHES=file_cache):
+            caches["default"].set("k", "v")
+            self.assertEqual(self._groups(scan())["cache"][0], 1)
+            report = clear()
+            self.assertIsNone(caches["default"].get("k"))
+        self.assertTrue(report.cache_cleared)
+        self.assertTrue(location.is_dir())  # emptied, not removed: a write in flight still finds it
+
+    def test_launches_wait_while_tmp_is_emptied(self):
+        from runner import tasks
+
+        with tasks.launches_held():
+            self.assertTrue(all(lock.locked() for lock in tasks._LAUNCH_LOCKS.values()))
+        self.assertFalse(any(lock.locked() for lock in tasks._LAUNCH_LOCKS.values()))
