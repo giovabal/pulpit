@@ -1440,6 +1440,78 @@ class ReplyMessageFilterTests(TestCase):
         self.assertContains(response, 'name="replies" value="only"')
 
 
+class ForwardMessageFilterTests(TestCase):
+    """``?forwards=include|exclude|only`` filters on the forward header, whatever its source."""
+
+    def setUp(self) -> None:
+        org = make_label(name="Org", is_in_target=True)
+        self.channel = make_channel(telegram_id=11, label=org)
+        source = make_channel(telegram_id=12)
+        when = datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc)
+        make = lambda tid, **kw: Message.objects.create(telegram_id=tid, channel=self.channel, **kw)  # noqa: E731
+        self.own = make(1)
+        self.shares = {
+            make(2, forwarded_from=source, fwd_from_channel_post=5).id,  # a stored channel
+            make(3, forwarded_from_private=999, fwd_from_channel_post=6).id,  # a private one
+            make(4, fwd_from_from_name="Someone", fwd_from_date=when).id,  # a hidden user
+        }
+
+    def _visible(self, query: str) -> set[int]:
+        from django.http import QueryDict
+
+        from webapp.views import _apply_message_options
+
+        qs = Message.objects.filter(channel=self.channel)
+        return set(_apply_message_options(qs, QueryDict(query)).values_list("id", flat=True))
+
+    def test_included_by_default(self) -> None:
+        everything = {self.own.id, *self.shares}
+        self.assertEqual(self._visible(""), everything)
+        self.assertEqual(self._visible("forwards=bogus"), everything)
+
+    def test_exclude_and_only(self) -> None:
+        self.assertEqual(self._visible("forwards=exclude"), {self.own.id})
+        self.assertEqual(self._visible("forwards=only"), self.shares)
+
+    def test_former_forwards_only_link_still_works(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        self.assertEqual(self._visible("forwards_only=1"), self.shares)
+        ctx = _message_options_context(QueryDict("forwards_only=1"))
+        self.assertEqual(ctx["forwards"], "only")
+        self.assertIn("forwards=only", ctx["original_query"])
+
+    def test_marks_options_active_and_survives_pagination(self) -> None:
+        from django.http import QueryDict
+
+        from webapp.views import _message_options_context
+
+        ctx = _message_options_context(QueryDict("forwards=exclude"))
+        self.assertTrue(ctx["options_active"])
+        self.assertIn("forwards=exclude", ctx["original_query"])
+        default = _message_options_context(QueryDict(""))
+        self.assertEqual(default["forwards"], "include")
+        self.assertNotIn("forwards", default["original_query"])
+
+    def test_search_page_renders_and_filters(self) -> None:
+        response = self.client.get(reverse("message-search") + "?forwards=exclude")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([m.id for m in response.context["object_list"]], [self.own.id])
+        self.assertContains(response, 'name="forwards" value="only"')
+
+    def test_channel_page_offers_it_except_on_the_received_tab(self) -> None:
+        url = reverse("channel-detail", kwargs={"pk": self.channel.pk})
+        response = self.client.get(url + "?forwards=only")
+        self.assertEqual({m.id for m in response.context["object_list"]}, self.shares)
+        self.assertTrue(response.context["options_active"])
+        self.assertContains(response, 'name="forwards" value="exclude"')
+        received = self.client.get(url + "?tab=received")
+        self.assertNotContains(received, 'name="forwards"')
+        self.assertContains(received, 'name="self_ref"')
+
+
 class EngagementMessageFilterTests(TestCase):
     """``?comments=`` and ``?reactions=`` (any / with / without) filter on Telegram's comment count and
     the reaction total, an album judged as one post."""

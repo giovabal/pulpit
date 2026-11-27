@@ -36,6 +36,7 @@ from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
+from network.near_copies import forward_header_q
 from network.utils import channel_cutoff_q, channel_period_date_q
 from network.vacancy_analysis import (
     EXTRAS_KEY,
@@ -143,6 +144,9 @@ _CONTENT_TYPE_Q: dict[str, Q] = {
 _LOST_MODES = ("exclude", "include", "only")
 # A reply is a message posted as an answer to another one (Telegram's reply_to header).
 _REPLY_MODES = ("include", "exclude", "only")
+# A forward is a message carrying a forward header of any kind (``forward_header_q``): a resolved source
+# channel, a private one, one still pending, a hidden user — what Content originality counts as forwarded.
+_FORWARD_MODES = ("include", "exclude", "only")
 # Engagement filters (?comments= / ?reactions=): any message, only those with some, only those with
 # none. Comments are Telegram's count of the replies in the channel's discussion group
 # (``Message.replies``; None = comments off or not captured, read as none), reactions the message's
@@ -342,6 +346,14 @@ def _reply_mode(params: Any) -> str:
     return replies if replies in _REPLY_MODES else "include"
 
 
+def _forward_mode(params: Any) -> str:
+    """``include`` / ``exclude`` / ``only``; the channel page's former ``forwards_only=1`` reads as ``only``."""
+    forwards = params.get("forwards")
+    if forwards in _FORWARD_MODES:
+        return forwards
+    return "only" if params.get("forwards_only") else "include"
+
+
 def _has_engagement(field: str) -> Q:
     """The messages with a positive *field* — judging an album as one post.
 
@@ -399,6 +411,11 @@ def _apply_message_options(qs: QuerySet, params: Any, user: Any = None) -> Query
         qs = qs.filter(reply_to_msg_id__isnull=True)
     elif replies == "only":
         qs = qs.filter(reply_to_msg_id__isnull=False)
+    forwards = _forward_mode(params)
+    if forwards == "exclude":
+        qs = qs.exclude(forward_header_q())
+    elif forwards == "only":
+        qs = qs.filter(forward_header_q())
     for key, field in _ENGAGEMENT_FIELDS.items():
         mode = _engagement_mode(params, key)
         if mode == "with":
@@ -424,6 +441,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         lost = "exclude"
     pinned = bool(params.get("pinned"))
     replies = _reply_mode(params)
+    forwards = _forward_mode(params)
     comments = _engagement_mode(params, "comments")
     reactions = _engagement_mode(params, "reactions")
     unique = bool(params.get("unique"))
@@ -437,6 +455,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         or lost != "exclude"
         or pinned
         or replies != "include"
+        or forwards != "include"
         or comments != "any"
         or reactions != "any"
         or unique
@@ -461,6 +480,8 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         extra["pinned"] = "1"
     if replies != "include":
         extra["replies"] = replies
+    if forwards != "include":
+        extra["forwards"] = forwards
     if comments != "any":
         extra["comments"] = comments
     if reactions != "any":
@@ -485,6 +506,7 @@ def _message_options_context(params: Any, user: Any = None) -> dict[str, Any]:
         "lost": lost,
         "pinned": pinned,
         "replies": replies,
+        "forwards": forwards,
         "comments": comments,
         "reactions": reactions,
         "unique": unique,
@@ -1094,8 +1116,6 @@ class ChannelDetailView(ListView):
         )
         if self.selected_channel.in_target_periods.exists():
             qs = qs.filter(channel_period_date_q(self.selected_channel))
-        if self.request.GET.get("forwards_only"):
-            qs = qs.filter(forwarded_from__isnull=False)
         return _apply_message_options(qs, self.request.GET, self.request.user)
 
     def get_context_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -1109,24 +1129,20 @@ class ChannelDetailView(ListView):
         context_data["query"] = q
         tab = self.request.GET.get("tab", "messages")
         context_data["active_tab"] = tab
-        forwards_only = bool(self.request.GET.get("forwards_only"))
-        context_data["forwards_only"] = forwards_only
         self_ref = self.request.GET.get("self_ref", "include")
         if self_ref not in ("include", "exclude", "only"):
             self_ref = "include"
         context_data["self_ref"] = self_ref
         context_data.update(_message_options_context(self.request.GET, self.request.user))
-        # Both filters live in the Options menu, so they light its button up too.
-        if (tab == "received" and self_ref != "include") or (tab != "received" and forwards_only):
+        # The self-reference filter lives in the Options menu, so it lights its button up too.
+        if tab == "received" and self_ref != "include":
             context_data["options_active"] = True
-        # Extend original_query so pagination links preserve tab, self_ref, and forwards_only.
+        # Extend original_query so pagination links preserve tab and self_ref.
         extra = ""
         if tab == "received":
             extra += "&tab=received"
             if self_ref != "include":
                 extra += f"&self_ref={self_ref}"
-        if self.request.GET.get("forwards_only"):
-            extra += "&forwards_only=1"
         context_data["original_query"] = context_data["original_query"] + extra
 
         is_in_target = Channel.objects.in_target().filter(pk=ch.pk).exists()

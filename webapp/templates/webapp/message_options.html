@@ -91,8 +91,7 @@
             {% endfor %}
           </div>
 
-          {% if channel_filters %}
-          {% if active_tab == "received" %}
+          {% if channel_filters and active_tab == "received" %}
           <div class="msg-options-section">
             <div class="msg-options-label">Self-references</div>
             <label class="msg-options-item">
@@ -113,11 +112,19 @@
           <div class="msg-options-section">
             <div class="msg-options-label">Forwards</div>
             <label class="msg-options-item">
-              <input type="checkbox" name="forwards_only" value="1" class="msg-opt-input"
-                     {% if forwards_only %}checked{% endif %}> Forwards only
+              <input type="radio" name="forwards" value="include" class="msg-opt-input" data-default
+                     {% if forwards == "include" %}checked{% endif %}> Include
             </label>
+            <label class="msg-options-item">
+              <input type="radio" name="forwards" value="exclude" class="msg-opt-input"
+                     {% if forwards == "exclude" %}checked{% endif %}> Exclude
+            </label>
+            <label class="msg-options-item">
+              <input type="radio" name="forwards" value="only" class="msg-opt-input"
+                     {% if forwards == "only" %}checked{% endif %}> Only
+            </label>
+            <p class="msg-options-note">A forward is a message shared from another channel or account, whatever the source.</p>
           </div>
-          {% endif %}
           {% endif %}
         </div>
 
