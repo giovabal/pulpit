@@ -200,7 +200,7 @@ def apply_base_node_measures(
     measures_labels: list[tuple[str, str]] = [
         ("in_deg", "In-strength"),
         ("out_deg", "Out-strength"),
-        ("fans", "Users"),
+        ("fans", "Subscribers"),
         ("messages_count", "Messages"),
     ]
 

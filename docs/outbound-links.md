@@ -72,8 +72,8 @@ The three shares count uncategorised links in the denominator, so they are **low
 
 - `data/links.json` (and `data_<period>/links.json` on a timeline export): summary, categories, per-channel rows with every site linked, sites, matrices, co-linking pairs.
 - `links.html` (with `--html`): the category bar and table, the label × category matrix, the channel, site and pair tables, with a period navigator.
-- `links.xlsx` (with `--xlsx`): `Channels`, `Sites` (one sheet per period too), `Categories`, `Co-linking`, one `Matrix <group>` sheet per label group.
-- `channel_sites.csv` (long format: channel, site, category, messages) and `links_colinking.csv` (with `--csv`).
+- `links.xlsx` (with `--xlsx`): `Channels`, `Sites` (with a `Period` column on a timeline export), `Categories`, `Co-linking`, `Channel sites`, one `Matrix <group>` sheet per label group.
+- `links_channel_sites.csv` (long format: channel, site, category, messages) and `links_colinking.csv` (with `--csv`).
 
 The fixed rules — the site rule, the platform and Telegram hosts, the co-linking null, its convergence and exact-tail budget, the validation level and listing floor, the diversity index — are listed in each export's `PARAMETERS.md`.
 

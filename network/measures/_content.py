@@ -136,7 +136,7 @@ def apply_amplification_factor(
         fr = forwards_received.get(pk, 0) + copies_received.get(pk, 0)
         node[key] = round(fr / mc, AMPLIFICATION_DECIMALS) if mc > 0 else None
 
-    return [(key, "Amplification Factor")]
+    return [(key, "Amplification factor")]
 
 
 def apply_content_originality(
@@ -180,7 +180,7 @@ def apply_content_originality(
         not_original = forwarded_counts.get(pk, 0) + copies_made.get(pk, 0)
         node[key] = round(1 - not_original / mc, CONTENT_ORIGINALITY_DECIMALS) if mc > 0 else None
 
-    return [(key, "Content Originality")]
+    return [(key, "Content originality")]
 
 
 def apply_diffusion_lag(
@@ -238,7 +238,7 @@ def apply_diffusion_lag(
             continue
         node[key] = lag_dict.get(entry["channel"].pk)
 
-    return [(key, "Diffusion Lag (h)")]
+    return [(key, "Diffusion lag (h)")]
 
 
 def apply_visual_originality(
@@ -279,4 +279,4 @@ def apply_visual_originality(
         pk = entry["channel"].pk
         posts = image_posts.get(pk, 0)
         node[key] = round(1 - copied.get(pk, 0) / posts, VISUAL_ORIGINALITY_DECIMALS) if posts else None
-    return [(key, "Visual Originality")]
+    return [(key, "Visual originality")]

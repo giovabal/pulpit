@@ -6,26 +6,46 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Network Statistics</h2>
-  <div class="d-flex gap-2">
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="{{ repository_url }}/blob/main/docs/whole-network-statistics.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures explained</a>
-  </div>
-</div>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>Each row of the first table is one figure for the whole network: how many channels and ties it has, how dense,
+  reciprocal and clustered it is, how far apart its channels are, whether it holds together in one piece, and how
+  unequally citations are spread. A statistic's name carries its definition as a tooltip.</p>
+  <p><em>Density</em> is the share of the possible ties that exist; <em>reciprocity</em> the share of ties that are
+  returned; <em>clustering</em> and <em>transitivity</em> say how often two channels tied to the same channel are
+  tied to each other. Path lengths and the diameter count steps between channels inside the largest connected part
+  of the network (†&nbsp;ignoring the ties' direction, ‡&nbsp;following it). A <em>centralisation</em> runs from 0,
+  when the measure is spread evenly, to 1, when one channel holds it all.</p>
+  <p>Channels that are only cited, without being observed themselves, are left out of the statistics that need a
+  channel's own citations: reciprocity, clustering, transitivity and the degree correlations.</p>
+  <p><em>Modularity by method</em> says how much more the ties stay inside the communities a method found than
+  chance would give. A high value alone proves little, because sparse random networks reach high values too: z and
+  p compare it with random networks in which every channel cites and is cited as much as it really does.</p>
+  <p><em>Homophily by label group</em> asks whether citations stay inside the analyst's labels more than the labels'
+  sizes predict, each figure tested against random reshuffles of the labels. The <em>dyadic regression</em> weighs
+  several explanations of who cites whom together. Where baseline columns are shown, z is the distance of the
+  observed value from random networks, in their standard deviations.</p>
+  <p>With a timeline, the small bars beside a value show the same statistic period by period; the bar of the period
+  on show is highlighted.</p>
+</details>
+<div id="timeline-nav" class="export-period-nav"></div>
 <div id="network-preamble" class="mb-3"></div>
-<div class="row g-4 mb-4 export-wide">
-  <div class="col-lg-7" id="summary-section"></div>
-  <div class="col-lg-5 d-none" id="modularity-section"></div>
-</div>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
+<section id="summary-section" class="mb-4"></section>
+<section id="modularity-section" class="mb-4 d-none"></section>
 <div id="homophily-section" class="export-wide d-none"></div>
 <div id="mrqap-section" class="export-wide d-none"></div>
-<h3 class="mt-4 mb-3">Degree distribution</h3>
-<div id="degree-dist-section" class="export-wide"></div>
-<h3 class="mt-4 mb-3">Measure comparison</h3>
-<div id="scatter-section" class="export-wide"></div>
+<section id="degree-distribution" class="d-none" aria-labelledby="degree-dist-title">
+  <h2 id="degree-dist-title">Degree distribution</h2>
+  <p class="text-muted small">How many channels fall in each band of in-strength or out-strength: the summed weight
+  of the ties a channel receives or sends, its weighted degree.</p>
+  <div id="degree-dist-section"></div>
+</section>
+<section id="measure-comparison" class="d-none" aria-labelledby="scatter-title">
+  <h2 id="scatter-title">Measure comparison</h2>
+  <p class="text-muted small">One dot per channel on two measures of its position, both axes on a logarithmic scale;
+  the dashed line is the power-law trend.</p>
+  <div id="scatter-section"></div>
+</section>
 <script type="module" src="js/network_table.js"></script>
 {% endblock %}

@@ -14,7 +14,13 @@ from network.near_copies import (
     near_copies_for_channels,
 )
 from network.parameters import FixedParameter
-from network.utils import DEAD_LEAVES_KEY, channel_cutoff_q, environment_channels, make_date_q
+from network.utils import (
+    DEAD_LEAVES_KEY,
+    MESSAGE_SPAN_KEY,
+    channel_cutoff_q,
+    environment_channels,
+    make_date_q,
+)
 from webapp.models import Channel, ChannelLabel, LabelGroup, LabelParent, Message, ProfilePicture
 from webapp.utils.channel_types import channel_type_filter
 from webapp.utils.colors import hex_to_rgb
@@ -543,16 +549,25 @@ def build_graph(
     cutoff_q = channel_cutoff_q(environment_depth=environment_depth)
     references_through = Message.references.through
 
-    messages_per_channel = {
-        item["channel_id"]: item["total"]
-        for item in Message.objects.alive()
+    activity = list(
+        Message.objects.alive()
         .filter(date_q, cutoff_q, channel_id__in=channel_ids)
         .values("channel_id")
-        .annotate(total=Count("id"))
-    }
+        .annotate(total=Count("id"), first=Min("date"), last=Max("date"))
+    )
+    messages_per_channel = {item["channel_id"]: item["total"] for item in activity}
 
     if start_date or end_date:
         channel_ids, channel_qs = _filter_inactive_channels(channel_dict, graph, channel_qs, messages_per_channel)
+
+    # The days the analysed messages actually span (local days, like every date filter): what an export
+    # states as its period when no --startdate / --enddate bounds it.
+    kept = set(channel_ids)
+    firsts = [item["first"] for item in activity if item["channel_id"] in kept and item["first"]]
+    lasts = [item["last"] for item in activity if item["channel_id"] in kept and item["last"]]
+    graph.graph[MESSAGE_SPAN_KEY] = (
+        (timezone.localdate(min(firsts)).isoformat(), timezone.localdate(max(lasts)).isoformat()) if firsts else None
+    )
 
     forwarded_counts = {
         (item["channel_id"], item["forwarded_from_id"]): item["total"]

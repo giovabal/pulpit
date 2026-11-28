@@ -14,7 +14,7 @@
 // Period switcher: same pattern as links.js — on a timeline export each period with comments has its own
 // data_<key>/audience.json (has_audience in timeline.json); "All" is the full range in data/.
 import { build_year_nav } from './year_nav.js';
-import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, loadFailed, loadRecovered, periodDataDir, readTimeline } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 var _no_timeline = isCompareDataDir(_dd);
@@ -26,37 +26,18 @@ var _events = [];
 var _loading = false;
 var _charts = [];
 
-function _isNil(v) {
-    return v === null || v === undefined;
-}
+// The shared formatters of format.js under this page's names.
+var _isNil = isNil;
+var _pct = fmtShare;
+var _dec = fmtFixed;
 
-function _pct(v, digits) {
-    return _isNil(v) ? "—" : (100 * v).toFixed(_isNil(digits) ? 0 : digits) + "%";
-}
-
-function _dec(v, digits) {
-    return _isNil(v) ? "—" : Number(v).toFixed(digits);
-}
-
-function _pval(v) {
-    if (_isNil(v)) return "—";
-    if (v < 0.001) return v.toExponential(1);
-    return v.toFixed(3);
-}
-
+// "2024-03-01" → "2024-03": year and month, the date form of every export page.
 function _month(iso) {
-    if (!iso) return "—";
-    var d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
-}
-
-function _css(name, fallback) {
-    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
+    return iso ? String(iso).slice(0, 7) : MISSING;
 }
 
 function _channel(ref) {
-    if (!ref) return "—";
+    if (!ref) return MISSING;
     var org = ref.organization ? " <span class=\"text-muted small\">(" + escHtml(ref.organization) + ")</span>" : "";
     return escHtml(ref.label) + org;
 }
@@ -88,7 +69,7 @@ function _table(caption, columns, rows, opts) {
     var body = rows.map(function(row) {
         return "<tr>" + row.map(function(cell, i) {
             var c = (cell !== null && typeof cell === "object") ? cell : { html: cell };
-            var cls = [columns[i] && columns[i].number ? "text-end" : "", c.cls || ""].join(" ").trim();
+            var cls = [columns[i] && columns[i].number ? "number" : "", c.cls || ""].join(" ").trim();
             return "<td" + (cls ? " class=\"" + cls + "\"" : "") +
                 (_isNil(c.sort) ? "" : " data-sort-value=\"" + escHtml(String(c.sort)) + "\"") +
                 (c.style ? " style=\"" + c.style + "\"" : "") +
@@ -104,7 +85,7 @@ function _num(v, text) {
 }
 
 function _chartBox(id, title) {
-    return "<div><h4 class=\"h6 mb-1\" id=\"" + id + "-title\">" + escHtml(title) + "</h4><div class=\"audience-chart\"><canvas id=\"" + id + "\" aria-labelledby=\"" + id + "-title\"></canvas></div></div>";
+    return "<div><h3 class=\"audience-chart-title\" id=\"" + id + "-title\">" + escHtml(title) + "</h3><div class=\"audience-chart\"><canvas id=\"" + id + "\" aria-labelledby=\"" + id + "-title\"></canvas></div></div>";
 }
 
 // Every chart goes through here so a period switch can destroy the previous period's instances.
@@ -117,8 +98,9 @@ function _empty(text) {
 }
 
 function _axes(xTitle, yTitle, pctX, pctY) {
-    var text = _css("--text", "#1c1917"),
-        grid = _css("--border", "#e3e0d8");
+    var theme = pulpitTheme();
+    var text = theme.text,
+        grid = theme.grid;
 
     function axis(title, pct) {
         var a = { title: { display: true, text: title, color: text }, ticks: { color: text }, grid: { color: grid } };
@@ -126,7 +108,7 @@ function _axes(xTitle, yTitle, pctX, pctY) {
             a.min = 0;
             a.max = 1;
             a.ticks.stepSize = 0.2;
-            a.ticks.callback = function(v) { return _pct(v); };
+            a.ticks.callback = function(v) { return _pct(v, 0); };
         }
         return a;
     }
@@ -134,7 +116,7 @@ function _axes(xTitle, yTitle, pctX, pctY) {
 }
 
 function _legend() {
-    return { labels: { color: _css("--text", "#1c1917"), boxWidth: 14 } };
+    return { labels: { color: pulpitTheme().text, boxWidth: 14 } };
 }
 
 // ── Participation ────────────────────────────────────────────────────────────
@@ -142,7 +124,7 @@ function _legend() {
 function _participation(target, data) {
     var o = data.overall;
     if (!o.accounts) {
-        target.innerHTML = _empty("No reply in scope. Replies are stored by crawl_channels --fetch-replies for channels with a discussion group.");
+        target.innerHTML = _empty("No reply in scope: no comment was collected under the posts of the channels in this export.");
         return;
     }
     var hyper = o.hyperactive || {};
@@ -163,8 +145,8 @@ function _participation(target, data) {
         { label: "Share of replies", number: true },
     ], data.bins.map(function(b) {
         return [escHtml(b.label), _num(b.accounts, fmtInt(b.accounts)), _num(b.account_share, _pct(b.account_share, 1)), _num(b.replies, fmtInt(b.replies)), _num(b.reply_share, _pct(b.reply_share, 1))];
-    }), { sortable: false });
-    html += "<h4 class=\"h5 mt-3\">By channel</h4>";
+    }));
+    html += "<h3>By channel</h3>";
     html += _table("Participation per channel, most commenters first. The top-10% share, Gini and effective commenters need at least " +
         data.min_concentration_commenters + " commenters. Hyperactive = the share of the channel's replies written by the hyperactive accounts above.", [
             { label: "Channel" },
@@ -183,7 +165,7 @@ function _participation(target, data) {
                 { html: _channel(r.channel), sort: r.channel ? r.channel.label : "" },
                 _num(r.subscribers, fmtInt(r.subscribers)),
                 _num(r.accounts, fmtInt(r.accounts)),
-                _num(r.commenter_rate, _isNil(r.commenter_rate) ? "—" : (100 * r.commenter_rate).toFixed(1)),
+                _num(r.commenter_rate, _isNil(r.commenter_rate) ? MISSING : fmtFixed(100 * r.commenter_rate, 1)),
                 _num(r.replies, fmtInt(r.replies)),
                 _num(r.mean, _dec(r.mean, 1)),
                 _num(r.one_time_share, _pct(r.one_time_share)),
@@ -201,20 +183,20 @@ function _participation(target, data) {
 function _lorenzChart(canvas, lorenz, gini) {
     if (!canvas || typeof Chart === "undefined" || !lorenz.length) return;
     var points = lorenz.map(function(p) { return { x: p[0], y: p[1] }; });
-    var line = _css("--accent", "#4338ca");
+    var theme = pulpitTheme();
     if (window.PulpitA11y) {
         var tenth = points.filter(function(p) { return p.x >= 0.9; })[0];
         PulpitA11y.accessibleChart(canvas, {
             label: "Lorenz curve of replies per account",
-            summary: (_isNil(gini) ? "" : "Gini coefficient " + gini.toFixed(2) + ". ") + (tenth ? "The least active 90% of accounts wrote " + _pct(tenth.y) + " of the replies." : ""),
+            summary: (_isNil(gini) ? "" : "Gini coefficient " + fmtFixed(gini, 2) + ". ") + (tenth ? "The least active 90% of accounts wrote " + _pct(tenth.y) + " of the replies." : ""),
         });
     }
     _chart(canvas, {
         type: "scatter",
         data: {
             datasets: [
-                { label: "Replies", data: points, showLine: true, borderColor: line, borderWidth: 2, pointRadius: 0 },
-                { label: "Perfect equality", data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], showLine: true, borderColor: _css("--muted", "#78716c"), borderWidth: 1, pointRadius: 0 },
+                { label: "Replies", data: points, showLine: true, borderColor: theme.series[0], backgroundColor: theme.series[0], borderWidth: 2, pointRadius: 0 },
+                { label: "Perfect equality", data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], showLine: true, borderColor: theme.muted, backgroundColor: theme.muted, borderWidth: 1, pointRadius: 0 },
             ],
         },
         options: {
@@ -249,7 +231,7 @@ function _activityChart(canvas, bins) {
         type: "bar",
         data: {
             labels: bins.map(function(b) { return b.label; }),
-            datasets: [{ label: "Accounts", data: bins.map(function(b) { return b.accounts; }), backgroundColor: _css("--accent", "#4338ca") }],
+            datasets: [{ label: "Accounts", data: bins.map(function(b) { return b.accounts; }), backgroundColor: pulpitTheme().series[0] }],
         },
         options: {
             responsive: true,
@@ -278,7 +260,7 @@ function _breadth(target, data) {
     if (classes.length) {
         html += "<div class=\"audience-charts\">" + _chartBox("au-breadth-chart", "Channels reached, observed and by chance") + "<div>" +
             _table("Channels per commenter", [{ label: "Channels" }, { label: "Accounts", number: true }, { label: "Share", number: true }],
-                data.channel_bins.map(function(b) { return [escHtml(b.label), _num(b.accounts, fmtInt(b.accounts)), _num(b.share, _pct(b.share, 1))]; }), { sortable: false }) +
+                data.channel_bins.map(function(b) { return [escHtml(b.label), _num(b.accounts, fmtInt(b.accounts)), _num(b.share, _pct(b.share, 1))]; })) +
             "</div></div>";
         html += _table("Channels reached by replies written. Below chance: the share of the class's accounts reaching fewer channels than the expectation.", [
             { label: "Replies per account" },
@@ -289,11 +271,11 @@ function _breadth(target, data) {
             { label: "Below chance", number: true },
         ], classes.map(function(c) {
             return [escHtml(c.label), _num(c.accounts, fmtInt(c.accounts)), _num(c.observed, _dec(c.observed, 2)), _num(c.expected, _dec(c.expected, 2)), _num(c.ratio, _dec(c.ratio, 2)), _num(c.below_share, _pct(c.below_share))];
-        }), { sortable: false });
+        }));
     }
     (data.groups || []).forEach(function(g) {
         var name = escHtml(g.name.toLowerCase());
-        html += "<h4 class=\"h5 mt-3\">Across " + name + " labels</h4>";
+        html += "<h3>Across " + name + " labels</h3>";
         html += "<p class=\"small\">Of the " + fmtInt(g.accounts) + " commenters on channels with a " + name + " label, <strong>" + _pct(g.multi_label_share, 1) +
             "</strong> of those with 2+ replies comment under more than one label; their effective number of labels averages <strong>" + _dec(g.effective_mean, 2) +
             "</strong>, and <strong>" + _pct(g.cross_share_mean, 1) + "</strong> of their replies fall outside their main label. They reach <strong>" +
@@ -325,8 +307,8 @@ function _breadthChart(canvas, classes) {
         data: {
             labels: classes.map(function(c) { return c.label; }),
             datasets: [
-                { label: "Observed", data: classes.map(function(c) { return c.observed; }), backgroundColor: _css("--accent", "#4338ca") },
-                { label: "By chance", data: classes.map(function(c) { return c.expected; }), backgroundColor: _css("--muted", "#78716c") },
+                { label: "Observed", data: classes.map(function(c) { return c.observed; }), backgroundColor: pulpitTheme().series[0] },
+                { label: "By chance", data: classes.map(function(c) { return c.expected; }), backgroundColor: pulpitTheme().muted },
             ],
         },
         options: {
@@ -348,7 +330,7 @@ function _pairRows(pairs, nameA, nameB) {
             _num(pr.shared, fmtInt(pr.shared)),
             _num(pr.expected, _dec(pr.expected, 1)),
             _num(pr.ratio, _dec(pr.ratio, 2)),
-            _num(pr.q, pr.significant ? "<strong>" + _pval(pr.q) + "</strong>" : _pval(pr.q)),
+            _num(pr.q, qHtml(pr.q)),
         ];
     });
 }
@@ -358,7 +340,7 @@ var PAIR_COLUMNS = [
     { label: "Shared", number: true },
     { label: "Expected", number: true, title: "Shared commenters expected under the null that keeps every commenter's number of channels" },
     { label: "Ratio", number: true },
-    { label: "q", number: true, title: "Benjamini–Hochberg adjusted p-value over every pair; bold = significant" },
+    { label: "q", number: true, title: "Benjamini–Hochberg adjusted p-value over every pair" },
 ];
 
 function _overlap(target, data) {
@@ -370,7 +352,7 @@ function _overlap(target, data) {
     var html = [];
     var cards = [_card("Pairs sharing more than chance", fmtInt(data.validated), "of " + fmtInt(data.tested) + " channel pairs", ["q &lt; " + data.q_threshold + " (Benjamini–Hochberg)"])];
     if (data.qap) {
-        cards.push(_card("Audience follows citations", "r = " + _dec(data.qap.r, 2), "QAP p = " + _pval(data.qap.p),
+        cards.push(_card("Audience follows citations", "r = " + _dec(data.qap.r, 2), "QAP " + pText(data.qap.p),
             ["shared commenters vs forwards + mentions, over " + fmtInt(data.qap.pairs) + " pairs (" + fmtInt(data.qap.cited_pairs) + " citing)"]));
     }
     html.push(_cards(cards));
@@ -397,35 +379,38 @@ function _overlap(target, data) {
             }
             var pr = lookup[row.id + "|" + col.id];
             if (!pr) {
-                cells.push({ html: "·", cls: "audience-cell text-center text-muted" });
+                // A pair that is not listed shares no commenter: a zero, not a missing value.
+                cells.push({ html: "0", cls: "audience-cell text-center text-muted", title: "no shared commenter" });
                 return;
             }
             cells.push({
-                html: fmtInt(pr.shared) + (pr.significant ? "<span class=\"audience-sig\" aria-label=\"significant\">●</span>" : ""),
+                html: fmtInt(pr.shared) + (sigStars(pr.q) ? "<span class=\"audience-sig\">" + sigStars(pr.q) + "</span>" : ""),
                 cls: "audience-cell text-center" + (pr.heat ? " audience-cell--" + pr.heat.side : ""),
                 style: pr.heat ? "--heat: " + pr.heat.percent + "%;" : "",
-                title: pr.shared + " shared, " + _dec(pr.expected, 1) + " expected, q = " + _pval(pr.q),
+                title: pr.shared + " shared, " + _dec(pr.expected, 1) + " expected, " + pText(pr.q, "q"),
             });
         });
         return cells;
     });
     html.push("<p class=\"small text-muted mb-1\">Shared commenters per pair of channels; the tint is the ratio to the expectation — <span class=\"audience-key audience-key--pos\">more than chance</span>, " +
-        "<span class=\"audience-key audience-key--neg\">fewer</span> — and ● marks a pair significant at q &lt; " + data.q_threshold +
-        "; pairs with fewer than 3 commenters shared and expected stay untinted. Hover a cell for the figures. Columns follow the rows' numbers.</p>");
+        "<span class=\"audience-key audience-key--neg\">fewer</span> — and the stars mark significance: " + escHtml(sigLegend("q")) +
+        " Pairs with fewer than 3 commenters shared and expected stay untinted. Hover a cell for the figures. Columns follow the rows' numbers.</p>");
     html.push(_table("Channel × channel shared commenters", columns, rows, { sortable: false, wide: true }));
 
     function chName(key) {
         return function(pr) { return byId[pr[key]] ? _channel(byId[pr[key]].channel) : escHtml(pr[key]); };
     }
-    html.push("<h4 class=\"h5 mt-3\">Pairs, most significant first</h4>");
+    html.push("<h3>Pairs, most significant first</h3>");
     html.push(_table("The " + Math.min(PAIR_LIMIT, data.pairs.length) + " most significant of " + fmtInt(data.pairs.length) + " pairs with shared commenters" +
         (data.pairs.length > PAIR_LIMIT ? (_current === "all" ? "; audience.xlsx and audience_overlap.csv list them all." :
             "; the period's Overlap pairs sheet of audience.xlsx lists them all.") : "."), PAIR_COLUMNS, _pairRows(data.pairs.slice(0, PAIR_LIMIT), chName("a"), chName("b"))));
+    var legend = "<p class=\"text-muted small\">" + escHtml(sigLegend("q")) + "</p>";
+    html.push(legend);
 
     (data.label_groups || []).forEach(function(g) {
-        html.push("<h4 class=\"h5 mt-3\">Between " + escHtml(g.name.toLowerCase()) + " labels</h4>");
+        html.push("<h3>Between " + escHtml(g.name.toLowerCase()) + " labels</h3>");
         html.push(g.pairs.length ?
-            _table(g.name + " label pairs, most significant first", PAIR_COLUMNS, _pairRows(g.pairs, function(pr) { return escHtml(pr.name_a); }, function(pr) { return escHtml(pr.name_b); })) :
+            _table(g.name + " label pairs, most significant first", PAIR_COLUMNS, _pairRows(g.pairs, function(pr) { return escHtml(pr.name_a); }, function(pr) { return escHtml(pr.name_b); })) + legend :
             _empty("No two labels share a commenter."));
     });
     target.innerHTML = html.join("");
@@ -443,15 +428,15 @@ function _retention(target, data) {
         _card("Comments from", _month(data.first_day) + " – " + _month(data.last_day), ""),
     ]);
     html += "<div class=\"audience-charts\">" + _chartBox("au-monthly", "Commenters per month") + "</div>";
-    html += "<h4 class=\"h5 mt-3\">Cohorts</h4>";
+    html += "<h3>Cohorts</h3>";
     var quarters = data.cohort_quarters || [];
     html += _table("Accounts by the quarter of their first reply, and the share of each cohort commenting again 1, 2, … quarters later. Darker = more of the cohort; blank = not over yet.",
         [{ label: "First reply" }, { label: "Accounts", number: true }].concat(quarters.map(function(q) { return { label: "+" + q }; })),
         data.cohorts.map(function(c) {
             return [escHtml(c.quarter), _num(c.size, fmtInt(c.size))].concat(c.cells.map(function(cell) {
-                return cell ? { html: _pct(cell.value), cls: "audience-cell audience-cell--seq text-center", style: "--heat: " + cell.percent + "%;" } : { html: "", cls: "audience-cell" };
+                return cell ? { html: _pct(cell.value), sort: cell.value, cls: "audience-cell audience-cell--seq text-center", style: "--heat: " + cell.percent + "%;" } : { html: "", cls: "audience-cell" };
             }));
-        }), { sortable: false });
+        }));
     target.innerHTML = html;
     _monthlyChart(document.getElementById("au-monthly"), data.monthly);
 }
@@ -470,8 +455,8 @@ function _monthlyChart(canvas, monthly) {
         data: {
             labels: monthly.map(function(m) { return m.month; }),
             datasets: [
-                { label: "Active commenters", data: monthly.map(function(m) { return m.active; }), borderColor: _css("--accent", "#4338ca"), backgroundColor: "transparent", pointRadius: 0, borderWidth: 2 },
-                { label: "First-time commenters", data: monthly.map(function(m) { return m.new; }), borderColor: _css("--div-neg", "#c2410c"), backgroundColor: "transparent", pointRadius: 0, borderWidth: 2 },
+                { label: "Active commenters", data: monthly.map(function(m) { return m.active; }), borderColor: pulpitTheme().series[0], backgroundColor: pulpitTheme().series[0], pointRadius: 0, borderWidth: 2 },
+                { label: "First-time commenters", data: monthly.map(function(m) { return m.new; }), borderColor: pulpitTheme().series[1], backgroundColor: pulpitTheme().series[1], pointRadius: 0, borderWidth: 2 },
             ],
         },
         options: {
@@ -503,10 +488,10 @@ function _channelCommenters(target, data) {
         { label: "On the posts of" },
         { label: "Comments", number: true },
         { label: "When" },
-        { label: "Also cited", title: "Whether the two channels forward or mention each other, either way, in any stored message" },
+        { label: "Also cited", title: "Whether the two channels forward or mention each other, either way, in any collected message" },
     ], data.pairs.map(function(r) {
-        var sender = r.sender ? _channel(r.sender) + (r.sender_in_target ? "" : " <span class=\"badge text-bg-secondary\">not in target</span>") :
-            escHtml(r.sender_name || "Unknown channel") + " <span class=\"text-muted small\">(not crawled, id " + escHtml(String(r.sender_tid)) + ")</span>";
+        var sender = r.sender ? _channel(r.sender) + (r.sender_in_target ? "" : " <span class=\"badge text-bg-secondary\">outside the studied set</span>") :
+            escHtml(r.sender_name || "Unnamed channel") + " <span class=\"text-muted small\">(not collected; Telegram id " + escHtml(String(r.sender_tid)) + ")</span>";
         var first = _month(r.first),
             last = _month(r.last);
         return [
@@ -514,7 +499,7 @@ function _channelCommenters(target, data) {
             { html: _channel(r.channel), sort: r.channel ? r.channel.label : "" },
             _num(r.comments, fmtInt(r.comments)),
             { html: first === last ? first : first + " – " + last, sort: r.first || "" },
-            { html: _isNil(r.cited) ? "<span class=\"text-muted\">—</span>" : (r.cited ? "yes" : "<strong>no</strong>"), sort: _isNil(r.cited) ? "" : (r.cited ? 1 : 0) },
+            { html: _isNil(r.cited) ? "<span class=\"text-muted\">" + MISSING + "</span>" : (r.cited ? "yes" : "no"), sort: _isNil(r.cited) ? "" : (r.cited ? 1 : 0) },
         ];
     }), { wide: true });
     target.innerHTML = html;
@@ -562,10 +547,11 @@ function _switch(key) {
     _loading = true;
     _load(key).then(function(payload) {
         _current = key;
+        loadRecovered();
         _render(payload);
         build_year_nav(_periods, _current, _switch, _events);
-    }).catch(function() {
-        document.getElementById("au-preamble").textContent = "Failed to load the audience of " + key + ".";
+    }).catch(function(err) {
+        loadFailed(err, "the audience of " + key);
     }).finally(function() {
         _loading = false;
     });
@@ -581,13 +567,5 @@ Promise.all([
     _periods = tl.periods.filter(function(p) { return p.has_audience; });
     if (_periods.length) build_year_nav(_periods, _current, _switch, _events);
 }).catch(function(err) {
-    console.error("audience: failed to load or render", err);
-    var msg = "Failed to load audience.json.";
-    if (window.location.protocol === "file:") {
-        msg += " The export bundle uses fetch() to load its JSON payloads, which most browsers refuse on file:// URLs. " +
-            "Open the bundle via the bundled start.sh (\"python -m http.server\") and browse it over http://localhost:8001 instead.";
-    } else if (err && err.message) {
-        msg += " (" + err.message + ")";
-    }
-    document.getElementById("au-preamble").textContent = msg;
+    loadFailed(err);
 });

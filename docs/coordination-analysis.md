@@ -79,7 +79,7 @@ Channels with no retained tie do not appear on the coordination map — it shows
 
 ### Timeline years
 
-With `--timeline-step year`, the coordination layer is recomputed **per year** with the same thresholds, and the coordination maps gain the same in-page year switcher as the main maps. Each year's layout is seeded from the full-range coordination layout and orientation-aligned to it, so channels stay put as you step through the years and what moves is the *tie structure* — pairs appearing, thickening, and dissolving. Two guarantees keep the switcher honest: a year's ties are always a subset of the full range's (event counts only grow with a wider window, so nothing can appear in a year that the full-range map lacks), and only years whose network survived the thresholds are listed — a year with forwards but no surviving synchrony simply does not appear.
+With a timeline (`--timeline-step`), the coordination layer is recomputed **per period** with the same thresholds, and the coordination maps gain the same period navigator as the main maps. Each period's layout is seeded from the full-range coordination layout and orientation-aligned to it, so channels stay put as you step through the periods and what moves is the *tie structure* — pairs appearing, thickening, and dissolving. Two guarantees keep the navigator honest: a period's ties are always a subset of the full range's (event counts only grow with a wider window, so nothing can appear in a period that the full-range map lacks), and only periods whose network survived the thresholds are listed — a period with forwards but no surviving synchrony simply does not appear.
 
 ---
 

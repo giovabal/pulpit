@@ -84,6 +84,7 @@ export function addSvgZoomPan(container, scrollDiv, svg) {
         btn.style.cssText = "padding:1px 10px;font-size:13px;line-height:1.4;";
         btn.textContent = b[0];
         btn.title = b[1];
+        btn.setAttribute("aria-label", b[1]);
         btn.addEventListener("click", b[2]);
         ctrl.appendChild(btn);
     });

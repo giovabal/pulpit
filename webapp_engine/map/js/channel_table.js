@@ -1,7 +1,7 @@
 import { build_year_nav } from './year_nav.js';
 import { mini_hist } from './charts.js';
 import { canonical_strategy_key, strategy_label } from './labels.js';
-import { fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
+import { communityName, fetchJson, fetchJsonOrNull, isCompareDataDir, loadFailed, loadRecovered, periodDataDir, readTimeline, scopeLine } from './utils.js';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 var BASE_KEYS = ["fans", "messages_count", "in_deg", "out_deg"];
@@ -9,36 +9,38 @@ var INFLUENCE_KEYS = { "pagerank": 1, "hits_hub": 1, "hits_authority": 1, "in_de
 var STRUCTURAL_KEYS = { "burt_constraint": 1, "within_module_z": 1, "participation": 1, "participation_weighted": 1, "reciprocity": 1, "david_score": 1 };
 var CONTENT_KEYS = { "content_originality": 1, "visual_originality": 1, "amplification_factor": 1, "diffusion_lag": 1 };
 var LINK_KEYS = { "link_share": 1, "distinct_sites": 1, "platform_diversity": 1, "monetisation_share": 1, "mainstream_share": 1, "alternative_share": 1 };
+// Columns named as shares: written as percentages, like every share of the export pages.
+var SHARE_KEYS = { "link_share": 1, "monetisation_share": 1, "mainstream_share": 1, "alternative_share": 1 };
 var POSITION_ORDER = ["in_deg", "out_deg", "fans", "messages_count"];
-var POSITION_LABELS = { "in_deg": "In-strength", "out_deg": "Out-strength", "fans": "Users", "messages_count": "Messages" };
+var POSITION_LABELS = { "in_deg": "In-strength", "out_deg": "Out-strength", "fans": "Subscribers", "messages_count": "Messages" };
 var COL_TOOLTIPS = {
     "in_deg": "In-strength: summed raw weights of incoming ties (forwards + mentions received); higher → more heavily cited",
     "out_deg": "Out-strength: summed raw weights of outgoing ties (forwards + mentions made); higher → cites more heavily",
-    "fans": "Number of subscribers / followers at crawl time",
-    "messages_count": "Number of messages collected in the analysis period",
+    "fans": "Number of subscribers when the channel was last collected",
+    "messages_count": "Number of messages collected in the period analysed",
     "pagerank": "PageRank: steady-state visit probability in a random walk; higher → more central",
     "hits_hub": "HITS hub score: propensity to link to authoritative channels; high → important aggregator",
     "hits_authority": "HITS authority score: propensity to be cited by hub channels; high → important source",
-    "in_degree_centrality": "Normalized in-degree centrality: in-degree / (n−1)",
-    "out_degree_centrality": "Normalized out-degree centrality: out-degree / (n−1)",
+    "in_degree_centrality": "Normalised in-degree centrality: the number of channels citing it, divided by n − 1",
+    "out_degree_centrality": "Normalised out-degree centrality: the number of channels it cites, divided by n − 1",
     "burt_constraint": "Burt’s constraint (0–1): 0 → structural-hole broker, 1 → embedded in a closed clique",
-    "within_module_z": "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; pairs with the Role column",
-    "participation": "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's neighbours spread across communities, each neighbour counted once; 0 → all inside one community, → 1 → a cross-community bridge. The continuous score behind the Role column's connector labels",
-    "participation_weighted": "Weighted participation coefficient (0–1): as Participation, but each neighbour counts its tie weight (both directions summed), so it follows the edge-weight strategy — how evenly the channel's citation volume spreads across communities. Does not drive the Role column",
-    "david_score": "David's score (dominance): sum of the channel's dyadic dominance proportions over its citation partners — each pair's citations split in proportion to the dependence each side places on the other, corrected for sparse dyads (de Vries et al. 2006); positive → its partners rely on it more than it relies on them, negative → dependent; null for channels with no dyad above the evidence floor. From the Dominance analysis",
-    "reciprocity": "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; null for isolated channels",
+    "within_module_z": "Within-module degree z-score (Guimerà & Amaral 2005): how much of a hub the channel is inside its own community; read it with the Module role column",
+    "participation": "Participation coefficient (0–1, Guimerà & Amaral 2005): how evenly the channel's neighbours spread across communities, each neighbour counted once; 0 → all inside one community, → 1 → a cross-community bridge. The continuous score behind the connector roles of the Module role column",
+    "participation_weighted": "Weighted participation coefficient (0–1): as Participation, but each neighbour counts its tie weight (both directions summed), so it follows the way ties are weighted — how evenly the channel's citation volume spreads across communities. It does not decide the Module role",
+    "david_score": "David's score (dominance): sum of the channel's dyadic dominance proportions over its citation partners — each pair's citations split in proportion to the dependence each side places on the other, corrected for sparse dyads (de Vries et al. 2006); positive → its partners rely on it more than it relies on them, negative → dependent; no value for channels with no pair of enough citations. From the Dominance analysis",
+    "reciprocity": "Reciprocity (0–1): share of the channel's citation partners that are mutual; 1 → every partner is a two-way alliance, 0 → purely one-way ties; no value for channels with no tie",
     "content_originality": "Content originality (0–1): share of messages that are not forwards",
     "visual_originality": "Visual originality (0–1): share of picture posts whose images are not copies of another channel's earlier post",
-    "amplification_factor": "Amplification factor: forwards received from tracked channels per own message",
-    "link_share": "Linking posts share (0–1): share of the channel's messages carrying at least one outbound web link (t.me excluded). From the Outbound links analysis",
+    "amplification_factor": "Amplification factor: forwards received from the studied channels per own message",
+    "link_share": "Linking posts share: share of the channel's messages carrying at least one outbound web link (links to Telegram excluded). From the Outbound links analysis",
     "distinct_sites": "Distinct sites: number of different web sites the channel links to in the period",
-    "platform_diversity": "Platform diversity: effective number of equally used link categories (Hill number of order 2 over the categorised links; 1 → all in one category). Null when no link is categorised",
-    "monetisation_share": "Monetisation link share (0–1): share of the channel's links pointing to donation and shop sites (categories with the Monetisation role); a lower bound while sites stay uncategorised",
-    "mainstream_share": "Mainstream link share (0–1): share of the channel's links pointing to mainstream platforms (Mainstream role) — its exposure to mainstream moderation; a lower bound while sites stay uncategorised",
-    "alternative_share": "Alternative link share (0–1): share of the channel's links pointing to alternative platforms (Alternative role); a lower bound while sites stay uncategorised",
-    "diffusion_lag": "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; null for channels with no dated forwards.",
-    "sbm_confidence": "SBM assignment confidence (0–1): share of posterior MCMC samples agreeing with the reported block, from SBM(refine=MCMC); low → the channel's structural role is ambiguous",
-    "environment_depth": "Environment depth: citation hops from the monitored channels — 0 in target, k for an environment channel the crawler reached k hops out, 1 for a dead leaf",
+    "platform_diversity": "Platform diversity: effective number of equally used link categories (Hill number of order 2 over the categorised links; 1 → all in one category). No value when no link is categorised",
+    "monetisation_share": "Monetisation link share: share of the channel's links pointing to donation and shop sites; a lower bound while sites stay uncategorised",
+    "mainstream_share": "Mainstream link share: share of the channel's links pointing to mainstream platforms — its exposure to mainstream moderation; a lower bound while sites stay uncategorised",
+    "alternative_share": "Alternative link share: share of the channel's links pointing to alternative platforms; a lower bound while sites stay uncategorised",
+    "diffusion_lag": "Diffusion lag (median hours): typical delay between original post and this channel's forward — median, not mean, because forwarding lags are heavy-tailed. Low → early adopter, high → late amplifier; no value for channels with no dated forwards.",
+    "sbm_confidence": "Assignment confidence (0–1): share of the block model's sampled fits that put the channel in the reported block; low → the channel's structural role is ambiguous",
+    "environment_depth": "Environment depth: citation steps from the studied channels — 0 for a studied channel, k for a channel of their environment reached k steps out, 1 for a channel that is only cited",
 };
 
 // Parameterised measures may be requested more than once, each producing a parameter-suffixed
@@ -73,7 +75,7 @@ function roleCompanion(numericKey) {
         return {
             roleKey: "module_role" + suffix,
             roleLabel: "Module role",
-            tip: "Guimerà–Amaral within-module role (from the MODULEROLE measure)"
+            tip: "Role of the channel within and across communities (Guimerà & Amaral 2005), read from its within-module z and its participation coefficient"
         };
     return null;
 }
@@ -85,7 +87,6 @@ var _current_year = "all";
 var _base_dd = _dd;
 var _no_timeline = isCompareDataDir(_dd);
 var _tl_events = [];
-var _tl_overlapping = false;
 var _ty = [];
 var _all_years = []; // ordered year numbers, derived from _ty
 var _cache = {};
@@ -212,17 +213,7 @@ function _render(d) {
     var preambleTarget = document.getElementById("channel-preamble");
     if (preambleTarget) {
         preambleTarget.innerHTML = "";
-        if (meta) {
-            var pEl = document.createElement("p");
-            pEl.className = "table-preamble";
-            var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
-            parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
-            if (meta.start_date || meta.end_date)
-                parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
-            parts.push("Exported " + meta.export_date + ".");
-            pEl.textContent = parts.join(" ");
-            preambleTarget.appendChild(pEl);
-        }
+        if (meta) preambleTarget.appendChild(scopeLine(meta));
     }
 
     // Sort by in_deg descending
@@ -306,17 +297,17 @@ function _render(d) {
         if (tip) th.title = tip;
         htr.appendChild(th);
     }
-    addTh("#", "number", false, "Initial rank by inbound links");
+    addTh("#", "number", false, "Rank by in-strength");
     addTh("Channel", "", false);
     if (has_env_depth) addTh("Environment depth", "number", false, COL_TOOLTIPS.environment_depth);
     cols.forEach(function(col) { addTh(col.label, "number", col.groupStart || false, COL_TOOLTIPS[canonicalKey(col.key)] || ""); });
     roleCols.forEach(function(rc, i) { addTh(rc.label, "", i === 0, rc.tip); });
     var stratGroupStart = true;
     strategies.forEach(function(s) {
-        addTh(strategy_label(s), "", stratGroupStart, "Community label assigned by the " + strategy_label(s) + " strategy");
+        addTh(strategy_label(s), "", stratGroupStart, "Community the channel falls in: " + strategy_label(s));
         stratGroupStart = false;
     });
-    addTh("Activity", "", true, "Date range of channel activity in the crawled dataset (start–end)");
+    addTh("Activity", "", true, "First and last month with collected messages");
     thead.appendChild(htr);
 
     // tbody
@@ -366,7 +357,8 @@ function _render(d) {
             var btn = document.createElement("button");
             btn.type = "button";
             btn.className = "channel-toggle";
-            btn.title = "Year-by-year charts";
+            btn.title = "Charts by period";
+            btn.setAttribute("aria-label", "Charts by period");
             btn.innerHTML = '<i class="bi bi-bar-chart-steps" aria-hidden="true"></i>';
             (function(b, row, n) { b.addEventListener("click", function() { _toggle_row(b, row, n); }); })(btn, tr, node);
             nameWrap.appendChild(btn);
@@ -386,12 +378,12 @@ function _render(d) {
         if (has_env_depth) {
             var depth = node.environment_depth;
             var depthStr = (depth === null || depth === undefined) ? "" : String(depth);
-            addTd(depthStr || "—", "number", depthStr, "", "", false);
+            addTd(depthStr || MISSING, "number", depthStr, "", "", false);
         }
 
         cols.forEach(function(col) {
             var val = node[col.key];
-            var displayStr = col.isBase ? fmtInt(val) : sigFig(val, 3);
+            var displayStr = col.isBase ? fmtInt(val) : (SHARE_KEYS[canonicalKey(col.key)] ? fmtShare(val) : sigFig(val, 3));
             var sortV = col.isBase ? (val !== null && val !== undefined ? String(val) : "") : numSortVal(val);
             var td = addTd(displayStr, "number", sortV, colBg(col, val), "", col.groupStart || false);
             if (has_spark && !_SPARK_SKIP[col.key]) {
@@ -399,16 +391,16 @@ function _render(d) {
                 td.dataset.displayVal = displayStr;
             }
         });
-        roleCols.forEach(function(rc, i) { addTd(node[rc.key] || "—", "", node[rc.key] || "", "", "", i === 0); });
+        roleCols.forEach(function(rc, i) { addTd(node[rc.key] || MISSING, "nowrap", node[rc.key] || "", "", "", i === 0); });
         var firstStrategy = true;
         strategies.forEach(function(s) {
             var comm = (node.communities || {})[s];
-            addTd(comm !== undefined ? String(comm) : "", "", "", "", "", firstStrategy);
+            addTd(comm !== undefined && comm !== null ? communityName(comm) : MISSING, "nowrap", "", "", "", firstStrategy);
             firstStrategy = false;
         });
         var start = node.activity_start || "",
             end = node.activity_end || "";
-        addTd(start && end ? start + "–" + end : start || end || "—", "", start || end || "", "", "", true);
+        addTd(start && end ? start + " – " + end : start || end || MISSING, "nowrap", start || end || "", "", "", true);
 
         fragment.appendChild(tr);
     });
@@ -417,9 +409,10 @@ function _render(d) {
     // tfoot — Mean ± SD per numeric column
     function colMeanSd(key) {
         var vals = nodes.map(function(n) { return n[key]; }).filter(function(v) { return v !== null && v !== undefined; });
-        if (!vals.length) return "—";
+        if (!vals.length) return MISSING;
         var mean = vals.reduce(function(a, b) { return a + b; }, 0) / vals.length;
         var sd = Math.sqrt(vals.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / vals.length);
+        if (SHARE_KEYS[canonicalKey(key)]) return fmtShare(mean) + " ± " + fmtShare(sd);
         return sigFig(mean, 3) + " ± " + sigFig(sd, 3);
     }
     var tfoot = document.createElement("tfoot");
@@ -449,7 +442,7 @@ function _render(d) {
     table.appendChild(tfoot);
 
     document.getElementById("channel-count").textContent =
-        nodes.length + " channel" + (nodes.length !== 1 ? "s" : "") + ". Click column headers to sort.";
+        fmtInt(nodes.length) + " channel" + (nodes.length !== 1 ? "s" : "") + ".";
     initSortableTables();
 
     // Re-expand rows that were open before this render (year switch keeps sparklines alive).
@@ -470,10 +463,20 @@ function _render(d) {
 // ── Year switching ─────────────────────────────────────────────────────────────
 function _switch_year(year) {
     if (year === _current_year || _loading) return;
+    var prev = _current_year;
     _current_year = year;
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year, _tl_events);
-    _fetch_year(year).then(function(d) { return _render(d); }).then(function() { _loading = false; }).catch(function() { _loading = false; });
+    _fetch_year(year).then(function(d) {
+        loadRecovered();
+        return _render(d);
+    }).then(function() { _loading = false; }).catch(function(err) {
+        // The table still shows the previous period: the selector goes back to it.
+        _current_year = prev;
+        _loading = false;
+        build_year_nav(_ty, _current_year, _switch_year, _tl_events);
+        loadFailed(err, "the channels of " + year);
+    });
 }
 
 // ── Initial load ───────────────────────────────────────────────────────────────
@@ -487,13 +490,10 @@ Promise.all([
     var timeline = results[3];
     var _tl = readTimeline(_no_timeline ? null : timeline);
     _tl_events = _tl.events;
-    _tl_overlapping = _tl.overlapping;
     _ty = _tl.periods.filter(function(y) { return y.has_channel_html; });
     _all_years = _ty.map(function(y) { return y.key; });
     _render(_cache[_current_year]);
     if (_ty.length) build_year_nav(_ty, _current_year, _switch_year, _tl_events);
 }).catch(function(err) {
-    var el = document.getElementById("channel-preamble");
-    if (el) el.textContent = "Failed to load data.";
-    console.error("channel_table:", err);
+    loadFailed(err);
 });

@@ -8,7 +8,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from network import publication, tables
+from network import exporter, publication, site, tables
 from webapp.models import Project
 from webapp_engine.command_logging import styled_warning_logs
 
@@ -74,6 +74,15 @@ class Command(BaseCommand):
         if not target_name:
             raise CommandError("--target is required: specify the name of the export to write comparison files into.")
         root_target = str(Path(settings.BASE_DIR) / "exports" / target_name)
+        # Both exports must be this version's kind of site: the pages of the two are combined under one set of
+        # scripts and styles, and an export made before pages carried the shared navigation has neither the
+        # markers the site pass fills nor the scripts its own pages were written for.
+        for role, folder in (("target", root_target), ("compared", compare_dir)):
+            if os.path.isfile(os.path.join(folder, "index.html")) and not site.is_site(folder):
+                raise CommandError(
+                    f"The {role} export ({folder}) was made by an earlier version of Pulpit and cannot be combined "
+                    "with this version's pages. Run its structural analysis again, then compare."
+                )
         # Create the target before anything writes into it: copy_compare_project / the table writers
         # below open files directly in root_target, so the directory must already exist.
         os.makedirs(root_target, exist_ok=True)
@@ -87,55 +96,19 @@ class Command(BaseCommand):
         except ValueError as exc:
             raise CommandError(f"--public-url: {exc}") from exc
 
-        def exists(name: str) -> bool:
-            return os.path.isfile(os.path.join(root_target, name))
-
         self.stdout.write("- compare analysis files")
-        compare_files = tables.copy_compare_project(compare_dir, root_target)
+        exporter.copy_shared_assets(root_target)
+        tables.copy_compare_project(compare_dir, root_target)
         self.stdout.write("- comparison table (html)")
         tables.write_network_compare_table_html(
             output_filename=os.path.join(root_target, "network_compare_table.html"),
             seo=seo,
             project_title=project_title,
         )
-        self.stdout.write("- index")
-        tables.write_index_html(
-            output_filename=os.path.join(root_target, "index.html"),
-            seo=seo,
-            project_title=project_title,
-            include_graph=exists("graph.html"),
-            include_3d_graph=exists("graph3d.html"),
-            include_channel_html=exists("channel_table.html"),
-            include_channel_xlsx=exists("channel_table.xlsx"),
-            include_network_html=exists("network_table.html"),
-            include_network_xlsx=exists("network_table.xlsx"),
-            include_community_html=exists("community_table.html"),
-            include_community_xlsx=exists("community_table.xlsx"),
-            include_consensus_matrix_html=exists("consensus_matrix.html"),
-            include_structural_similarity=exists("structural_similarity.html"),
-            include_behavioural_equivalence=exists("behavioural_equivalence.html"),
-            # Probed like the flags above: this command rewrites a live export's
-            # index, and write_index_html defaults every include_* to False — omitting
-            # these would silently drop the cards for analyses that are still on disk.
-            include_vacancy_analysis=exists("vacancy_analysis.html"),
-            include_robustness_html=exists("robustness_table.html"),
-            include_robustness_xlsx=exists("robustness_table.xlsx"),
-            include_interest_structural=exists("interest_structural.html"),
-            include_coordination_2d=exists("coordination.html"),
-            include_coordination_3d=exists("coordination3d.html"),
-            include_dominance_html=exists("dominance.html"),
-            include_dominance_xlsx=exists("dominance.xlsx"),
-            include_dyads=os.path.isdir(os.path.join(root_target, "dyads")),
-            include_event_impact_html=exists("events.html"),
-            include_event_impact_xlsx=exists("event_impact.xlsx"),
-            include_links_html=exists("links.html"),
-            include_links_xlsx=exists("links.xlsx"),
-            include_audience_html=exists("audience.html"),
-            include_audience_xlsx=exists("audience.xlsx"),
-            include_compare_html=True,
-            compare_files=compare_files,
-        )
-        written = publication.publish(root_target, seo=seo, public_url=public_url, site_name=project_title)
+        # The landing page, the navigation and the data dictionary are rebuilt from the files now on disk, the
+        # compared copies included, and the publication policy is applied to every page.
+        self.stdout.write("- overview, navigation, methods record and data dictionary")
+        written = site.finalise(root_target, project_title=project_title, seo=seo, public_url=public_url)
         self.stdout.write(f"- publication: {'search-optimised' if seo else 'private'} — {', '.join(written)}")
 
         self.stdout.write(self.style.SUCCESS("\nDone."))

@@ -88,7 +88,7 @@ def labelgroup_display_labels() -> dict[str, str]:
 # its own picker — the MODULEROLE basis select, the table / CSV / GEXF export columns, and the viewer's
 # colour-by selector (mirrored by ``strategy_label`` in webapp_engine/map/js/labels.js). Inside the
 # Operations "Label groups" fieldset the bare name is shown, since the context is already unambiguous.
-CUSTOM_LABEL_SUFFIX = " [custom label]"
+CUSTOM_LABEL_SUFFIX = " (label group)"
 
 
 def custom_label_display(name: str) -> str:

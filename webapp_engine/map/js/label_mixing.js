@@ -4,17 +4,8 @@
 // computed server-side by network/label_mixing.py (assortativity, inbreeding homophily, label flows,
 // all tested against label permutations) and network/mrqap.py (MRQAP with double semi-partialling).
 
-var Q_THRESHOLD = 0.05;
 // Above this many labels the flow matrix starts collapsed.
 var FLOW_OPEN_MAX_LABELS = 12;
-
-function _stars(q) {
-    if (q === null || q === undefined) return "";
-    if (q < 0.001) return "***";
-    if (q < 0.01) return "**";
-    if (q < Q_THRESHOLD) return "*";
-    return "";
-}
 
 function _el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -24,10 +15,10 @@ function _el(tag, cls, text) {
 }
 
 function _test_text(test) {
-    if (!test || test.value === null || test.value === undefined) return "—";
+    if (!test || isNil(test.value)) return MISSING;
     var s = sigFig(test.value, 3);
     if (test.null_mean !== null && test.null_mean !== undefined)
-        s += " (expected " + sigFig(test.null_mean, 3) + (test.p !== null && test.p !== undefined ? ", p = " + sigFig(test.p, 2) : "") + ")";
+        s += " (expected " + sigFig(test.null_mean, 3) + (isNil(test.p) ? "" : ", " + pText(test.p)) + ")";
     return s;
 }
 
@@ -68,7 +59,8 @@ var LABEL_COLUMNS = [{
     key: "out_of_scope_citations_share",
     label: "Out-of-scope share",
     num: true,
-    tip: "Share of the label's citations going to channels with no label in this group or to out-of-target channels (descriptive). Out-of-target sources are in the graph only with dead leaves drawn or the environment admitted"
+    share: true,
+    tip: "Share of the label's citations going to channels with no label in this group or to channels outside the studied set (descriptive)"
 }];
 
 function _label_table(group, idPrefix) {
@@ -95,13 +87,13 @@ function _label_table(group, idPrefix) {
             if (!col.num) {
                 td.textContent = val;
             } else {
-                td.textContent = col.int ? fmtInt(val) : sigFig(val, 3);
+                td.textContent = col.int ? fmtInt(val) : (col.share ? fmtShare(val) : sigFig(val, 3));
                 if (col.q) {
-                    var star = _stars(row[col.q]);
+                    var star = sigStars(row[col.q]);
                     if (star) td.appendChild(_el("span", "text-muted ms-1", star));
                     var p = row[col.q.replace(/_q$/, "_p")];
                     if (row[col.q] !== null && row[col.q] !== undefined)
-                        td.title = "H = " + sigFig(row[col.key.replace("ih_", "h_")], 3) + ", p = " + sigFig(p, 2) + ", q = " + sigFig(row[col.q], 2);
+                        td.title = "H = " + sigFig(row[col.key.replace("ih_", "h_")], 3) + ", " + pText(p) + ", " + pText(row[col.q], "q");
                 }
                 if (val !== null && val !== undefined) td.setAttribute("data-sort-value", String(val));
             }
@@ -134,7 +126,7 @@ function _flow_matrix(group) {
     wrap.style.overflowX = "auto";
     var table = _el("table", "table table-sm table-bordered comparison-matrix label-flow-matrix");
     table.style.cssText = "width:auto;min-width:0;font-size:.8rem;";
-    var cap = _el("caption", "text-muted small", "Rows cite columns. Cell = ties between the labels' channels; colour = observed / expected under label permutations (red over-, blue under-represented), for tested cells only; * = BH q < 0.05. Hover a cell for the counts.");
+    var cap = _el("caption", "text-muted small", "Rows cite columns. Cell = ties between the labels' channels; colour = observed / expected under label permutations (blue over-, orange under-represented), for tested cells only. " + sigLegend("q") + " Hover a cell for the counts.");
     cap.style.captionSide = "top";
     table.appendChild(cap);
     var thead = _el("thead");
@@ -157,20 +149,20 @@ function _flow_matrix(group) {
             var ties = flows.ties[i][j],
                 q = flows.q[i][j],
                 ratio = flows.ratio[i][j];
-            var td = _el("td", "number", ties ? fmtInt(ties) : "·");
+            var td = _el("td", "number", fmtInt(ties || 0));
             var tested = q !== null && q !== undefined;
             if (tested && ratio !== null && ratio > 0) {
                 var style = divergingHeatmapBg(Math.log2(ratio), 0, -extent, extent);
-                if (style) td.setAttribute("style", style + ";color:#1c1917");
+                if (style) td.setAttribute("style", style);
             } else if (tested && ratio === 0) {
-                td.setAttribute("style", divergingHeatmapBg(-extent, 0, -extent, extent) + ";color:#1c1917");
+                td.setAttribute("style", divergingHeatmapBg(-extent, 0, -extent, extent));
             } else {
                 td.classList.add("text-muted");
             }
-            if (tested && q < Q_THRESHOLD) td.appendChild(document.createTextNode("*"));
-            var tip = labels[i] + " → " + labels[j] + ": " + ties + " ties, " + flows.citations[i][j] + " citations; expected " +
+            if (tested && sigStars(q)) td.appendChild(_el("span", "text-muted ms-1", sigStars(q)));
+            var tip = labels[i] + " → " + labels[j] + ": " + fmtInt(ties) + " ties, " + fmtInt(flows.citations[i][j]) + " citations; expected " +
                 sigFig(flows.expected_ties[i][j], 3) + " ties";
-            if (tested) tip += " (ratio " + sigFig(ratio, 3) + ", z = " + sigFig(flows.z[i][j], 3) + ", q = " + sigFig(q, 2) + ")";
+            if (tested) tip += " (ratio " + sigFig(ratio, 3) + ", z = " + sigFig(flows.z[i][j], 3) + ", " + pText(q, "q") + ")";
             else tip += " (not tested: fewer than 3 ties observed and expected)";
             td.title = tip;
             tr.appendChild(td);
@@ -190,25 +182,26 @@ export function render_label_mixing(target, payload) {
         return;
     }
     target.classList.remove("d-none");
-    target.appendChild(_el("h3", "mt-4 mb-1", "Homophily by label group"));
+    target.appendChild(_el("h2", "", "Homophily by label group"));
     target.appendChild(_el("p", "text-muted small mb-3",
         "Do citations stay inside the analyst's labels (nation, region, …) more than the labels' sizes predict? " +
         "Every statistic is compared with " + fmtInt(payload.permutations) + " random relabellings of the same channels " +
-        "(the graph fixed), so a large label is not mistaken for an inward-looking one. Only observed channels holding a " +
+        "(the network fixed), so a large label is not mistaken for an inward-looking one. Only observed channels holding a " +
         "label in the group take part."));
     payload.groups.forEach(function(group) {
         var idPrefix = "mixing-" + group.key;
-        var h4 = _el("h4", "h5 mt-3 mb-1", group.group);
-        h4.id = idPrefix + "-h";
-        target.appendChild(h4);
+        var h3 = _el("h3", "", group.group);
+        h3.id = idPrefix + "-h";
+        target.appendChild(h3);
         target.appendChild(_el("p", "small mb-2",
             fmtInt(group.channels) + " channels, " + fmtInt(group.ties) + " ties between them (" + fmtInt(group.citations) + " citations). " +
             "Assortativity r: " + _test_text(group.assortativity.ties) + " on ties, " + _test_text(group.assortativity.citations) +
             " on citations. E-I index: " + _test_text(group.ei_index) + "."));
-        var h5 = _el("h5", "h6 mb-1", "Per label");
-        h5.id = idPrefix + "-labels-h";
-        target.appendChild(h5);
+        var h4 = _el("h4", "", "Per label");
+        h4.id = idPrefix + "-labels-h";
+        target.appendChild(h4);
         target.appendChild(_label_table(group, idPrefix));
+        target.appendChild(_el("p", "text-muted small mt-1", sigLegend("q")));
         var details = _el("details", "mb-4");
         if (group.labels.length <= FLOW_OPEN_MAX_LABELS) details.open = true;
         details.appendChild(_el("summary", "small", "Citation flows between labels (" + group.labels.length + " × " + group.labels.length + ")"));
@@ -226,7 +219,7 @@ export function render_mrqap(target, payload) {
         return;
     }
     target.classList.remove("d-none");
-    target.appendChild(_el("h3", "mt-4 mb-1", "Dyadic regression (MRQAP)"));
+    target.appendChild(_el("h2", "", "Dyadic regression (MRQAP)"));
     if (payload.skipped) {
         target.appendChild(_el("p", "text-muted", "Not computed: " + payload.skipped + "."));
         return;
@@ -240,12 +233,12 @@ export function render_mrqap(target, payload) {
     var row = _el("div", "row g-4");
     payload.models.forEach(function(model, m) {
         var col = _el("div", "col-lg-6");
-        var h5 = _el("h4", "h6 mb-1", model.label + " — R² = " + sigFig(model.r2, 3));
-        h5.id = "mrqap-model-" + m;
-        col.appendChild(h5);
+        var h3 = _el("h3", "", model.label + " — R² = " + sigFig(model.r2, 3));
+        h3.id = "mrqap-model-" + m;
+        col.appendChild(h3);
         var wrap = _el("div", "table-responsive");
-        var table = _el("table", "table table-sm table-hover");
-        table.setAttribute("aria-labelledby", h5.id);
+        var table = _el("table", "table table-sm table-hover sortable");
+        table.setAttribute("aria-labelledby", h3.id);
         var thead = _el("thead");
         var htr = _el("tr");
         [
@@ -266,11 +259,14 @@ export function render_mrqap(target, payload) {
         model.coefficients.forEach(function(c) {
             var tr = _el("tr");
             tr.appendChild(_el("td", "", c.label));
-            tr.appendChild(_el("td", "number", sigFig(c.coef, 3)));
-            tr.appendChild(_el("td", "number", sigFig(c.beta, 3)));
-            tr.appendChild(_el("td", "number", sigFig(c.t, 3)));
-            var pTd = _el("td", "number", sigFig(c.p, 2));
-            var star = _stars(c.p);
+            [c.coef, c.beta, c.t].forEach(function(value) {
+                var td = _el("td", "number", sigFig(value, 3));
+                if (!isNil(value)) td.setAttribute("data-sort-value", String(value));
+                tr.appendChild(td);
+            });
+            var pTd = _el("td", "number", fmtP(c.p));
+            if (!isNil(c.p)) pTd.setAttribute("data-sort-value", String(c.p));
+            var star = sigStars(c.p);
             if (star) pTd.appendChild(_el("span", "text-muted ms-1", star));
             tr.appendChild(pTd);
             tbody.appendChild(tr);
@@ -284,5 +280,6 @@ export function render_mrqap(target, payload) {
     target.appendChild(_el("p", "text-muted small mt-2",
         "The tie model is a linear probability model; the reverse tie is endogenous and is read as a control for reciprocity, " +
         "not as a cause. With nested groups (nation inside continent) the finer one reads as the effect beyond the coarser. " +
-        "Stars: p < 0.05 / 0.01 / 0.001."));
+        sigLegend("p")));
+    initSortableTables();
 }

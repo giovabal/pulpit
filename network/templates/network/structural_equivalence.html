@@ -1,0 +1,15 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p><strong>Structural equivalence</strong> (Lorrain &amp; White 1971) is the cosine between two channels'
+  <em>tie profiles</em>: their weighted citations to, and from, every other channel. Two channels score 1 when they
+  cite, and are cited by, the same channels with the same relative intensity: they hold interchangeable positions in
+  the network, whether or not they cite each other. The pair's own tie is left out of both profiles.</p>
+  <p>The <a href="behavioural_equivalence.html">behavioural equivalence</a> matrix asks the complementary question:
+  which channels act alike, wherever they sit.</p>
+</details>
+<div id="structural-similarity-container" class="export-wide"></div>
+<script type="module" src="js/structural_equivalence.js"></script>
+{% endblock %}

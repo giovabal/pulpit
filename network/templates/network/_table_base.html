@@ -27,6 +27,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/site.css" type="text/css">
   <link rel="stylesheet" href="css/tables.css" type="text/css">
   <link rel="stylesheet" href="css/a11y.css" type="text/css">
 </head>
@@ -34,10 +35,11 @@
   {% include "network/_skip_link.html" %}
   <nav class="export-topnav" aria-label="Site navigation">
     <div class="export-topnav-inner">
-      <a href="index.html" class="export-topnav-brand">
-        <img src="pulpit_logo.svg" alt="Pulpit">
+      <a href="index.html" class="export-topnav-brand" title="Overview">
+        <img src="pulpit_logo.svg" alt="Overview">
       </a>
-      <div class="theme-toggle btn-group btn-group-sm ms-auto" role="group" aria-label="Theme">
+      <!-- pulpit:sitenav --><!-- /pulpit:sitenav -->
+      <div class="theme-toggle btn-group btn-group-sm" role="group" aria-label="Theme">
         <button type="button" class="btn btn-outline-secondary" data-theme-set="light" title="Light theme" aria-label="Light theme"><i class="bi bi-sun" aria-hidden="true"></i></button>
         <button type="button" class="btn btn-outline-secondary" data-theme-set="auto" title="Auto (follow system)" aria-label="Auto theme"><i class="bi bi-circle-half" aria-hidden="true"></i></button>
         <button type="button" class="btn btn-outline-secondary" data-theme-set="dark" title="Dark theme" aria-label="Dark theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
@@ -45,8 +47,29 @@
     </div>
   </nav>
   <main id="main-content" class="export-wrap" tabindex="-1">
+    {% block page_head %}
+    <header class="export-page-head">
+      <div class="export-page-head-text">
+        <h1 class="export-title">{{ page.title }}</h1>
+        {% if page.question %}<p class="export-lede">{{ page.question }}</p>{% endif %}
+      </div>
+      <div class="export-page-tools"><!-- pulpit:pagetools -->{% if page.doc_url %}<a href="{{ page.doc_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>{% endif %}<!-- /pulpit:pagetools --></div>
+    </header>
+    {% endblock %}
     {% block content %}{% endblock %}
   </main>
+  <footer class="export-footer">
+    <span class="export-footer-title">{% if project_title %}{{ project_title }} · {% endif %}{{ page.title }}</span>
+    <span class="export-footer-credit">
+      {% if generated %}Generated {{ generated }} ·{% endif %}
+      Analysed with
+      <a href="{{ repository_url }}" target="_blank" rel="noopener noreferrer">
+        <img src="pulpit_logo.svg" alt="Pulpit" class="export-footer-logo">
+      </a>
+      {% if app_version %}<span class="export-footer-version">v{{ app_version }}</span>{% endif %}
+      · <a href="index.html#cite">How to cite</a>
+    </span>
+  </footer>
   {% include "network/_a11y_live.html" %}
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
   <script>
@@ -64,6 +87,7 @@
         });
       }
       applyTheme(currentPref());
+      // Charts read the theme's colours once, when drawn: a change of theme reloads the page.
       document.querySelectorAll("[data-theme-set]").forEach(function (b) {
         b.addEventListener("click", function () {
           var pref = b.getAttribute("data-theme-set");
@@ -73,22 +97,14 @@
       });
       if (window.matchMedia) {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
-          if (currentPref() === "auto") applyTheme("auto");
+          if (currentPref() === "auto") location.reload();
         });
       }
     })();
   </script>
   <script src="js/a11y.js"></script>
+  <script src="js/format.js"></script>
   <script src="js/tables_sort.js"></script>
-  <footer class="export-footer">
-    <span class="export-footer-title">{{ title }}</span>
-    <span class="export-footer-credit">
-      Analyzed with
-      <a href="{{ repository_url }}" target="_blank" rel="noopener noreferrer">
-        <img src="pulpit_logo.svg" alt="Pulpit" class="export-footer-logo">
-      </a>
-      {% if app_version %}<span class="export-footer-version">v{{ app_version }}</span>{% endif %}
-    </span>
-  </footer>
+  <script src="js/page.js"></script>
 </body>
 </html>

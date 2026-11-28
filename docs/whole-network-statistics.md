@@ -19,9 +19,9 @@ Metrics are organized into selectable groups. Controlled via `--network-stat-gro
 | Group | Metrics | Cost |
 | :---- | :------ | :--- |
 | `SIZE` | Nodes, Edges, Density | Low |
-| `PATHS` | Reciprocity, Avg Clustering, Avg Path Length, Diameter, Directed variants | Medium–High |
-| `COHESION` | Transitivity, Global Efficiency, Algebraic Connectivity, Degree CV | High |
-| `COMPONENTS` | WCC count, Largest WCC, SCC count, Largest SCC | Low |
+| `PATHS` | Reciprocity, mean clustering, mean path length, diameter, directed variants | Medium–High |
+| `COHESION` | Transitivity, global efficiency, algebraic connectivity, degree CV | High |
+| `COMPONENTS` | Weakly and strongly connected components, and the share of the channels in the largest of each | Low |
 | `DEGCORRELATION` | Directed assortativity (4 coefficients) | Low |
 | `CENTRALIZATION` | Freeman centralisation per measure, Mean Burt's Constraint | Low–Medium |
 | `CONTENT` | Content Originality, Amplification Ratio | Low |
@@ -34,7 +34,7 @@ Metrics are organized into selectable groups. Controlled via `--network-stat-gro
 
 ## SIZE
 
-### Nodes and Edges
+### Channels and ties
 
 The raw count of channels (nodes) and directed connections (edges) in the graph. An edge from A to B means A has forwarded content from B or referenced B's username, weighted by frequency relative to A's total output. These counts depend on the `DRAW_DEAD_LEAVES` setting and any date range filters applied at export time.
 
@@ -52,7 +52,7 @@ The fraction of all possible directed edges that actually exist. For a directed 
 
 > Path-based statistics appear in Pulpit only here, at the network level, as **shape descriptors** of the citation topology — how compact or fragmented the recorded web of attribution is — and they are best read comparatively, across exports or over time. No per-channel path measure exists (see [Measures → what this catalogue covers](network-measures.md#what-this-catalogue-covers)): under one-degree attribution a multi-hop path is a chain of attributions, not a route content travelled, so no individual channel is credited for sitting on one. Read "distance" below as *degrees of citation separation*, not as hops content takes.
 
-### Average Path Length
+### Mean path length
 
 The mean of the shortest path lengths between all reachable pairs of nodes, computed on the **largest weakly connected component** (treated as undirected).
 
@@ -64,13 +64,13 @@ The longest shortest path in the network, computed on the largest weakly connect
 
 **In practice:** the diameter is the network's span — the longest chain of citation separation it contains. A small diameter (common in social networks) means every channel sits within a few citation steps of every other.
 
-### Directed Average Path Length
+### Directed mean path length
 
 The mean of all directed shortest-path distances between node pairs in the **largest strongly connected component** (SCC), following edge direction. Where the undirected path length ignores direction, this metric measures separation when only the citation direction is followed.
 
 **In practice:** comparing directed and undirected path lengths reveals how much directionality constrains the structure. A large gap means many links are one-way — channels that cite without being cited back — so the mutually-citing core is far smaller than the connected whole.
 
-### Directed Diameter
+### Directed diameter
 
 The longest directed shortest path in the largest strongly connected component.
 
@@ -80,7 +80,7 @@ The fraction of edges that are mutual — if A→B exists, does B→A also exist
 
 **In practice:** reciprocity measures how symmetric information exchange is. A low reciprocity means the network is predominantly hierarchical: content flows from producers to distributors in one direction. A high reciprocity suggests peer-like mutual amplification. In political networks, high reciprocity within a community usually signals tight ideological cohesion; it is also a natural place to *look* for arranged mutual amplification, though the static graph alone cannot tell arrangement from affinity — that distinction lives in message-level timing, which the [coordination analysis](coordination-analysis.md) tests directly.
 
-### Average Clustering Coefficient
+### Mean clustering
 
 For each channel, the clustering coefficient measures how interconnected its immediate neighbours are — do the channels that reference A also reference each other? The average is taken over all observed channels (every channel but the dead leaves).
 
@@ -100,7 +100,7 @@ The fraction of all connected triples in the graph that form closed triangles �
 
 **In practice:** high transitivity means channels that both reference a third channel tend to reference each other — information loops are closed and the network is echo-chamber-like. Low transitivity indicates a more open, tree-like structure.
 
-### Global Efficiency
+### Global efficiency
 
 The mean reciprocal directed shortest-path length over all ordered pairs of channels, including disconnected pairs (which contribute 0). Ranges from 0 (no pairs reachable) to 1 (all pairs at distance 1).
 
@@ -112,7 +112,7 @@ The mean reciprocal directed shortest-path length over all ordered pairs of chan
 
 > Note: computation requires all-pairs shortest paths (O(n·(n+m))); for large graphs (n > 3,000) this is the most expensive metric in the summary.
 
-### Algebraic Connectivity (Fiedler value)
+### Algebraic connectivity (Fiedler value)
 
 The second-smallest eigenvalue λ₂ of the graph Laplacian, computed on the undirected projection. This is the *Fiedler value* (Fiedler 1973). It equals 0 exactly when the graph is disconnected. For connected graphs it is strictly positive; larger values indicate stronger cohesion. Approximated using the trace-minimization algorithm (`tracemin_pcg`).
 
@@ -124,7 +124,7 @@ Two fundamental properties make λ₂ particularly meaningful:
 
 **Example.** Before a platform content-moderation wave: Fiedler value = 0.14. After: 0.03. The network is now one targeted removal away from splitting into disconnected fragments.
 
-### Degree CV (In-degree and Out-degree Coefficient of Variation)
+### Degree CV (in-degree and out-degree coefficient of variation)
 
 The coefficient of variation (σ/μ) of the in-degree and out-degree distributions. CV normalises the spread of the distribution by its centre, allowing networks of different sizes or densities to be compared directly. The out-degree CV runs over observed channels only: a dead leaf's out-degree is unknown, and counting it as 0 would inflate the spread.
 
@@ -136,19 +136,19 @@ The coefficient of variation (σ/μ) of the in-degree and out-degree distributio
 
 ## COMPONENTS
 
-### WCC count
+### Weakly connected components
 
 The total number of weakly connected components. Most real-world networks have one large component and many small satellite islands. A high WCC count means the network is fragmented: many channels have no relationship at all to the main ecosystem.
 
-### Largest WCC fraction
+### Largest weakly connected component, share
 
 The share of all channels belonging to the single largest weakly connected component. A value close to 1 means nearly all channels are part of one connected ecosystem.
 
-### SCC count
+### Strongly connected components
 
 The total number of strongly connected components. In most directed networks, the SCC decomposition produces one large component (the "bow-tie core") and many singleton or small components.
 
-### Largest SCC fraction
+### Largest strongly connected component, share
 
 The share of all channels in the largest strongly connected component — the network's mutually reinforcing core. Comparing this to the Largest WCC fraction reveals the ratio of the network that is connected but asymmetric versus genuinely mutually reinforcing.
 
@@ -234,7 +234,7 @@ The rows sit in the *Homophily* group of the whole-network table; their *vs labe
 
 ### Citation flows between labels
 
-The label × label matrix of ties (and citations), its permutation expectation and the observed / expected ratio. A cell is tested when its observed or expected tie count reaches 3; the tested cells of a group share one Benjamini–Hochberg correction. In the heat map (rows cite columns) red cells are over-represented flows, blue under-represented ones; `*` marks q < 0.05. The same data is in the *Label flows* sheet of `network_table.xlsx` and in `label_flows.csv` (with `--csv`), one row per label pair, for the full range and every timeline year.
+The label × label matrix of ties (and citations), its permutation expectation and the observed / expected ratio. A cell is tested when its observed or expected tie count reaches 3; the tested cells of a group share one Benjamini–Hochberg correction. In the heat map (rows cite columns) red cells are over-represented flows, blue under-represented ones; `*` marks q < 0.05. The same data is in the *Label flows* sheet of `network_table.xlsx` and in `network_label_flows.csv` (with `--csv`), one row per label pair, for the full range and every timeline year.
 
 **In practice:** on a transnational network labelled by nation, a clearly positive r with a strongly negative E-I-minus-expected says national scenes are real; per-label IH then tells *which* nations are inward-looking once their size is discounted, the net-exporter index which ones supply content across borders, and the significant off-diagonal flows which national pairs are tied beyond chance. A small label's statistics rest on few ties — read its q, not its point value. For a model that holds activity, audience and reciprocity fixed while estimating the same-nation effect, see the [dyadic regression](dyadic-models.md).
 
@@ -290,7 +290,7 @@ The fraction of all directed edges whose source and target belong to different c
 
 **In practice:** a ratio near 0 means almost all links stay within communities — a cohesive ecosystem. A ratio near 1 means most links cross boundaries. Comparing this across snapshots reveals whether cross-community interaction is growing or shrinking over time.
 
-### E-I Index (per community and strategy)
+### E-I index (per community and method)
 
 Krackhardt & Stern's E-I Index for a group:
 
@@ -311,7 +311,7 @@ Use E-I index together with reciprocity and inter-community edge ratio for a com
 
 ### Partition comparison matrices (ARI, AMI, NMI, VI)
 
-The **Partition comparison** block appears on `community_table.html` (and in the `Network` sheet of the network-statistics XLSX) whenever two or more comparable partitions are active. It renders **four** strategy × strategy heat-maps — one per index — that quantify, from complementary angles, how much any two partitions of the channels agree. On a year-timeline export it carries its own **year selector** (*All years* or a single year), so you can compare the partitions of the full-range analysis or of any one year in isolation.
+The **Partition comparison** block appears on `community_table.html` (and in the `Partition comparison` sheet of `network_table.xlsx`, one row per index and pair of methods) whenever two or more comparable partitions are active. It renders **four** strategy × strategy heat-maps — one per index — that quantify, from complementary angles, how much any two partitions of the channels agree. On a timeline export it carries its own **period selector** (*All periods* or a single period), so you can compare the partitions of the full-range analysis or of any one period in isolation.
 
 **What the rows and columns are.** Every active **community-detection strategy** (LEIDEN, LEIDEN_DIRECTED, LEIDEN_CPM, LOUVAIN, SBM, CONSENSUS, …) *and* every **label-group partition** (each partition `LabelGroup` — the primary one is the analyst's organisation grouping). `KCORE` is excluded: it is a shell decomposition, not a community detection, so partition similarity against it is uninformative (the [consensus matrix](export-formats.md#consensus_matrixhtml--cross-strategy-agreement) excludes it for the same reason). Including the label groups is the point: it turns the block into a validation of the algorithms' structural communities against the analyst's manual labels — and including the [consensus partition](community-detection.md#consensus) lets you read how much of each input strategy (and of the manual labels) survives cross-method agreement.
 
@@ -338,7 +338,7 @@ where I(U; V) is the mutual information of the two partitions and H(·) is Shann
 
 ## Structural equivalence matrix
 
-Generated with `--structural-similarity`. Available as a standalone page `structural_similarity.html` (the filename is kept for compatibility; the page shows structural equivalence — see [Export formats](export-formats.md#structural_similarityhtml--structural-equivalence-matrix)).
+Generated with `--structural-similarity`. Available as the page `structural_equivalence.html` (see [Export formats](export-formats.md#structural_equivalencehtml--structural-equivalence-matrix)).
 
 Each cell (i, j) shows the **structural equivalence** (Lorrain & White 1971) of channels i and j: the cosine similarity between their weighted *tie profiles*. A channel's profile is its weighted out-citations to every other channel concatenated with its weighted in-citations from every other channel (self-ties dropped). When i and j are compared, the entries for the tie between them are left out of both profiles (Burt 1976; Wasserman & Faust 1994 §9.4). They sit at different positions in the two profiles, so they could only lower the similarity: two channels that cite each other and share every other neighbour score 1.0.
 

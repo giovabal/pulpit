@@ -87,7 +87,7 @@ Every channel commenting on another channel's posts gets a row in the channels l
 
 - **Channels**: the graph's observed in-target channels, so the export's channel types, scope filter and lost / private switches apply. Dead leaves and environment channels are left out, as everywhere the page says *in target*.
 - **Posts**: inside the channels' in-target periods and the export's **Start** / **End** dates.
-- **Timeline**: with a timeline (`--timeline-step`), each period is computed again on its own channels and days, and the page gets a period navigator; a period without comments is left out of it. The workbook's *Summary* sheet then has one column per period beside *All*, and the per-channel participation and the overlap pairs get one sheet per period. A period's retention only sees that period's replies, so its cohorts are short.
+- **Timeline**: with a timeline (`--timeline-step`), each period is computed again on its own channels and days, and the page gets a period navigator; a period without comments is left out of it. The workbook's *Summary*, per-channel participation and overlap pairs then carry a *Period* column (*All periods*, then each period). A period's retention only sees that period's replies, so its cohorts are short.
 - **Commenters**: the bot and bulk-poster flags and the Manage → Commenters overrides as they stand when the export runs.
 
 With no reply in scope the section is skipped with a warning. `PARAMETERS.md` lists the thresholds, null-model settings and seeds the sections ran with. See [Export formats](export-formats.md#audiencehtml--audiencexlsx--audience_csv--the-commenters).

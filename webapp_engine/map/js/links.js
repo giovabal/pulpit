@@ -5,13 +5,17 @@
 //   - matrix:     labels × categories for one partition label group
 //   - channels:   one row per observed channel with its link measures
 //   - sites:      one row per linked site
-//   - pairs:      co-linking pairs, validated by the hypergeometric test
+//   - pairs:      co-linking pairs, validated against the bipartite configuration model
 //
 // Period switcher: same pattern as dominance.js — when opened from a per-period data dir the
 // "All" button fetches the global payload from data/.
 
 import { build_year_nav } from './year_nav.js';
-import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
+import { escHtml, fetchJson, fetchJsonOrNull, isCompareDataDir, loadFailed, loadRecovered, periodDataDir, readTimeline, readableTextOn } from './utils.js';
+import { channelCell as _channelCell, header as _header, matches as _matches, numCell as _numCell, qCell, shareCell as _shareCell } from './table_cells.js';
+
+var _isNil = isNil;
+var _fmtShare = fmtShare;
 
 var _dd = window.DATA_DIR || "data/";
 var _base_dd = _dd;
@@ -24,6 +28,8 @@ var _loading = false;
 var _payload = null;
 
 var UNCATEGORISED = "Uncategorised";
+// Swatch of a site with no category (a neutral grey that reads in both themes).
+var NO_CATEGORY_COLOR = "#9ca3af";
 
 var CHANNEL_COLUMNS = [
     { label: "Channel", number: false },
@@ -53,51 +59,12 @@ var PAIR_COLUMNS = [
     { label: "Channel B", number: false },
     { label: "Shared sites", number: true },
     { label: "Expected", number: true, title: "Shared sites expected under the bipartite configuration model: random channel × site links keeping, on average, each channel's number of sites and each site's number of channels" },
-    { label: "q", number: true, title: "Benjamini–Hochberg adjusted p-value of the hypergeometric test, over every pair of linking channels" },
+    { label: "q", number: true, title: "Benjamini–Hochberg adjusted p-value of the number of shared sites under the bipartite configuration model, over every pair of linking channels" },
     { label: "Shared sites (rarest first)", number: false },
 ];
 
-function _isNil(v) {
-    return v === null || v === undefined;
-}
-
-function _fmtShare(v) {
-    return _isNil(v) ? "—" : (100 * v).toFixed(1) + "%";
-}
-
-function _fmtQ(v) {
-    if (_isNil(v)) return "—";
-    if (v < 0.001) return v.toExponential(1);
-    return v.toFixed(3);
-}
-
-function _numCell(v, text, style) {
-    return "<td class=\"text-end\" data-sort-value=\"" + (_isNil(v) ? "" : v) + "\"" + (style ? " style=\"" + style + "\"" : "") + ">" + text + "</td>";
-}
-
-function _shareCell(v) {
-    return _numCell(v, _fmtShare(v), _isNil(v) ? "" : heatmapBg(v, 0, 1));
-}
-
-function _channelCell(ref) {
-    var org = ref.organization ? " <span class=\"text-muted small\">(" + escHtml(ref.organization) + ")</span>" : "";
-    return "<td data-sort-value=\"" + escHtml(ref.label) + "\">" + escHtml(ref.label) + org + "</td>";
-}
-
 function _swatch(color) {
-    return "<span class=\"d-inline-block rounded-1 me-1 align-middle\" style=\"width:.8em;height:.8em;background:" + escHtml(color || "#9ca3af") + "\" aria-hidden=\"true\"></span>";
-}
-
-function _header(table, columns) {
-    table.removeAttribute("data-sort-initialized");
-    table.querySelector("thead").innerHTML = "<tr>" + columns.map(function(c) {
-        return "<th" + (c.number ? " class=\"number text-end\"" : "") + (c.title ? " title=\"" + escHtml(c.title) + "\"" : "") + ">" + escHtml(c.label) + "</th>";
-    }).join("") + "</tr>";
-}
-
-function _matches(needle, parts) {
-    if (!needle) return true;
-    return parts.join(" ").toLowerCase().indexOf(needle) !== -1;
+    return "<span class=\"d-inline-block rounded-1 me-1 align-middle\" style=\"width:.8em;height:.8em;background:" + escHtml(color || NO_CATEGORY_COLOR) + "\" aria-hidden=\"true\"></span>";
 }
 
 function _categoryColors() {
@@ -127,11 +94,13 @@ function _renderCategories() {
     var cats = (_payload.categories || []).filter(function(c) { return c.events > 0; });
     var bar = document.getElementById("ln-category-bar");
     // One stacked bar of link-event shares; segments under 8% carry no direct label (the table below is the legend).
+    // A label is black or white, whichever reads better on its segment's colour.
     bar.innerHTML = cats.length ? "<div class=\"d-flex w-100 rounded overflow-hidden\" style=\"height:1.6rem;gap:2px\" role=\"img\" aria-label=\"Share of link events by category\">" +
         cats.map(function(c) {
             var pct = 100 * (c.share || 0);
-            var label = pct >= 8 ? "<span class=\"small text-truncate px-1\" style=\"color:#fff;text-shadow:0 0 2px rgba(0,0,0,.6)\">" + escHtml(c.name) + "</span>" : "";
-            return "<div class=\"d-flex align-items-center\" style=\"flex:" + pct.toFixed(3) + " 1 0;min-width:2px;background:" + escHtml(c.color) + "\" title=\"" +
+            var fill = c.color || NO_CATEGORY_COLOR;
+            var label = pct >= 8 ? "<span class=\"small text-truncate px-1\" style=\"color:" + readableTextOn(fill) + "\">" + escHtml(c.name) + "</span>" : "";
+            return "<div class=\"d-flex align-items-center\" style=\"flex:" + pct.toFixed(3) + " 1 0;min-width:2px;background:" + escHtml(fill) + "\" title=\"" +
                 escHtml(c.name) + ": " + _fmtShare(c.share) + " of link events (" + fmtInt(c.events) + ")\">" + label + "</div>";
         }).join("") + "</div>" : "<p class=\"text-muted\">No outbound links in this period.</p>";
 
@@ -146,7 +115,7 @@ function _renderCategories() {
     ]);
     table.querySelector("tbody").innerHTML = (_payload.categories || []).map(function(c) {
         return "<tr><td data-sort-value=\"" + escHtml(c.name) + "\">" + _swatch(c.color) + escHtml(c.name) + "</td>" +
-            "<td>" + escHtml(c.role || "") + "</td>" +
+            "<td>" + escHtml(c.role || MISSING) + "</td>" +
             _numCell(c.events, fmtInt(c.events)) +
             _shareCell(c.share) +
             _numCell(c.channels, fmtInt(c.channels)) +
@@ -193,9 +162,9 @@ function _renderMatrix() {
             var share = total ? v / total : null;
             var tip = escHtml(label + " → " + m.categories[j] + ": " + fmtInt(v) + " links (" + _fmtShare(share) + " of the label's links)");
             if (mode === "count") {
-                return "<td class=\"text-end\" data-sort-value=\"" + v + "\" title=\"" + tip + "\" style=\"" + heatmapBg(v, 0, max || 1) + "\">" + (v ? fmtInt(v) : "·") + "</td>";
+                return "<td class=\"number\" data-sort-value=\"" + v + "\" title=\"" + tip + "\" style=\"" + heatmapBg(v, 0, max || 1) + "\">" + fmtInt(v) + "</td>";
             }
-            return "<td class=\"text-end\" data-sort-value=\"" + (share === null ? "" : share) + "\" title=\"" + tip + "\" style=\"" + (share === null ? "" : heatmapBg(share, 0, 1)) + "\">" + (v ? _fmtShare(share) : "·") + "</td>";
+            return "<td class=\"number\" data-sort-value=\"" + (share === null ? "" : share) + "\" title=\"" + tip + "\" style=\"" + (share === null ? "" : heatmapBg(share, 0, 1)) + "\">" + _fmtShare(share) + "</td>";
         }).join("") + _numCell(total, fmtInt(total)) + "</tr>";
     }).join("");
     note.innerHTML = "Rows: the " + escHtml(m.group) + " label of the linking channel in the period. Columns: " +
@@ -224,7 +193,7 @@ function _renderChannels() {
             _numCell(c.messages, fmtInt(c.messages)) +
             _shareCell(c.link_share) +
             _numCell(c.distinct_sites, fmtInt(c.distinct_sites), _isNil(c.distinct_sites) ? "" : heatmapBg(c.distinct_sites, 0, maxSites || 1)) +
-            _numCell(c.platform_diversity, _isNil(c.platform_diversity) ? "—" : c.platform_diversity.toFixed(2), _isNil(c.platform_diversity) ? "" : heatmapBg(c.platform_diversity, 1, Math.max(maxDiv, 1.0001))) +
+            _numCell(c.platform_diversity, fmtFixed(c.platform_diversity, 2), _isNil(c.platform_diversity) ? "" : heatmapBg(c.platform_diversity, 1, Math.max(maxDiv, 1.0001))) +
             _shareCell(c.monetisation_share) +
             _shareCell(c.mainstream_share) +
             _shareCell(c.alternative_share) +
@@ -269,7 +238,7 @@ function _renderSites() {
             "<td data-sort-value=\"" + escHtml(name) + "\">" + _swatch(colors[name]) + escHtml(name) + "</td>" +
             _numCell(s.posts, fmtInt(s.posts)) +
             _numCell(s.channels, fmtInt(s.channels)) +
-            "<td>" + escHtml(s.first || "—") + "</td><td>" + escHtml(s.last || "—") + "</td>" +
+            "<td>" + escHtml(s.first || MISSING) + "</td><td>" + escHtml(s.last || MISSING) + "</td>" +
             "<td class=\"small\">" + first.map(function(l) { return escHtml(l[0]) + " <span class=\"text-muted\">" + fmtInt(l[1]) + "</span>"; }).join(", ") + "</td></tr>");
     });
     table.querySelector("tbody").innerHTML = rows.join("");
@@ -294,14 +263,13 @@ function _renderPairs() {
         if (!_matches(needle, [p.a.label, p.a.organization, p.b.label, p.b.organization].concat(p.common))) return;
         rows.push("<tr>" + _channelCell(p.a) + _channelCell(p.b) +
             _numCell(p.shared, fmtInt(p.shared)) +
-            _numCell(p.expected, p.expected.toFixed(1)) +
-            "<td class=\"text-end" + (p.validated ? " fw-semibold" : "") + "\" data-sort-value=\"" + p.q + "\">" + _fmtQ(p.q) +
-            (p.validated ? " <span title=\"validated (q < " + co.q_threshold + ")\">★</span>" : "") + "</td>" +
+            _numCell(p.expected, fmtFixed(p.expected, 1)) +
+            qCell(p.q) +
             "<td class=\"small\">" + p.common.map(escHtml).join(", ") + "</td></tr>");
     });
     table.querySelector("tbody").innerHTML = rows.join("");
     document.getElementById("ln-pair-count").textContent = fmtInt(rows.length) + " of " + fmtInt(all.length) +
-        " listed pairs shown (pairs sharing at least " + co.min_shared + " sites).";
+        " listed pairs shown (pairs sharing at least " + co.min_shared + " sites). " + sigLegend("q");
     initSortableTables();
 }
 
@@ -331,10 +299,11 @@ function _switch(key) {
     _loading = true;
     _load(key).then(function(payload) {
         _current = key;
+        loadRecovered();
         _render(payload);
         if (_periods.length) build_year_nav(_periods, _current, _switch, _events);
-    }).catch(function() {
-        document.getElementById("ln-channel-count").textContent = "Failed to load the outbound links of " + key + ".";
+    }).catch(function(err) {
+        loadFailed(err, "the outbound links of " + key);
     }).finally(function() {
         _loading = false;
     });
@@ -365,13 +334,5 @@ Promise.all([
     _periods = tl.periods.filter(function(p) { return p.has_links; });
     if (_periods.length) build_year_nav(_periods, _current, _switch, _events);
 }).catch(function(err) {
-    console.error("links: failed to load or render", err);
-    var msg = "Failed to load links.json.";
-    if (window.location.protocol === "file:") {
-        msg += " The export bundle uses fetch() to load its JSON payloads, which most browsers refuse on file:// URLs. " +
-            "Open the bundle via the bundled start.sh (\"python -m http.server\") and browse it over http://localhost:8001 instead.";
-    } else if (err && err.message) {
-        msg += " (" + err.message + ")";
-    }
-    document.getElementById("ln-channel-count").textContent = msg;
+    loadFailed(err);
 });

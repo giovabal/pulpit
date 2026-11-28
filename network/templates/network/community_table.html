@@ -1,16 +1,25 @@
 {% extends "network/_table_base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Community Statistics</h2>
-  <div class="d-flex gap-2">
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="{{ repository_url }}/blob/main/docs/community-detection.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Strategies explained</a>
-  </div>
-</div>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>A community is a group of channels tied to each other more than to the rest. Each section is one way of
+  grouping the channels: a detection method that reads the citations, or one of the analyst's label groups.</p>
+  <p>For every community the table gives its size, the ties inside it and across its boundary, and how closed it
+  is: the <em>E-I index</em> runs from −1, every tie inside, to +1, every tie outside. Density, reciprocity and
+  clustering describe the ties inside; path length and diameter, how many steps separate its channels.</p>
+  <p><em>Modularity Q</em>, above each table, says how much more the ties stay inside the communities than chance
+  would give. Where a z is shown, it compares Q with random networks in which every channel cites and is cited as much as it really does: a high Q with
+  a z near zero is no evidence of communities.</p>
+  <p>Under each table come the list of channels and the overlap of the communities with each label group. With a
+  timeline, the flow diagram follows the channels from one period's communities into the next.</p>
+  <p><em>Partition comparison</em> scores the agreement between the methods, and <em>Community intersection</em>
+  shows which communities of two methods share channels.</p>
+  <p>The methods answer different questions and none of them is the true grouping: one that several methods agree
+  on is better supported than one a single method finds.</p>
+</details>
+<div id="timeline-nav" class="export-period-nav"></div>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
 <div id="community-tables" class="export-wide"></div>
 <div id="partition-comparison" class="export-wide mt-5"></div>
 <div id="strategy-sankey" class="export-wide mt-5"></div>

@@ -36,7 +36,7 @@ from django.db.models import Q
 
 from network.links import category_for, domain_categories, scan_message_sites
 from network.parameters import FixedParameter
-from network.utils import GraphData, channel_cutoff_q, dead_leaf_ids, make_date_q
+from network.utils import GraphData, channel_cutoff_q, dead_leaf_ids, int_id, make_date_q
 
 import networkx as nx
 import numpy as np
@@ -536,9 +536,11 @@ def inject_node_scores(graph_data: GraphData, payload: dict[str, Any]) -> list[t
     return list(NODE_MEASURES)
 
 
-# ── Flat row layouts shared by the XLSX sheets and channel_sites.csv ─────────────────────────────
+# ── Flat row layouts shared by the XLSX sheets and links_channel_sites.csv ─────────────────────────────
 
+# Readable headers, as links.xlsx shows them; the CSVs write them in snake_case (data_dictionary.column_key).
 CHANNEL_COLUMNS: tuple[tuple[str, Any], ...] = (
+    ("Channel ID", lambda r: int_id(r["id"])),
     ("Channel", lambda r: r["label"]),
     ("Label", lambda r: r["organization"]),
     ("Messages", lambda r: r["messages"]),
@@ -577,8 +579,10 @@ CATEGORY_COLUMNS: tuple[tuple[str, Any], ...] = (
     ("Sites", lambda r: r["sites"]),
 )
 PAIR_COLUMNS: tuple[tuple[str, Any], ...] = (
+    ("Channel A ID", lambda r: int_id(r["a"]["id"])),
     ("Channel A", lambda r: r["a"]["label"]),
     ("Label A", lambda r: r["a"]["organization"]),
+    ("Channel B ID", lambda r: int_id(r["b"]["id"])),
     ("Channel B", lambda r: r["b"]["label"]),
     ("Label B", lambda r: r["b"]["organization"]),
     ("Shared sites", lambda r: r["shared"]),
@@ -592,15 +596,20 @@ PAIR_COLUMNS: tuple[tuple[str, Any], ...] = (
 )
 
 
+CHANNEL_SITE_COLUMNS: tuple[str, ...] = ("Channel ID", "Channel", "Label", "Site", "Category", "Messages")
+
+
 def flat_rows(columns: tuple[tuple[str, Any], ...], rows: list[dict[str, Any]]) -> tuple[list[str], list[list[Any]]]:
     return [name for name, _ in columns], [[get(row) for _, get in columns] for row in rows]
 
 
 def channel_site_rows(payload: dict[str, Any]) -> list[list[Any]]:
-    """Long format for ``channel_sites.csv``: one row per (channel, site) with its message count."""
+    """Long format for ``links_channel_sites.csv``: one row per (channel, site) with its message count."""
     category = {row["site"]: row["category"] or UNCATEGORISED for row in payload.get("sites", [])}
     out = []
     for row in payload.get("channels", []):
         for site, count in row["sites"]:
-            out.append([row["label"], row["id"], row["organization"], site, category.get(site, UNCATEGORISED), count])
+            out.append(
+                [int_id(row["id"]), row["label"], row["organization"], site, category.get(site, UNCATEGORISED), count]
+            )
     return out

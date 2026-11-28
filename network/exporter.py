@@ -1,4 +1,3 @@
-import csv as _csv
 import datetime
 import html as _html
 import json
@@ -7,6 +6,7 @@ import os
 import re
 import shutil
 from collections import Counter
+from collections.abc import Iterable
 from math import sqrt
 from typing import TYPE_CHECKING, Any
 
@@ -14,15 +14,19 @@ from django.conf import settings
 from django.db.models import QuerySet
 
 from network.community import (
+    CUSTOM_LABEL_SUFFIX,
     SBM_CONFIDENCE_BASE_KEY,
     canonical_strategy_key,
+    labelgroup_id,
     sbm_confidence_display_label,
     sbm_confidence_key,
     strategy_display_label,
 )
+from network.data_dictionary import column_key
 from network.measures._registry import role_companions
-from network.publication import PAGE_DESCRIPTIONS, set_robots_meta
-from network.utils import GraphData
+from network.pages import page_description, page_title
+from network.publication import set_robots_meta
+from network.utils import GraphData, csv_writer
 from webapp.models import Channel
 from webapp.utils.colors import parse_color, rgb_avg
 
@@ -68,6 +72,10 @@ def build_graph_data(
             "out_deg",
         ):
             node_info[key] = node_data["data"][key]
+        # 0 in target, k for an environment channel, 1 for a dead leaf (build_graph); absent on a graph
+        # assembled without it.
+        if "environment_depth" in node_data["data"]:
+            node_info["environment_depth"] = node_data["data"]["environment_depth"]
         # SBM(refine=MCMC) assignment-confidence companions — written onto the node data by
         # community detection (which runs before this serialisation), one parameter-suffixed
         # key per refined SBM instance.
@@ -113,7 +121,17 @@ def reposition_isolated_nodes(graph_data: GraphData, main_component: set[str]) -
                 graph_data["nodes"][isolated_nodes[idx]]["y"] = max_y - j * d
 
 
+# The assets every export page shares, copied from webapp_engine/map/. The map pages themselves are copied
+# only when their map is written (copy_map_page), so an export holds no page it has no data for.
+SHARED_ASSETS: tuple[str, ...] = ("css", "js", "favicon.ico", "pulpit_logo.svg")
+
+
+def _map_src() -> str:
+    return str(settings.BASE_DIR / "webapp_engine" / "map")
+
+
 def ensure_graph_root(root_target: str) -> None:
+    """Empty (or create) the export folder and copy the shared assets (:data:`SHARED_ASSETS`) into it."""
     if os.path.isdir(root_target):
         for entry in os.scandir(root_target):
             if entry.is_dir(follow_symlinks=False):
@@ -122,11 +140,29 @@ def ensure_graph_root(root_target: str) -> None:
                 os.remove(entry.path)
     else:
         os.makedirs(root_target)
+    copy_shared_assets(root_target)
+
+
+def copy_shared_assets(root_target: str) -> None:
+    """Copy (or refresh) :data:`SHARED_ASSETS` into the export folder, leaving its other files alone."""
+    for name in SHARED_ASSETS:
+        src = os.path.join(_map_src(), name)
+        dst = os.path.join(root_target, name)
+        try:
+            if os.path.isdir(src):
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dst)
+        except OSError as e:
+            logger.warning("Could not copy %s to %s: %s", name, root_target, e)
+
+
+def copy_map_page(root_target: str, name: str) -> None:
+    """Copy the map page template *name* (``graph.html`` / ``graph3d.html``) into the export folder."""
     try:
-        map_src = str(settings.BASE_DIR / "webapp_engine" / "map")
-        shutil.copytree(map_src, root_target, dirs_exist_ok=True)
+        shutil.copy2(os.path.join(_map_src(), name), os.path.join(root_target, name))
     except OSError as e:
-        logger.warning("Could not copy map template to %s: %s", root_target, e)
+        logger.warning("Could not copy map page %s to %s: %s", name, root_target, e)
 
 
 def _patch_html_file(
@@ -164,9 +200,15 @@ def _patch_html_file(
     if about_title:
         escaped = _html.escape(about_title)
         content = re.sub(
-            r'(<h4 class="modal-title" id="about_modalLabel">)[^<]*(</h4>)',
+            r'(<h2 class="modal-title h4" id="about_modalLabel">)[^<]*(</h2>)',
             lambda m: f"{m.group(1)}{escaped}{m.group(2)}",
             content,
+        )
+    if page_name:
+        # The map's own heading (read by screen readers and search engines; the canvas shows no title).
+        escaped_name = _html.escape(page_name)
+        content = re.sub(
+            r'(<h1 id="map-title">)[^<]*(</h1>)', lambda m: f"{m.group(1)}{escaped_name}{m.group(2)}", content
         )
     repo_url = getattr(settings, "REPOSITORY_URL", "")
     app_version = getattr(settings, "APP_VERSION", "")
@@ -218,10 +260,7 @@ def _patch_html_file(
 
 # The page part of each map page's <title> ("<project> | <page name>"), so that no two pages share a title.
 MAP_PAGE_NAMES: dict[str, str] = {
-    "graph.html": "Structural map",
-    "graph3d.html": "Structural map (3D)",
-    "coordination.html": "Coordination map",
-    "coordination3d.html": "Coordination map (3D)",
+    name: page_title(name) for name in ("graph.html", "graph3d.html", "coordination.html", "coordination3d.html")
 }
 
 
@@ -236,23 +275,15 @@ def apply_robots_to_graph_html(
     node_count: int = 0,
     edge_count: int = 0,
     strategy_labels: "dict[str, str] | None" = None,
+    include_2d: bool = True,
 ) -> None:
-    """Patch the robots meta tag, title, and layout flags in the static graph HTML files after they are copied."""
-    _patch_html_file(
-        os.path.join(root_target, "graph.html"),
-        seo,
-        project_title,
-        vertical_layout,
-        extra_layouts,
-        extra_layouts_3d,
-        node_count=node_count,
-        edge_count=edge_count,
-        strategy_labels=strategy_labels,
-        page_name=MAP_PAGE_NAMES["graph.html"],
-    )
-    if include_3d:
+    """Copy the map pages that were asked for and patch their robots tag, title and layout flags."""
+    for included, name in ((include_2d, "graph.html"), (include_3d, "graph3d.html")):
+        if not included:
+            continue
+        copy_map_page(root_target, name)
         _patch_html_file(
-            os.path.join(root_target, "graph3d.html"),
+            os.path.join(root_target, name),
             seo,
             project_title,
             vertical_layout,
@@ -261,7 +292,7 @@ def apply_robots_to_graph_html(
             node_count=node_count,
             edge_count=edge_count,
             strategy_labels=strategy_labels,
-            page_name=MAP_PAGE_NAMES["graph3d.html"],
+            page_name=MAP_PAGE_NAMES[name],
         )
 
 
@@ -377,6 +408,110 @@ def sbm_confidence_columns(graph_data: GraphData, strategies: list[str]) -> list
     return cols
 
 
+def community_value(value: Any, strategy: str) -> Any:
+    """A channel's community as the tables show it: the number of an algorithmic community (its stored label is
+    ``"<n>-<strategy>"``), the label itself for a label group, ``None`` when the channel has none."""
+    if value is None or value == "":
+        return None
+    text = str(value)
+    # The stored label carries the strategy *family* ("3-leiden_cpm"), whatever the instance's parameters
+    # ("leiden_cpm_resolution_0_05"); the instance key is tried too for labels written under it.
+    for suffix in (f"-{canonical_strategy_key(strategy)}", f"-{strategy}"):
+        if text.endswith(suffix):
+            number = text[: -len(suffix)]
+            return int(number) if number.isdigit() else number
+    return text
+
+
+def community_header(strategy: str) -> str:
+    """Header of a channel's community column: ``Community: Leiden directed``, or ``Label: Nation`` for a label group."""
+    label = strategy_display_label(strategy)
+    if labelgroup_id(strategy) is not None:
+        return "Label: " + label.removesuffix(CUSTOM_LABEL_SUFFIX)
+    return "Community: " + label
+
+
+def channel_table(
+    graph_data: GraphData, measures_labels: list[tuple[str, str]], strategies: list[str]
+) -> tuple[list[str], list[list[Any]]]:
+    """The channel table as ``(headers, rows)``: one row per channel, most cited first.
+
+    The single layout of ``channel_table.xlsx`` (readable headers) and ``nodes.csv`` (the same headers in
+    snake_case, :func:`network.data_dictionary.column_key`). A role measure requested with several community
+    bases contributes one companion column group per instance, each carrying its parameter annotation.
+    """
+    extra = [(k, lbl) for k, lbl in measures_labels if k not in _CSV_BASE_KEYS]
+    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
+    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
+    role_groups = _role_companion_groups(measures_labels)
+    conf_cols = sbm_confidence_columns(graph_data, strategies)
+
+    headers = [
+        "Channel ID",
+        "Channel",
+        "URL",
+        "Label",
+        "Environment depth",
+        "Subscribers",
+        "Messages",
+        "In-strength",
+        "Out-strength",
+    ]
+    if pagerank_col:
+        headers.append(pagerank_col[1])
+    headers += [lbl for _, lbl in other_extra]
+    for comp, annot in role_groups:
+        headers.append(comp["role_label"] + annot)
+        headers += [cl + annot for cl in comp["count_labels"]]
+    headers += [community_header(s) for s in strategies]
+    headers += [lbl for _, lbl in conf_cols]
+    headers += ["Activity start", "Activity end"]
+
+    rows: list[list[Any]] = []
+    for node in sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True):
+        communities = node.get("communities") or {}
+        row: list[Any] = [
+            int(node["id"]) if str(node["id"]).isdigit() else node["id"],
+            node.get("label") or node["id"],
+            node.get("url") or None,
+            node.get("organization") or None,
+            node.get("environment_depth"),
+            node.get("fans"),
+            node.get("messages_count"),
+            node.get("in_deg"),
+            node.get("out_deg"),
+        ]
+        if pagerank_col:
+            row.append(node.get(pagerank_col[0]))
+        for key, _ in other_extra:
+            row.append(node.get(key))
+        for comp, _annot in role_groups:
+            row.append(node.get(comp["role_key"]) or None)
+            for count_key in comp["count_keys"]:
+                row.append(node.get(count_key))
+        for s in strategies:
+            row.append(community_value(communities.get(s), s))
+        for key, _ in conf_cols:
+            row.append(node.get(key))
+        row.append(node.get("activity_start") or None)
+        row.append(node.get("activity_end") or None)
+        rows.append(row)
+    return headers, rows
+
+
+def csv_header(headers: "Iterable[str]") -> list[str]:
+    """The CSV column names of *headers* (``data_dictionary.column_key``), kept distinct: two headers that
+    reduce to one key (label groups named alike once punctuation is dropped) get ``_2``, ``_3``… so no
+    reader of the file silently loses a column."""
+    seen: dict[str, int] = {}
+    names = []
+    for header in headers:
+        key = column_key(header)
+        seen[key] = seen.get(key, 0) + 1
+        names.append(key if seen[key] == 1 else f"{key}_{seen[key]}")
+    return names
+
+
 def write_csv(
     graph_data: GraphData,
     edge_list: list[list],
@@ -386,70 +521,30 @@ def write_csv(
 ) -> None:
     """Write nodes.csv and edges.csv to output_dir.
 
-    nodes.csv mirrors channel_table.xlsx. A role measure requested with several community bases
-    contributes one companion column group per instance, each carrying its parameter annotation.
-    edges.csv columns: source_label, target_label, weight, weight_forwards, weight_mentions, weight_copies,
-    weight_image_copies — the last four the raw forward / mention / near-copy / image-copy counts (the copy
-    columns are 0 unless near-copy or image-copy edges were on).
+    nodes.csv is the channel table (:func:`channel_table`) with snake_case headers. edges.csv: one row per tie,
+    from the citing channel (``source_id``, ``source``) to the cited one (``target_id``, ``target``), with its
+    ``weight`` and the raw forward / mention / near-copy / image-copy counts (the copy columns are 0 unless
+    near-copy or image-copy edges were on).
     """
     os.makedirs(output_dir, exist_ok=True)
 
     label_by_id = {node["id"]: node.get("label") or node["id"] for node in graph_data["nodes"]}
 
-    extra = [(k, lbl) for k, lbl in measures_labels if k not in _CSV_BASE_KEYS]
-    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
-    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    role_groups = _role_companion_groups(measures_labels)
-    conf_cols = sbm_confidence_columns(graph_data, strategies)
-
-    headers = ["Channel", "URL", "Label", "Environment depth", "Users", "Messages", "Inbound", "Outbound"]
-    if pagerank_col:
-        headers.append(pagerank_col[1])
-    headers += [lbl for _, lbl in other_extra]
-    for comp, annot in role_groups:
-        headers.append(comp["role_label"] + annot)
-        headers += [cl + annot for cl in comp["count_labels"]]
-    headers += [strategy_display_label(s) for s in strategies]
-    headers += [lbl for _, lbl in conf_cols]
-    headers += ["Activity start", "Activity end"]
-
+    headers, rows = channel_table(graph_data, measures_labels, strategies)
     with open(os.path.join(output_dir, "nodes.csv"), "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
-        writer.writerow(headers)
-        for node in sorted(graph_data["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True):
-            communities = node.get("communities") or {}
-            row: list = [
-                node.get("label") or node["id"],
-                node.get("url") or "",
-                node.get("organization") or "",
-                node.get("environment_depth"),
-                node.get("fans"),
-                node.get("messages_count"),
-                node.get("in_deg"),
-                node.get("out_deg"),
-            ]
-            if pagerank_col:
-                row.append(node.get(pagerank_col[0]))
-            for key, _ in other_extra:
-                row.append(node.get(key))
-            for comp, _annot in role_groups:
-                row.append(node.get(comp["role_key"]) or "")
-                for count_key in comp["count_keys"]:
-                    row.append(node.get(count_key))
-            for s in strategies:
-                row.append(communities.get(s, ""))
-            for key, _ in conf_cols:
-                row.append(node.get(key))
-            row.append(node.get("activity_start") or "")
-            row.append(node.get("activity_end") or "")
+        writer = csv_writer(fh)
+        writer.writerow(csv_header(headers))
+        for row in rows:
             writer.writerow(row)
 
     with open(os.path.join(output_dir, "edges.csv"), "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
+        writer = csv_writer(fh)
         writer.writerow(
             [
-                "source_label",
-                "target_label",
+                "source_id",
+                "source",
+                "target_id",
+                "target",
                 "weight",
                 "weight_forwards",
                 "weight_mentions",
@@ -467,7 +562,9 @@ def write_csv(
             weight_image_copies = edge[6] if len(edge) > 6 else 0.0
             writer.writerow(
                 [
+                    edge[0],
                     source_label,
+                    edge[1],
                     target_label,
                     weight,
                     weight_forwards,
@@ -479,6 +576,10 @@ def write_csv(
 
 
 NEAR_COPIES_CSV = "near_copies.csv"
+# Root CSVs named after the page they belong to (network_table.html, links.html), like every download.
+LABEL_FLOWS_CSV = "network_label_flows.csv"
+CHANNEL_SITES_CSV = "links_channel_sites.csv"
+INTERESTING_MESSAGES_JSON = "interesting_messages.json"
 _NEAR_COPY_COLUMNS = (
     "copy_channel",
     "copy_channel_id",
@@ -507,7 +608,7 @@ def write_near_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: st
     os.makedirs(data_dir, exist_ok=True)
     path = os.path.join(data_dir, NEAR_COPIES_CSV)
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
+        writer = csv_writer(fh)
         writer.writerow(_NEAR_COPY_COLUMNS)
         for link in graph.graph.get("near_copies") or []:
             writer.writerow(
@@ -558,7 +659,7 @@ def write_image_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: s
     os.makedirs(data_dir, exist_ok=True)
     path = os.path.join(data_dir, IMAGE_COPIES_CSV)
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
+        writer = csv_writer(fh)
         writer.writerow(_IMAGE_COPY_COLUMNS)
         for link in graph.graph.get("image_copies") or []:
             writer.writerow(
@@ -754,11 +855,12 @@ def write_meta_json(
     citation convention that ``build_graph`` uses — so ``edge_direction`` is a
     constant string rather than a parameter.
     """
+    # Noun phrases: the pages read "its weight is the <label>", the landing page "Tie weight: <Label>".
     _weight_labels = {
-        "NONE": "unweighted (all edges equal)",
-        "TOTAL": "raw forward + mention count",
-        "PARTIAL_MESSAGES": "count divided by the citing channel's total messages",
-        "PARTIAL_REFERENCES": "count divided by the citing channel's forwarding/citing messages",
+        "NONE": "same for every tie (unweighted)",
+        "TOTAL": "number of citations",
+        "PARTIAL_MESSAGES": "number of citations divided by the citing channel's messages",
+        "PARTIAL_REFERENCES": "number of citations divided by the citing channel's citing messages",
     }
     payload: dict[str, object] = {
         "export_date": datetime.date.today().isoformat(),
@@ -792,8 +894,13 @@ def write_summary_json(
     community_fits: dict[str, Any] | None = None,
     homophily: list[dict[str, Any]] | None = None,
     image_copies: int | None = None,
+    message_span: tuple[str, str] | None = None,
 ) -> None:
     """Write summary.json at the export root with name, timestamp, result counts, and all CLI options.
+
+    ``message_span`` — the first and last local day of the analysed messages (``build_graph``'s
+    ``graph.graph["message_span"]``), written as ``first_message`` / ``last_message``: the period an export
+    states where no ``--startdate`` / ``--enddate`` bounds it.
 
     ``near_copies`` — number of copy → origin links the graph was built with (``None`` = option off);
     ``image_copies`` the same for image copies.
@@ -899,6 +1006,8 @@ def write_summary_json(
         "pulpit_version": getattr(settings, "APP_VERSION", ""),
         "nodes": nodes,
         "edges": edges,
+        "first_message": message_span[0] if message_span else None,
+        "last_message": message_span[1] if message_span else None,
         "near_copies": near_copies,
         "image_copies": image_copies,
         "community_resolutions": community_resolutions or {},
@@ -907,7 +1016,7 @@ def write_summary_json(
         "options": opts,
     }
     os.makedirs(graph_dir, exist_ok=True)
-    with open(os.path.join(graph_dir, "summary.json"), "w") as f:
+    with open(os.path.join(graph_dir, "summary.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(payload, indent=2))
 
 
@@ -924,8 +1033,8 @@ def write_event_impact_csv(payload: dict, output_dir: str) -> None:
     from network.event_impact import EFFECT_COLUMNS, effect_rows
 
     with open(os.path.join(output_dir, "event_impact.csv"), "w", newline="", encoding="utf-8") as f:
-        writer = _csv.writer(f)
-        writer.writerow(EFFECT_COLUMNS)
+        writer = csv_writer(f)
+        writer.writerow(csv_header(EFFECT_COLUMNS))
         writer.writerows(effect_rows(payload))
 
 
@@ -938,13 +1047,13 @@ def write_mrqap_json(payload: dict, graph_dir: str) -> None:
 
 
 def write_label_flows_csv(periods: list[tuple[str, dict[str, Any]]], output_dir: str) -> None:
-    """Write label_flows.csv: the label → label citation flows of every partition label group, one row per
-    label pair with a tie observed or expected, for the full range (``All``) and each timeline year."""
+    """Write network_label_flows.csv: the label → label citation flows of every partition label group, one row per
+    label pair with a tie observed or expected, for the full range (``All periods``) and each timeline period."""
     from network.label_mixing import FLOW_COLUMNS, flow_rows
 
-    with open(os.path.join(output_dir, "label_flows.csv"), "w", newline="", encoding="utf-8") as f:
-        writer = _csv.writer(f)
-        writer.writerow(FLOW_COLUMNS)
+    with open(os.path.join(output_dir, LABEL_FLOWS_CSV), "w", newline="", encoding="utf-8") as f:
+        writer = csv_writer(f)
+        writer.writerow(csv_header(FLOW_COLUMNS))
         for period, payload in periods:
             writer.writerows(flow_rows(payload, period))
 
@@ -980,10 +1089,10 @@ def _sanitize_nan_inf(obj):
 
 
 def write_interest_structural_json(payload: dict, graph_dir: str) -> None:
-    """Write data/interest_structural.json from compute_interest_structural."""
+    """Write data/interesting_messages.json from compute_interest_structural."""
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
-    with open(os.path.join(data_dir, "interest_structural.json"), "w") as f:
+    with open(os.path.join(data_dir, INTERESTING_MESSAGES_JSON), "w") as f:
         f.write(json.dumps(_sanitize_nan_inf(payload), allow_nan=False))
 
 
@@ -1015,19 +1124,19 @@ def write_links_json(payload: dict, graph_dir: str) -> None:
 
 
 def write_channel_sites_csv(payload: dict, output_dir: str) -> None:
-    """Write channel_sites.csv: one row per (channel, linked site) with the messages linking to it, plus
+    """Write links_channel_sites.csv: one row per (channel, linked site) with the messages linking to it, plus
     links_colinking.csv with the listed co-linking pairs."""
-    from network.link_layer import PAIR_COLUMNS, channel_site_rows, flat_rows
+    from network.link_layer import CHANNEL_SITE_COLUMNS, PAIR_COLUMNS, channel_site_rows, flat_rows
 
     os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(output_dir, "channel_sites.csv"), "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
-        writer.writerow(["channel", "channel_id", "label", "site", "category", "messages"])
+    with open(os.path.join(output_dir, CHANNEL_SITES_CSV), "w", newline="", encoding="utf-8") as fh:
+        writer = csv_writer(fh)
+        writer.writerow(csv_header(CHANNEL_SITE_COLUMNS))
         writer.writerows(channel_site_rows(payload))
     headers, rows = flat_rows(PAIR_COLUMNS, payload.get("colinking", {}).get("pairs", []))
     with open(os.path.join(output_dir, "links_colinking.csv"), "w", newline="", encoding="utf-8") as fh:
-        writer = _csv.writer(fh)
-        writer.writerow(headers)
+        writer = csv_writer(fh)
+        writer.writerow(csv_header(headers))
         writer.writerows(rows)
 
 
@@ -1046,7 +1155,7 @@ def write_audience_csv(result: "AudienceExport", output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
     for filename, columns, rows in csv_tables(result):
         with open(os.path.join(output_dir, filename), "w", newline="", encoding="utf-8") as fh:
-            writer = _csv.writer(fh)
+            writer = csv_writer(fh)
             writer.writerow(columns)
             writer.writerows(rows)
 
@@ -1062,8 +1171,8 @@ def write_dominance_csv(payload: dict, output_dir: str) -> None:
         ("dominance_pairs.csv", flat_pair_rows(payload)),
     ):
         with open(os.path.join(output_dir, filename), "w", newline="", encoding="utf-8") as fh:
-            writer = _csv.writer(fh)
-            writer.writerow(headers)
+            writer = csv_writer(fh)
+            writer.writerow(csv_header(headers))
             writer.writerows(rows)
 
 
@@ -1246,20 +1355,20 @@ def write_coordination_pages(
     advertised (FA2 only), so the layout switcher stays hidden; the year
     switcher appears only when ``data_coordination/timeline.json`` exists.
     """
-    map_src = str(settings.BASE_DIR / "webapp_engine" / "map")
+    map_src = _map_src()
     coord_title = f"{project_title} — Coordination" if project_title else "Co-forwarding coordination"
     page_specs = (
         (
             include_2d,
             "graph.html",
             "coordination.html",
-            PAGE_DESCRIPTIONS["coordination.html"],
+            page_description("coordination.html"),
         ),
         (
             include_3d,
             "graph3d.html",
             "coordination3d.html",
-            PAGE_DESCRIPTIONS["coordination3d.html"],
+            page_description("coordination3d.html"),
         ),
     )
     for included, src_name, dst_name, desc_new in page_specs:
@@ -1276,9 +1385,7 @@ def write_coordination_pages(
         # The structural map's description, whatever its wording, becomes the coordination map's.
         description = _html.escape(desc_new)
         content = _DESCRIPTION_META_RE.sub(lambda m, d=description: f"{m.group(1)}{d}{m.group(2)}", content)
-        content = content.replace(
-            "</strong> connections between them", "</strong> mutual co-forwarding ties between them"
-        )
+        content = content.replace("</strong> ties between them", "</strong> mutual co-forwarding ties between them")
         with open(dst_path, "w") as f:
             f.write(content)
         _patch_html_file(

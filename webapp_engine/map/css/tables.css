@@ -12,11 +12,26 @@
   --bg: #f5f4f0;
   --surface: #ffffff;
   --text: #1c1917;
-  --muted: #78716c;
+  /* Secondary text: at least 4.5:1 on --bg, --surface, --hover and --accent-bg (WCAG AA), so it is darker
+     here than in webapp.css. */
+  --muted: #6b6560;
   --border: #e3e0d8;
   /* Diverging tints (more / fewer than expected) — webapp.css --div-pos / --div-neg. */
   --div-pos: #4338ca;
   --div-neg: #c2410c;
+  /* Charts (format.js pulpitTheme): categorical series in fixed order, validated for colour-vision
+     deficiencies on this surface (dataviz reference palette), the sequential tint, grid and null band. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --tint: #4338ca;
+  --chart-grid: #ebe8e1;
+  --chart-band: rgba(120, 113, 108, 0.16);
   /* Shape */
   --radius: .5rem;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .05);
@@ -58,6 +73,17 @@
   --border: #2a2a31;
   --div-pos: #6366f1;
   --div-neg: #ea580c;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #0ca30c;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --tint: #818cf8;
+  --chart-grid: #2e2e36;
+  --chart-band: rgba(199, 193, 187, 0.16);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow: 0 4px 12px rgba(0, 0, 0, .55);
   --bs-primary: #818cf8;
@@ -121,6 +147,21 @@
   --bs-btn-focus-shadow-rgb: 67, 56, 202;
 }
 
+/* Secondary buttons (period selector, Method, Download, theme switch) from the tokens, so their label reads
+   at 4.5:1 or more on the page and on a card in both themes; Bootstrap's own grey does not. */
+.btn-outline-secondary {
+  --bs-btn-color: var(--muted);
+  --bs-btn-border-color: var(--muted);
+  --bs-btn-hover-color: var(--surface);
+  --bs-btn-hover-bg: var(--muted);
+  --bs-btn-hover-border-color: var(--muted);
+  --bs-btn-active-color: var(--surface);
+  --bs-btn-active-bg: var(--muted);
+  --bs-btn-active-border-color: var(--muted);
+  --bs-btn-disabled-color: var(--muted);
+  --bs-btn-disabled-border-color: var(--border);
+}
+
 /* ── Base ──────────────────────────────────────────────────── */
 body {
   font-family: var(--font-sans);
@@ -136,36 +177,6 @@ h5,
 h6 {
   font-family: var(--font-serif);
   font-weight: 700;
-}
-
-/* ── Sticky topnav ─────────────────────────────────────────── */
-.export-topnav {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-}
-
-.export-topnav-inner {
-  display: flex;
-  align-items: center;
-  height: 52px;
-  max-width: calc(1340px + 6rem);
-  margin: 0 auto;
-  padding: 0 3rem;
-}
-
-.export-topnav-brand {
-  display: flex;
-  align-items: center;
-  text-decoration: none;
-}
-
-.export-topnav-brand img {
-  height: 34px;
-  width: auto;
 }
 
 /* ── Content wrappers ───────────────────────────────────────── */
@@ -194,6 +205,35 @@ h6 {
   margin-left: 3rem;
   margin-right: 3rem;
   min-width: 0;
+}
+
+/* Narrow screens: the same 1rem gutter as the top bar. */
+@media (max-width: 720px) {
+  .export-wrap {
+    grid-template-columns:
+      [full-start] 1rem [content-start] minmax(0, 1fr) [content-end] 1rem [full-end];
+  }
+
+  .export-wide {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+}
+
+/* A notice at the top of a page: the page was opened from a folder, or its data could not be read. */
+.export-notice {
+  margin: 0 0 1.25rem;
+  padding: .6rem .9rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: .9rem;
+}
+
+.export-notice--error {
+  border-left-color: var(--div-neg);
 }
 
 /* Prose content inside wide sections (headings, preambles, accordions) is
@@ -257,6 +297,12 @@ h6 {
   overflow-y: auto;
 }
 
+/* A statistic / value table: as wide as its content, not stretched over the page. */
+.table.table-fit {
+  width: auto;
+  min-width: min(100%, 34rem);
+}
+
 td.number,
 th.number {
   text-align: right;
@@ -306,6 +352,19 @@ th[data-sort-direction="desc"] .th-sort-btn::after {
   content: " ↓";
   font-size: 0.75em;
   opacity: 0.6;
+}
+
+/* An unsorted sortable column shows a faint double arrow: the affordance, before any click. */
+th:not([data-sort-direction]) .th-sort-btn::after {
+  content: " ↕";
+  font-size: 0.75em;
+  opacity: 0.3;
+}
+
+.export-sort-hint {
+  margin: 0 0 .35rem;
+  font-size: .78rem;
+  color: var(--muted);
 }
 
 .community-channels summary {
@@ -626,30 +685,6 @@ th.col-group-start {
 }
 
 /* ── Export index section separator ─────────────────────────── */
-.export-section-sep {
-  display: flex;
-  align-items: center;
-  gap: .875rem;
-  margin: 2rem 0 1.25rem;
-}
-
-.export-section-sep::before,
-.export-section-sep::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-.export-section-sep span {
-  color: var(--muted);
-  font-size: .72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  white-space: nowrap;
-}
-
 /* ── Export footer ───────────────────────────────────────────── */
 .export-footer {
   display: flex;
@@ -664,6 +699,13 @@ th.col-group-start {
   max-width: 1400px;
   margin-left: auto;
   margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .export-footer {
+    flex-wrap: wrap;
+    padding: .75rem 1rem;
+  }
 }
 
 .export-footer-title {
@@ -771,6 +813,7 @@ th.col-group-start {
 .audience-key {
   padding: 0 0.25rem;
   border-radius: 2px;
+  color: var(--text);
 }
 
 .audience-key--pos {
@@ -783,4 +826,16 @@ th.col-group-start {
 
 .audience-section {
   scroll-margin-top: 4rem;
+}
+
+/* The logo is drawn in black: on the dark theme it is inverted to stay visible. */
+[data-theme="dark"] .export-topnav-brand img,
+[data-theme="dark"] .export-footer-logo {
+  filter: invert(1);
+}
+
+/* Cells that must stay on one line: identifiers, dates, labels in wide tables. */
+.table td.nowrap,
+.table th.nowrap {
+  white-space: nowrap;
 }

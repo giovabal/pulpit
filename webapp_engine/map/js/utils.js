@@ -4,6 +4,80 @@ export function escHtml(s) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// An algorithmic community is stored as "<n>-<method key>" ("3-leiden_directed"): pages show its number. A label
+// group's community is the label's own name and is shown as it is.
+export function communityName(label) {
+    var m = /^(\d+)-[a-z0-9_]+$/.exec(String(label == null ? "" : label));
+    return m ? m[1] : String(label == null ? "" : label);
+}
+
+// The scope line a table page opens with: what the figures below cover. `extra` adds the page's own sentences.
+export function scopeLine(meta, extra) {
+    var p = document.createElement("p");
+    p.className = "table-preamble";
+    if (!meta) return p;
+    var text = fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " ties";
+    if (meta.start_date || meta.end_date) text += ", " + (meta.start_date || "…") + " to " + (meta.end_date || "…");
+    text += ". A tie points from the citing channel to the cited one";
+    if (meta.edge_weight_label) text += "; its weight is the " + meta.edge_weight_label;
+    text += ".";
+    (extra || []).forEach(function(sentence) {
+        if (sentence) text += " " + sentence;
+    });
+    p.textContent = text;
+    return p;
+}
+
+// One way to say a page could not read its data, used by every page: a notice at the top of the page, with every
+// "Loading…" placeholder cleared. `what` names what failed for the reader ("the data of 2024"), by default the
+// page's data. (A page opened straight from a folder gets its own notice from page.js.)
+var LOAD_FAILURE_ID = "export-load-failure";
+
+export function loadFailed(err, what) {
+    if (err) console.error("Pulpit page:", err);
+    var main = document.getElementById("main-content");
+    if (!main) return;
+    var notice = document.getElementById(LOAD_FAILURE_ID);
+    if (!notice) {
+        notice = document.createElement("p");
+        notice.id = LOAD_FAILURE_ID;
+        notice.className = "export-notice export-notice--error";
+        notice.setAttribute("role", "alert");
+        var head = main.querySelector(".export-page-head");
+        main.insertBefore(notice, head ? head.nextSibling : main.firstChild);
+    }
+    var status = err && /^\d+$/.test(String(err.message || "")) ? " (the server answered " + err.message + ")" : "";
+    notice.textContent = "This page could not load " + (what || "its data") + status +
+        ". Reload the page; if it still fails, a data file of the analysis is missing.";
+    Array.prototype.forEach.call(main.querySelectorAll("p, span, div, td"), function(el) {
+        if (el.children.length === 0 && el.textContent.trim() === "Loading…") el.textContent = "";
+    });
+}
+
+// A later load worked (another period): the failure notice goes.
+export function loadRecovered() {
+    var notice = document.getElementById(LOAD_FAILURE_ID);
+    if (notice) notice.remove();
+}
+
+// The most frequent of `values` (null and undefined left out), the first met on a tie; "" when there is none.
+export function plurality(values) {
+    var counts = {};
+    var best = "",
+        bestN = 0;
+    values.forEach(function(v) {
+        if (v === null || v === undefined) return;
+        counts[v] = (counts[v] || 0) + 1;
+    });
+    Object.keys(counts).forEach(function(v) {
+        if (counts[v] > bestN) {
+            best = v;
+            bestN = counts[v];
+        }
+    });
+    return best;
+}
+
 // Fetch JSON, rejecting on any non-2xx response. Use for required resources.
 export function fetchJson(url) {
     return fetch(url).then(function(r) {
@@ -117,6 +191,36 @@ export function cssColorToRgb(css) {
     }
     m = s.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
     return m ? [+m[1], +m[2], +m[3]] : [17, 34, 51];
+}
+
+// Black or white, whichever reads better as text on the colour `css` (WCAG relative luminance).
+export function readableTextOn(css) {
+    var lin = cssColorToRgb(css).map(function(v) {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    var luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    // Contrast with black is (L + 0.05) / 0.05, with white 1.05 / (L + 0.05): black wins above L ≈ 0.179.
+    return luminance > 0.179 ? "#000000" : "#ffffff";
+}
+
+// ── Map theme ────────────────────────────────────────────────────────────────────
+// A map starts in the light or dark theme the reader chose on the export's other pages (the shared
+// ``pulpit_theme`` key), dark when no choice was made; picking light or dark on a map becomes that choice.
+// The other map themes are display styles of the map alone and are not remembered.
+var THEME_STORAGE_KEY = 'pulpit_theme';
+
+export function initialMapTheme() {
+    var pref = null;
+    try { pref = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { pref = null; }
+    if (pref === 'light') return 'light';
+    if (pref === 'auto') return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'dark';
+}
+
+export function rememberMapTheme(themeKey) {
+    if (themeKey !== 'light' && themeKey !== 'dark') return;
+    try { localStorage.setItem(THEME_STORAGE_KEY, themeKey); } catch (e) { /* storage refused: nothing to remember */ }
 }
 
 function _rgbToHsl(rgb) {

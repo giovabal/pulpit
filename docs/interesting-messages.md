@@ -16,8 +16,8 @@ Both layers are read-only from the analyst's perspective: the hot layer is alway
 | `Message.z_views` / `z_forwards` / `z_reactions` | The three facet z-scores feeding the composite, exposed separately so you can see *why* a post scored well. |
 | `interest_desc` / `interest_asc` sort modes | New radio options in the Options dropdown on home (`/`), search (`/search/`), and channel detail (`/channel/<pk>/`). |
 | `/messages/highlights/` | New global feed across all in-target channels, default-sorted by `interest_score`. Cold-start channels are excluded. |
-| `interest_structural.html` (structural-analysis export page) | Standalone page ranking the hottest messages with *C* (cross-community reach) and *D* (authority-weighted reach) columns; reads the `interest_structural.json` sidecar client-side. |
-| `data/interest_structural.json` (export sidecar) | Per-message *cross-community reach* (C) and *authority-weighted reach* (D), produced opt-in by `structural_analysis --interest-structural`. |
+| `interesting_messages.html` (structural-analysis export page) | Standalone page ranking the hottest messages with *C* (cross-community reach) and *D* (authority-weighted reach) columns; reads the `interesting_messages.json` sidecar client-side. |
+| `data/interesting_messages.json` (export sidecar) | Per-message *cross-community reach* (C) and *authority-weighted reach* (D), produced opt-in by `structural_analysis --interest-structural`. |
 
 ---
 
@@ -133,9 +133,9 @@ The structural layer is most informative on networks that satisfy two conditions
 
 ## Surfaces revisited: how C and D appear in the UI
 
-The structural layer (C and D) is surfaced only by the standalone **`interest_structural.html`** page that `structural_analysis --interest-structural` writes into the export. It ranks the hottest messages with two extra columns — *C* (cross-community reach, the integer) and *D* (authority-weighted reach, the float) — and a caption recording the chosen community strategy, authority key, and window so the analyst sees exactly what the numbers mean. The page reads its own `data/interest_structural.json` sidecar client-side (`fetchJson("data/interest_structural.json")`).
+The structural layer (C and D) is surfaced only by the standalone **`interesting_messages.html`** page that `structural_analysis --interest-structural` writes into the export. It ranks the hottest messages with two extra columns — *C* (cross-community reach, the integer) and *D* (authority-weighted reach, the float) — and a caption recording the chosen community strategy, authority key, and window so the analyst sees exactly what the numbers mean. The page reads its own `data/interesting_messages.json` sidecar client-side (`fetchJson("data/interesting_messages.json")`).
 
-The live web app's hot-layer surfaces — the global `/messages/highlights/` feed and the `interest_desc` / `interest_asc` sort options on the home, search, and channel-detail browsers — show only the database `interest_score`; they are *not* enriched with C and D, because the structural layer is an export-time artifact rather than a crawl-time DB column. The intended pattern for cross-channel investigation of structural reach is to open the `interest_structural.html` export page, or `interest_structural.json` directly in a JSON viewer or notebook.
+The live web app's hot-layer surfaces — the global `/messages/highlights/` feed and the `interest_desc` / `interest_asc` sort options on the home, search, and channel-detail browsers — show only the database `interest_score`; they are *not* enriched with C and D, because the structural layer is an export-time artifact rather than a crawl-time DB column. The intended pattern for cross-channel investigation of structural reach is to open the `interesting_messages.html` export page, or `interesting_messages.json` directly in a JSON viewer or notebook.
 
 ---
 
@@ -157,7 +157,7 @@ Five new nullable columns on `Message`:
 
 The migration's `RunPython` backfill computes scores via `apps.get_model`, so it stays self-contained and replayable. On a 1.7M-message dev DB the backfill takes a few minutes (dominated by `bulk_update`).
 
-### Export sidecar (`data/interest_structural.json`)
+### Export sidecar (`data/interesting_messages.json`)
 
 When `--interest-structural` runs, the export receives a single self-contained JSON file:
 
@@ -196,7 +196,7 @@ The file honours the same `_sanitize_nan_inf` + `allow_nan=False` discipline as 
 
 ### Timeline export
 
-When `--timeline-step year` is active alongside `--interest-structural`, the structural layer runs once on the global graph *and* once per calendar year — per-year payloads land in `data_YYYY/interest_structural.json`. The hot layer is global only: per-channel z-scores are computed against the channel's all-time (or `--recency-days`) baseline regardless of timeline slicing, so an unusually engaging post stays an unusually engaging post no matter which year-slice you read it from.
+When `--timeline-step year` is active alongside `--interest-structural`, the structural layer runs once on the global graph *and* once per calendar year — per-year payloads land in `data_YYYY/interesting_messages.json`. The hot layer is global only: per-channel z-scores are computed against the channel's all-time (or `--recency-days`) baseline regardless of timeline slicing, so an unusually engaging post stays an unusually engaging post no matter which year-slice you read it from.
 
 ---
 

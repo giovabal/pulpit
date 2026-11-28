@@ -236,7 +236,7 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 
 | Path | Description | Built-in default |
 | :--- | :---------- | ---------------: |
-| `interest.structural` | Compute the per-message structural-reach sidecar — cross-community reach (C; Goel et al. 2016) and authority-weighted reach (D; Cha et al. 2010) — and write `data/interest_structural.json` + `interest_structural.html`. Requires at least one community strategy (and ideally `PAGERANK` in `measures.selected`). | `false` |
+| `interest.structural` | Compute the per-message structural-reach sidecar — cross-community reach (C; Goel et al. 2016) and authority-weighted reach (D; Cha et al. 2010) — and write `data/interesting_messages.json` + `interesting_messages.html`. Requires at least one community strategy (and ideally `PAGERANK` in `measures.selected`). | `false` |
 | `interest.window_days` | Reaction window in days for the structural scoring: only forwards within this many days of the origin post count toward C and D. `0` disables the window. | `30` |
 | `interest.include_mentions` | Accepted for forward compatibility; currently a no-op (logs a warning when set). | `false` |
 

@@ -154,7 +154,7 @@ class ComputeEventImpactTests(TestCase):
         self.assertTrue(rows and all(len(r) == len(event_impact.EFFECT_COLUMNS) for r in rows))
         header, series = event_impact.series_rows(payload)
         self.assertEqual(len(series), len(payload["weeks"]))
-        self.assertEqual(header[0], "week")
+        self.assertEqual(header[0], "Week")
 
     def test_timeline_events_carry_the_period_key(self) -> None:
         from network.periods import build_periods

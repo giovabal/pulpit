@@ -2,15 +2,15 @@
 // behavioural equivalence). Both consume the same JSON schema
 // `{ node_ids, node_labels, measures, note, cells_lower }` and differ only in the
 // data file, the container id, and the method note carried in the JSON.
-import { strategy_label as _strat_label } from './labels.js';
+import { measure_label, strategy_label as _strat_label } from './labels.js';
 import { addSvgZoomPan as _addSvgZoomPan, showTip as _showTip, moveTip as _moveTip, hideTip as _hideTip } from './_zoom_pan.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { fetchJson, fetchJsonOrNull, loadFailed, plurality, scopeLine } from './utils.js';
 
 var _dd = window.DATA_DIR || "data/";
 
-// ── Color scale: white (0) → steel-blue (1) ───────────────────────────────────
+// ── Colour scale: the surface (0) → the theme's tint (1), as in every heat map of the export ─────
 function _simColor(v) {
-    return "rgb(" + Math.round(255 - v * 185) + "," + Math.round(255 - v * 125) + "," + Math.round(255 - v * 75) + ")";
+    return "color-mix(in srgb, var(--tint) " + Math.round(Math.max(0, Math.min(1, v)) * 70) + "%, var(--surface))";
 }
 
 // ── Similarity lookup from lower-triangle ─────────────────────────────────────
@@ -24,20 +24,7 @@ function _sim(cells_lower, i, j) {
 function _pluralityComm(node_id, nodeById, communities, stratKeys) {
     var nd = nodeById[node_id];
     if (!nd || !nd.communities) return "";
-    var counts = {};
-    stratKeys.forEach(function(sk) {
-        var c = nd.communities[sk];
-        if (c != null) counts[c] = (counts[c] || 0) + 1;
-    });
-    var best = "",
-        bestN = 0;
-    Object.keys(counts).forEach(function(c) {
-        if (counts[c] > bestN) {
-            best = c;
-            bestN = counts[c];
-        }
-    });
-    return best;
+    return plurality(stratKeys.map(function(sk) { return nd.communities[sk]; }));
 }
 
 // ── Sorted index array ─────────────────────────────────────────────────────────
@@ -86,16 +73,7 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var n = simData.node_ids.length;
 
     // ── Preamble ──────────────────────────────────────────────────────────────
-    if (meta) {
-        var pEl = document.createElement("p");
-        pEl.className = "table-preamble";
-        var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
-        if (meta.start_date || meta.end_date)
-            parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
-        parts.push("Exported " + meta.export_date + ".");
-        pEl.textContent = parts.join(" ");
-        container.appendChild(pEl);
-    }
+    if (meta) container.appendChild(scopeLine(meta));
 
     var noteEl = document.createElement("p");
     noteEl.className = "text-muted small mb-2";
@@ -116,8 +94,11 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var sortSel = document.createElement("select");
     sortSel.className = "form-select form-select-sm";
     sortSel.style.width = "auto";
+    sortSel.style.maxWidth = "100%";
+    sortSel.id = containerId + "-sort";
+    sortLbl.htmlFor = sortSel.id;
     sortSel.appendChild(new Option("Community", "community"));
-    (simData.measures || []).forEach(function(m) { sortSel.appendChild(new Option(m[1], "measure:" + m[0])); });
+    (simData.measures || []).forEach(function(m) { sortSel.appendChild(new Option(measure_label(m[0], m[1]), "measure:" + m[0])); });
     sortSel.value = (sortMode === "community") ? "community" : ("measure:" + sortMeasureKey);
     sortWrap.appendChild(sortLbl);
     sortWrap.appendChild(sortSel);
@@ -131,6 +112,9 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var stratSel = document.createElement("select");
     stratSel.className = "form-select form-select-sm";
     stratSel.style.width = "auto";
+    stratSel.style.maxWidth = "100%";
+    stratSel.id = containerId + "-strategy";
+    stratLbl.htmlFor = stratSel.id;
     stratSel.appendChild(new Option("All", ""));
     stratKeys.forEach(function(sk) { stratSel.appendChild(new Option(_strat_label(sk), sk)); });
     stratSel.value = stratKey || "";
@@ -148,11 +132,11 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     legDiv.style.fontSize = "11px";
     legDiv.appendChild(document.createTextNode("Similarity → "));
     var gradBox = document.createElement("div");
-    gradBox.style.cssText = "width:120px;height:12px;background:linear-gradient(to right,#fff,rgb(70,130,180));border:1px solid #ccc;display:inline-block;vertical-align:middle;";
+    gradBox.style.cssText = "width:120px;height:12px;background:linear-gradient(to right,var(--surface)," + _simColor(1) + ");border:1px solid var(--border);display:inline-block;vertical-align:middle;";
     legDiv.appendChild(gradBox);
     var legLbls = document.createElement("span");
-    legLbls.textContent = "0 – 1.0";
-    legLbls.style.color = "#555";
+    legLbls.textContent = "0 – 1";
+    legLbls.style.color = "var(--muted)";
     legDiv.appendChild(legLbls);
     container.appendChild(legDiv);
 
@@ -175,13 +159,13 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     var svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", svgW);
     svg.setAttribute("height", svgH);
-    svg.style.cssText = "display:block;background:white;";
+    svg.style.cssText = "display:block;background:var(--surface);";
     svg.setAttribute("role", "grid");
     svg.setAttribute("aria-label", "Equivalence heatmap, " + n + " by " + n + " channels");
 
     // Grid lines
     var gridG = document.createElementNS(NS, "g");
-    gridG.setAttribute("stroke", "#e4e4e4");
+    gridG.style.stroke = "var(--chart-grid)";
     gridG.setAttribute("stroke-width", "0.5");
     for (var gi = 0; gi <= n; gi++) {
         var hl = document.createElementNS(NS, "line");
@@ -207,7 +191,7 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
     }
     var triPoly = document.createElementNS(NS, "polygon");
     triPoly.setAttribute("points", triPts.join(" "));
-    triPoly.setAttribute("fill", "#f2f2f2");
+    triPoly.style.fill = "color-mix(in srgb, var(--text) 5%, var(--surface))";
     svg.appendChild(triPoly);
 
     // Row labels (left). Coerce to string — node_ids may be numeric in the JSON.
@@ -219,7 +203,7 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
         tx.setAttribute("dy", "0.35em");
         tx.setAttribute("text-anchor", "end");
         tx.setAttribute("font-size", fontSize);
-        tx.setAttribute("fill", "#333");
+        tx.style.fill = "var(--text)";
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
         if (trunc !== lbl) {
@@ -240,7 +224,7 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
         tx2.setAttribute("y", cy2);
         tx2.setAttribute("text-anchor", "end");
         tx2.setAttribute("font-size", fontSize);
-        tx2.setAttribute("fill", "#333");
+        tx2.style.fill = "var(--text)";
         tx2.setAttribute("transform", "rotate(-45 " + cx + " " + cy2 + ")");
         var trunc2 = lbl2.length > 22 ? lbl2.slice(0, 20) + "…" : lbl2;
         tx2.textContent = trunc2;
@@ -265,17 +249,17 @@ function _render(containerId, simData, channelData, communities, meta, sortMode,
             rect.setAttribute("y", topPad + ri * cellSize);
             rect.setAttribute("width", cellSize);
             rect.setAttribute("height", cellSize);
-            rect.setAttribute("fill", ri === rj ? "#64748b" : _simColor(v));
+            rect.style.fill = ri === rj ? "var(--muted)" : _simColor(v);
             rect.setAttribute("role", "gridcell");
             var labelA = String(simData.node_labels[origI] || origI);
             var labelB = String(simData.node_labels[origJ] || origJ);
             if (ri !== rj) {
                 rect.setAttribute("tabindex", "0");
-                rect.setAttribute("aria-label", labelA + " by " + labelB + ", similarity " + v.toFixed(4));
+                rect.setAttribute("aria-label", labelA + " by " + labelB + ", similarity " + sigFig(v, 3));
                 (function(lA, lB, val) {
-                    rect.addEventListener("mouseenter", function(e) { _showTip(e, lA + " × " + lB + ": " + val.toFixed(4)); });
+                    rect.addEventListener("mouseenter", function(e) { _showTip(e, lA + " × " + lB + ": " + sigFig(val, 3)); });
                     rect.addEventListener("mousemove", _moveTip);
-                    rect.addEventListener("focus", function(e) { _showTip(e, lA + " × " + lB + ": " + val.toFixed(4)); });
+                    rect.addEventListener("focus", function(e) { _showTip(e, lA + " × " + lB + ": " + sigFig(val, 3)); });
                     rect.addEventListener("blur", _hideTip);
                 })(labelA, labelB, v);
             } else {
@@ -320,8 +304,7 @@ export function initEquivalenceMatrix(opts) {
     ]).then(function(results) {
         _render(containerId, results[0], results[1], results[2], results[3], "community", null, null);
     }).catch(function(err) {
-        var el = document.getElementById(containerId);
-        if (el) el.textContent = "Failed to load data.";
         console.error(errorLabel + ":", err);
+        loadFailed(err);
     });
 }

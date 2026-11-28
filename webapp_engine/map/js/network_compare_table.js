@@ -1,5 +1,56 @@
-import { strategy_label } from './labels.js';
-import { fetchJson, arrMin, arrMax } from './utils.js';
+import { measure_label, strategy_label } from './labels.js';
+import { histogram, power_law_fit } from './charts.js';
+import { fetchJson, arrMin, arrMax, loadFailed } from './utils.js';
+
+// Statistics renamed after an analysis may have been exported: an older export's row, read under its new
+// name, still lines up with the same statistic of a newer one.
+// How the two analyses are named in every table, legend and tooltip of the page.
+var THIS_ANALYSIS = "This analysis";
+var COMPARED_ANALYSIS = "Compared analysis";
+
+var LEGACY_LABELS = {
+    "Nodes": "Channels",
+    "Edges": "Ties",
+    "Edges / Nodes": "Ties per channel",
+    "Avg Clustering (0–1)": "Mean clustering (0–1)",
+    "Avg Path Length": "Mean path length",
+    "Avg Path Length †": "Mean path length †",
+    "Directed Avg Path Length": "Directed mean path length",
+    "Directed Avg Path Length ‡": "Directed mean path length ‡",
+    "Directed Diameter": "Directed diameter",
+    "Directed Diameter ‡": "Directed diameter ‡",
+    "Global Efficiency (0–1)": "Global efficiency (0–1)",
+    "Algebraic Connectivity": "Algebraic connectivity",
+    "Algebraic Connectivity †": "Algebraic connectivity †",
+    "WCC count": "Weakly connected components",
+    "Largest WCC fraction (0–1)": "Largest weakly connected component, share (0–1)",
+    "SCC count": "Strongly connected components",
+    "Largest SCC fraction (0–1)": "Largest strongly connected component, share (0–1)",
+    "Mean Burt's Constraint (~0–1)": "Mean Burt's constraint (~0–1)",
+    "Content Originality (0–1)": "Content originality (0–1)",
+    "Amplification Ratio": "Amplification ratio",
+};
+
+// Looked up without regard to case: the capitals of a statistic's name changed between releases too.
+var _LEGACY_LABELS_LC = {};
+Object.keys(LEGACY_LABELS).forEach(function(old) { _LEGACY_LABELS_LC[old.toLowerCase()] = LEGACY_LABELS[old]; });
+
+function _currentLabel(label) {
+    var text = String(label);
+    var renamed = _LEGACY_LABELS_LC[text.toLowerCase()];
+    if (renamed) return renamed;
+    return text.replace(/ Centralization \(approx\., 0–1\)$/i, " centralisation (approx., 0–1)")
+        .replace(/^HITS Hub\b/, "HITS hub").replace(/^HITS Authority\b/, "HITS authority");
+}
+
+// Two exports' rows are the same statistic when their names match, whatever the capitals.
+function _labelKey(label) {
+    return String(label).toLowerCase();
+}
+
+function _measureLabels(measures) {
+    return measures.map(function(m) { return [m[0], measure_label(m[0], m[1])]; });
+}
 
 Promise.all([
     fetchJson("data/network_metrics.json"),
@@ -13,42 +64,39 @@ Promise.all([
         channelsB = results[3];
     var nodesA = channelsA.nodes;
     var nodesB = channelsB.nodes;
-    var measuresA = channelsA.measures || [];
-    var measuresB = channelsB.measures || [];
+    var measuresA = _measureLabels(channelsA.measures || []);
+    var measuresB = _measureLabels(channelsB.measures || []);
 
     // --- Comparison table ---
     var tablesSection = document.getElementById("compare-tables-section");
 
+    [dataA, dataB].forEach(function(d) {
+        d.summary_rows.forEach(function(row) { row.label = _currentLabel(row.label); });
+    });
     var aValueOf = {};
-    dataA.summary_rows.forEach(function(row) { aValueOf[row.label] = row.value; });
+    dataA.summary_rows.forEach(function(row) { aValueOf[_labelKey(row.label)] = row.value; });
     var bValueOf = {};
-    dataB.summary_rows.forEach(function(row) { bValueOf[row.label] = row.value; });
+    dataB.summary_rows.forEach(function(row) { bValueOf[_labelKey(row.label)] = row.value; });
 
     // Merge labels: preserve A order, append B-only labels at the end
     var allLabels = [];
     var seen = {};
-    dataA.summary_rows.forEach(function(row) {
-        if (!seen[row.label]) {
-            seen[row.label] = true;
-            allLabels.push(row.label);
-        }
-    });
-    dataB.summary_rows.forEach(function(row) {
-        if (!seen[row.label]) {
-            seen[row.label] = true;
+    dataA.summary_rows.concat(dataB.summary_rows).forEach(function(row) {
+        var key = _labelKey(row.label);
+        if (!seen[key]) {
+            seen[key] = true;
             allLabels.push(row.label);
         }
     });
 
-    var h5 = document.createElement("h5");
-    h5.className = "mb-2";
-    h5.textContent = "Whole-network metrics";
-    tablesSection.appendChild(h5);
+    var h2 = document.createElement("h2");
+    h2.textContent = "Whole-network statistics";
+    tablesSection.appendChild(h2);
     var table = document.createElement("table");
-    table.className = "table table-sm table-hover";
+    table.className = "table table-sm table-hover table-fit";
     var thead = document.createElement("thead");
     var tr = document.createElement("tr");
-    ["Metric", "This network", "Compare network"].forEach(function(label, i) {
+    ["Statistic", THIS_ANALYSIS, COMPARED_ANALYSIS].forEach(function(label, i) {
         var th = document.createElement("th");
         th.scope = "col";
         if (i > 0) th.className = "number";
@@ -64,17 +112,21 @@ Promise.all([
         td1.textContent = label;
         var td2 = document.createElement("td");
         td2.className = "number";
-        td2.textContent = aValueOf[label] !== undefined ? aValueOf[label] : "N/A";
+        var key = _labelKey(label);
+        td2.textContent = aValueOf[key] !== undefined ? aValueOf[key] : MISSING;
         var td3 = document.createElement("td");
         td3.className = "number";
-        td3.textContent = bValueOf[label] !== undefined ? bValueOf[label] : "N/A";
+        td3.textContent = bValueOf[key] !== undefined ? bValueOf[key] : MISSING;
         tr2.appendChild(td1);
         tr2.appendChild(td2);
         tr2.appendChild(td3);
         tbody.appendChild(tr2);
     });
     table.appendChild(tbody);
-    tablesSection.appendChild(table);
+    var tableWrap = document.createElement("div");
+    tableWrap.className = "table-responsive";
+    tableWrap.appendChild(table);
+    tablesSection.appendChild(tableWrap);
 
     if (dataA.wcc_note_visible || dataB.wcc_note_visible) {
         var note = document.createElement("p");
@@ -91,10 +143,9 @@ Promise.all([
 
     // --- Modularity comparison ---
     if ((dataA.modularity_rows && dataA.modularity_rows.length) || (dataB.modularity_rows && dataB.modularity_rows.length)) {
-        var h5m = document.createElement("h5");
-        h5m.className = "mb-2 mt-4";
-        h5m.textContent = "Modularity by strategy";
-        tablesSection.appendChild(h5m);
+        var h2m = document.createElement("h2");
+        h2m.textContent = "Modularity by method";
+        tablesSection.appendChild(h2m);
 
         var aMod = {},
             bMod = {};
@@ -117,10 +168,10 @@ Promise.all([
         });
 
         var modTable = document.createElement("table");
-        modTable.className = "table table-sm table-hover sortable";
+        modTable.className = "table table-sm table-hover table-fit sortable";
         var mThead = document.createElement("thead");
         var mTr = document.createElement("tr");
-        ["Strategy", "This network", "Compare network"].forEach(function(label, i) {
+        ["Method", THIS_ANALYSIS, COMPARED_ANALYSIS].forEach(function(label, i) {
             var th = document.createElement("th");
             th.scope = "col";
             if (i > 0) th.className = "number";
@@ -133,26 +184,32 @@ Promise.all([
         allStrategies.forEach(function(strategy) {
             var tr3 = document.createElement("tr");
             var td1 = document.createElement("td");
+            td1.className = "nowrap";
             td1.textContent = strategy_label(strategy);
             var td2 = document.createElement("td");
             td2.className = "number";
-            td2.textContent = aMod[strategy] !== undefined ? aMod[strategy] : "N/A";
+            td2.textContent = aMod[strategy] !== undefined ? aMod[strategy] : MISSING;
             var td3 = document.createElement("td");
             td3.className = "number";
-            td3.textContent = bMod[strategy] !== undefined ? bMod[strategy] : "N/A";
+            td3.textContent = bMod[strategy] !== undefined ? bMod[strategy] : MISSING;
             tr3.appendChild(td1);
             tr3.appendChild(td2);
             tr3.appendChild(td3);
             mTbody.appendChild(tr3);
         });
         modTable.appendChild(mTbody);
-        tablesSection.appendChild(modTable);
+        var modWrap = document.createElement("div");
+        modWrap.className = "table-responsive";
+        modWrap.appendChild(modTable);
+        tablesSection.appendChild(modWrap);
     }
 
     initSortableTables();
 
     // --- Degree distribution histogram (lazy, both networks) ---
     var distSection = document.getElementById("degree-dist-section");
+    var distWrapper = document.getElementById("degree-distribution");
+    if (distWrapper) distWrapper.classList.remove("d-none");
 
     var distControls = document.createElement("div");
     distControls.className = "d-flex align-items-end gap-3 mb-3";
@@ -179,32 +236,26 @@ Promise.all([
     var distCanvasWrap = document.createElement("div");
     distCanvasWrap.style.cssText = "height:280px;position:relative;";
     var distCanvas = document.createElement("canvas");
+    distCanvas.setAttribute("role", "img");
+    distCanvas.setAttribute("aria-label", "Histogram of the channels of the two analyses by in-strength or out-strength");
     distCanvasWrap.appendChild(distCanvas);
     distSection.appendChild(distCanvasWrap);
 
+    // Both analyses on the same bins (charts.js histogram).
     function buildCompareDistData(key) {
-        var valsA = nodesA.map(function(n) { return n[key] || 0; });
-        var valsB = nodesB.map(function(n) { return n[key] || 0; });
-        var maxVal = arrMax(valsA.concat(valsB));
-        var binSize = 10;
-        var numBins = Math.max(1, Math.ceil((maxVal + 1) / binSize));
-        var countsA = new Array(numBins).fill(0);
-        var countsB = new Array(numBins).fill(0);
-        valsA.forEach(function(v) { countsA[Math.floor(v / binSize)]++; });
-        valsB.forEach(function(v) { countsB[Math.floor(v / binSize)]++; });
-        while (numBins > 1 && countsA[numBins - 1] === 0 && countsB[numBins - 1] === 0) {
-            countsA.pop();
-            countsB.pop();
-            numBins--;
-        }
-        var labels = countsA.map(function(_, i) {
-            return (i * binSize) + "\u2013" + (i * binSize + binSize - 1);
-        });
-        return { labels: labels, countsA: countsA, countsB: countsB };
+        var bins = histogram([
+            nodesA.map(function(n) { return n[key] || 0; }),
+            nodesB.map(function(n) { return n[key] || 0; }),
+        ]);
+        return { labels: bins.labels, countsA: bins.counts[0], countsB: bins.counts[1] };
     }
 
     var distChart = null;
     var distInitialized = false;
+
+    function _distLabel() {
+        return dirSel.value === "out_deg" ? "Out-strength" : "In-strength";
+    }
 
     function initDistChart() {
         if (distInitialized) return;
@@ -215,8 +266,8 @@ Promise.all([
             data: {
                 labels: dd.labels,
                 datasets: [
-                    { label: "This network", data: dd.countsA, backgroundColor: "rgba(37,99,235,0.65)", borderRadius: 3 },
-                    { label: "Compare network", data: dd.countsB, backgroundColor: "rgba(220,38,38,0.65)", borderRadius: 3 }
+                    { label: THIS_ANALYSIS, data: dd.countsA, backgroundColor: pulpitTheme().series[0], borderRadius: 3 },
+                    { label: COMPARED_ANALYSIS, data: dd.countsB, backgroundColor: pulpitTheme().series[1], borderRadius: 3 }
                 ]
             },
             options: {
@@ -225,8 +276,8 @@ Promise.all([
                 maintainAspectRatio: false,
                 plugins: { legend: { display: true, position: "top" } },
                 scales: {
-                    x: { title: { display: true, text: "Links per node", font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
-                    y: { title: { display: true, text: "Nodes", font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 }, precision: 0 } }
+                    x: { title: { display: true, text: _distLabel(), font: { size: 12 } }, grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { title: { display: true, text: "Channels", font: { size: 12 } }, ticks: { font: { size: 11 }, precision: 0 } }
                 }
             }
         });
@@ -238,6 +289,7 @@ Promise.all([
         distChart.data.labels = dd.labels;
         distChart.data.datasets[0].data = dd.countsA;
         distChart.data.datasets[1].data = dd.countsB;
+        distChart.options.scales.x.title.text = _distLabel();
         distChart.update();
     });
 
@@ -260,6 +312,8 @@ Promise.all([
     if (commonMeasures.length < 2) return;
 
     var scatterSection = document.getElementById("scatter-section");
+    var scatterWrapper = document.getElementById("measure-comparison");
+    if (scatterWrapper) scatterWrapper.classList.remove("d-none");
     var labelOf = {};
     commonMeasures.forEach(function(m) { labelOf[m[0]] = m[1]; });
 
@@ -295,7 +349,7 @@ Promise.all([
     var normalizeLbl = document.createElement("label");
     normalizeLbl.className = "form-check-label small fw-semibold";
     normalizeLbl.htmlFor = "normalize-chk";
-    normalizeLbl.textContent = "Normalize axes [0–1] per network";
+    normalizeLbl.textContent = "Normalise axes to 0–1 per analysis";
     normalizeWrap.appendChild(normalizeChk);
     normalizeWrap.appendChild(normalizeLbl);
     controls.appendChild(normalizeWrap);
@@ -303,6 +357,7 @@ Promise.all([
     var resetWrap = document.createElement("div");
     resetWrap.className = "scatter-reset-wrap";
     var resetBtn = document.createElement("button");
+    resetBtn.type = "button";
     resetBtn.className = "btn btn-outline-secondary btn-sm";
     resetBtn.textContent = "Reset zoom";
     resetWrap.appendChild(resetBtn);
@@ -317,6 +372,8 @@ Promise.all([
     var canvasWrap = document.createElement("div");
     canvasWrap.className = "scatter-canvas-wrap";
     var canvas = document.createElement("canvas");
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", "Scatter plot of the channels of the two analyses on two measures");
     canvasWrap.appendChild(canvas);
     scatterSection.appendChild(canvasWrap);
 
@@ -354,34 +411,12 @@ Promise.all([
         return { min: mn, range: mx - mn || 1 };
     }
 
-    function powerLawFit(pts) {
-        var valid = pts.filter(function(p) { return p.x > 0 && p.y > 0; });
-        if (valid.length < 2) return null;
-        var n = valid.length,
-            sumX = 0,
-            sumY = 0,
-            sumXY = 0,
-            sumX2 = 0;
-        valid.forEach(function(p) {
-            var lx = Math.log(p.x),
-                ly = Math.log(p.y);
-            sumX += lx;
-            sumY += ly;
-            sumXY += lx * ly;
-            sumX2 += lx * lx;
-        });
-        var d = n * sumX2 - sumX * sumX;
-        if (!d) return null;
-        var slope = (n * sumXY - sumX * sumY) / d;
-        return { slope: slope, intercept: (sumY - slope * sumX) / n };
-    }
-
     // Fit on RAW values (which every point carries) so a node normalized to exactly
     // 0 is not dropped by the log filter, then map the two endpoints back into the
     // plotted (optionally normalized) coordinate space. `ax` is null in raw mode.
     function buildRegLine(pts, ax) {
         var valid = pts.filter(function(p) { return p.xRaw > 0 && p.yRaw > 0; });
-        var fit = powerLawFit(valid.map(function(p) { return { x: p.xRaw, y: p.yRaw }; }));
+        var fit = power_law_fit(valid.map(function(p) { return { x: p.xRaw, y: p.yRaw }; }));
         if (!fit) return [];
         var xs = valid.map(function(p) { return p.xRaw; });
         var xMin = arrMin(xs),
@@ -409,7 +444,7 @@ Promise.all([
     }
 
     var initial = buildDatasets(xSelect.value, ySelect.value);
-    countNote.textContent = initial.ptsA.length + " + " + initial.ptsB.length + " nodes (zero values excluded)";
+    countNote.textContent = fmtInt(initial.ptsA.length) + " + " + fmtInt(initial.ptsB.length) + " channels (zeros left out)";
 
     function scaleType() { return normalizeChk.checked ? "linear" : "logarithmic"; }
 
@@ -417,10 +452,10 @@ Promise.all([
         type: "scatter",
         data: {
             datasets: [
-                { label: "This network", data: initial.ptsA, backgroundColor: "rgba(37,99,235,0.55)", pointRadius: 4, pointHoverRadius: 6 },
-                { label: "Trend A", data: initial.regA, type: "line", borderColor: "rgba(37,99,235,0.75)", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
-                { label: "Compare network", data: initial.ptsB, backgroundColor: "rgba(220,38,38,0.55)", pointRadius: 4, pointHoverRadius: 6 },
-                { label: "Trend B", data: initial.regB, type: "line", borderColor: "rgba(220,38,38,0.75)", borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
+                { label: THIS_ANALYSIS, data: initial.ptsA, backgroundColor: pulpitTheme().series[0], pointRadius: 4, pointHoverRadius: 6 },
+                { label: "Trend, " + THIS_ANALYSIS.toLowerCase(), data: initial.regA, type: "line", borderColor: pulpitTheme().series[0], borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
+                { label: COMPARED_ANALYSIS, data: initial.ptsB, backgroundColor: pulpitTheme().series[1], pointRadius: 4, pointHoverRadius: 6 },
+                { label: "Trend, " + COMPARED_ANALYSIS.toLowerCase(), data: initial.regB, type: "line", borderColor: pulpitTheme().series[1], borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, tension: 0 },
             ],
         },
         options: {
@@ -428,8 +463,8 @@ Promise.all([
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { type: scaleType(), title: { display: true, text: labelOf[xSelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
-                y: { type: scaleType(), title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, grid: { color: "#e5e7eb" }, ticks: { font: { size: 11 } } },
+                x: { type: scaleType(), title: { display: true, text: labelOf[xSelect.value], font: { size: 12 } }, ticks: { font: { size: 11 } } },
+                y: { type: scaleType(), title: { display: true, text: labelOf[ySelect.value], font: { size: 12 } }, ticks: { font: { size: 11 } } },
             },
             plugins: {
                 legend: { display: true, position: "top", labels: { filter: function(item) { return item.datasetIndex % 2 === 0; } } },
@@ -440,9 +475,9 @@ Promise.all([
                             var d = ctx.raw,
                                 xLbl = chart.options.scales.x.title.text,
                                 yLbl = chart.options.scales.y.title.text;
-                            var xVal = d.xRaw !== undefined ? d.xRaw.toFixed(4) : d.x.toFixed(4);
-                            var yVal = d.yRaw !== undefined ? d.yRaw.toFixed(4) : d.y.toFixed(4);
-                            return ["Channel: " + d.label, xLbl + ": " + xVal, yLbl + ": " + yVal, "Subscribers: " + d.fans.toLocaleString(), "Messages: " + d.msgs.toLocaleString()];
+                            var xVal = sigFig(d.xRaw !== undefined ? d.xRaw : d.x, 4);
+                            var yVal = sigFig(d.yRaw !== undefined ? d.yRaw : d.y, 4);
+                            return ["Channel: " + d.label, xLbl + ": " + xVal, yLbl + ": " + yVal, "Subscribers: " + fmtInt(d.fans), "Messages: " + fmtInt(d.msgs)];
                         },
                     },
                 },
@@ -465,8 +500,8 @@ Promise.all([
         chart.options.scales.y.title.text = labelOf[yKey];
         chart.resetZoom();
         chart.update();
-        var note = normalizeChk.checked ? " nodes (normalized to [0–1] per network)" : " nodes (zero values excluded)";
-        countNote.textContent = ds.ptsA.length + " + " + ds.ptsB.length + note;
+        var note = normalizeChk.checked ? " channels (normalised to 0–1 per analysis)" : " channels (zeros left out)";
+        countNote.textContent = fmtInt(ds.ptsA.length) + " + " + fmtInt(ds.ptsB.length) + note;
     }
 
     xSelect.addEventListener("change", updateChart);
@@ -474,9 +509,5 @@ Promise.all([
     normalizeChk.addEventListener("change", updateChart);
     resetBtn.addEventListener("click", function() { chart.resetZoom(); });
 }).catch(function(err) {
-    var el = document.getElementById("compare-tables-section") || document.body;
-    var p = document.createElement("p");
-    p.textContent = "Failed to load comparison data.";
-    el.insertBefore(p, el.firstChild);
-    console.error("network_compare_table:", err);
+    loadFailed(err, "the data of the two analyses");
 });

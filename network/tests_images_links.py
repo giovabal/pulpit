@@ -348,7 +348,7 @@ class ImageAndLinkExportTests(TestCase):
             "data/links.json",
             "links.html",
             "links.xlsx",
-            "channel_sites.csv",
+            "links_channel_sites.csv",
             "links_colinking.csv",
             "data_2024/links.json",
             "data_2024/image_copies.csv",

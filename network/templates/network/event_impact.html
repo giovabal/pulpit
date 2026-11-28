@@ -1,0 +1,24 @@
+{% extends "network/_table_base.html" %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>For each event the analyst recorded, the weekly series around its date are fitted with a <em>segmented
+  regression</em>: the <em>level change</em> is the jump at the event's week, the <em>slope change</em> the bend in the
+  trend after it. An event scoped to labels is tested as a <em>comparative</em> series (the channels holding those labels
+  against all the others), so a movement-wide shift does not count as the event's effect.</p>
+  <p><em>p (HAC)</em> uses autocorrelation-robust standard errors. <em>p (placebo)</em> is the share of other dates at
+  which the same model finds an effect at least as large, and <em>q</em> corrects it for the number of events and metrics
+  tested (Benjamini–Hochberg). Counts are modelled on log(1 + count): a level change of 0.1 is about +10%.</p>
+</details>
+<div id="ei-preamble" class="mb-3"></div>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
+<div id="ei-overview" class="mb-4"></div>
+<div id="ei-events"></div>
+<script type="module" src="js/event_impact.js"></script>
+{% endblock %}

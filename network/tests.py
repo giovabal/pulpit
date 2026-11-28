@@ -884,11 +884,11 @@ class StrategyParserTests(TestCase):
 
     def test_label_group_display_carries_custom_label_tag(self) -> None:
         # Outside its own picker a label group reads as a manual partition: both the key-based display
-        # label (exports/tables) and the instance label (basis dropdown, summaries) get "[custom label]".
+        # label (exports/tables) and the instance label (basis dropdown, summaries) get "(label group)".
         group = label_group(name="Region", is_primary=False)
-        self.assertEqual(strategy_display_label(f"labelgroup{group.pk}"), "Region [custom label]")
+        self.assertEqual(strategy_display_label(f"labelgroup{group.pk}"), "Region (label group)")
         inst = parse_strategies([f"LABELGROUP{group.pk}"])[0]
-        self.assertEqual(inst.label, "Region [custom label]")
+        self.assertEqual(inst.label, "Region (label group)")
 
     def test_strategy_name_sources_stay_in_sync(self) -> None:
         # Guard: measures.ALL_STRATEGIES (the measure "basis" choices) must match the community list.
@@ -2317,7 +2317,9 @@ class PatchHtmlTitleTests(TestCase):
                     with open(os.path.join(tmpdir, page)) as f:
                         content = f.read()
                     self.assertIn(f"<title>{html.escape(title)} | {name}</title>", content)
-                    self.assertIn(f'<h4 class="modal-title" id="about_modalLabel">{html.escape(title)}</h4>', content)
+                    self.assertIn(
+                        f'<h2 class="modal-title h4" id="about_modalLabel">{html.escape(title)}</h2>', content
+                    )
 
     def test_backslashes_in_the_title_land_literally_in_the_coordination_pages(self) -> None:
         for title in self.TITLES:
@@ -2330,7 +2332,7 @@ class PatchHtmlTitleTests(TestCase):
                     with open(os.path.join(tmpdir, page)) as f:
                         content = f.read()
                     self.assertIn(f"<title>{title} | {name}</title>", content)
-                    self.assertIn(f'id="about_modalLabel">{title} — Coordination</h4>', content)
+                    self.assertIn(f'id="about_modalLabel">{title} — Coordination</h2>', content)
 
 
 # ---------------------------------------------------------------------------
@@ -2957,7 +2959,7 @@ class ExportNetworkCommandTests(TestCase):
             f"{_b}.publication.publish",
             f"{_b}.exporter.write_summary_json",
             f"{_b}.parameters.write_parameters_md",
-            f"{_b}.tables.write_index_html",
+            f"{_b}.site.finalise",
             f"{_b}.tables.write_network_metrics_json",
             f"{_b}.tables.write_community_metrics_json",
             f"{_b}.tables.write_network_table_html",
@@ -4144,7 +4146,7 @@ class ApplyModuleRoleTests(TestCase):
             labels,
             [
                 ("within_module_z", "Within-module z"),
-                ("participation", "Participation Coefficient"),
+                ("participation", "Participation coefficient"),
                 ("participation_weighted", "Participation (weighted)"),
             ],
         )
@@ -4877,7 +4879,7 @@ class WriteCoordinationOutputsTests(TestCase):
                 # Titled after the project and the page, still noindex without --seo, and described as
                 # the coordination map rather than the structural one it is copied from.
                 self.assertIn("<title>Test Project | Coordination map", content)
-                self.assertIn('id="about_modalLabel">Test Project — Coordination</h4>', content)
+                self.assertIn('id="about_modalLabel">Test Project — Coordination</h2>', content)
                 self.assertIn('content="noindex', content)
                 self.assertIn("co-forwarding coordination", content)
                 self.assertNotIn("showing how they connect", content)
@@ -5007,13 +5009,13 @@ class NetworkSummaryRowsTests(TestCase):
     def test_nodes_row_present(self) -> None:
         rows = network_summary_rows(self._make_summary())
         labels = [r[0] for r in rows]
-        self.assertIn("Nodes", labels)
+        self.assertIn("Channels", labels)
 
     def test_edges_row_value_matches_summary(self) -> None:
         rows = network_summary_rows(self._make_summary())
         row_map = {r[0]: r[1] for r in rows}
-        self.assertEqual(row_map["Nodes"], 5)
-        self.assertEqual(row_map["Edges"], 8)
+        self.assertEqual(row_map["Channels"], 5)
+        self.assertEqual(row_map["Ties"], 8)
 
 
 # ---------------------------------------------------------------------------
@@ -6946,10 +6948,13 @@ class WriteRobustnessTableXlsxTests(TestCase):
             out = os.path.join(tmp, "robustness_table.xlsx")
             write_robustness_table_xlsx(self._payload(), output_filename=out)
             wb = openpyxl.load_workbook(out)
-            ws = wb["Ban wave leiden"]
-            self.assertEqual(ws.max_row, 2)  # header + 1 block
-            self.assertEqual(ws.cell(row=2, column=1).value, "0")
-            self.assertEqual(ws.cell(row=2, column=2).value, 2)
+            ws = wb["Ban waves"]
+            # One row per (community, measure): the block's channels in Channels, its number (or label) in Community.
+            header = [c.value for c in ws[1]]
+            self.assertEqual(header[:5], ["Method", "Community", "Channels", "Share of the network", "Measure"])
+            rows = list(ws.iter_rows(min_row=2, values_only=True))
+            self.assertEqual({r[4] for r in rows}, {"WCC", "SCC", "Reach", "Strength"})
+            self.assertEqual({(r[1], r[2]) for r in rows}, {(0, 2)})
 
     def test_ban_wave_sheet_prefers_community_label(self) -> None:
         from network.tables import write_robustness_table_xlsx
@@ -6962,8 +6967,8 @@ class WriteRobustnessTableXlsxTests(TestCase):
             out = os.path.join(tmp, "robustness_table.xlsx")
             write_robustness_table_xlsx(payload, output_filename=out)
             wb = openpyxl.load_workbook(out)
-            ws = wb["Ban wave leiden"]
-            self.assertEqual(ws.cell(row=2, column=1).value, "Germany")
+            ws = wb["Ban waves"]
+            self.assertEqual(ws.cell(row=2, column=2).value, "Germany")
 
     def test_handles_payload_without_null(self) -> None:
         from network.tables import write_robustness_table_xlsx
@@ -6979,10 +6984,9 @@ class WriteRobustnessTableXlsxTests(TestCase):
             wb = openpyxl.load_workbook(out)
             self.assertIn("Summary", wb.sheetnames)
 
-    def test_year_data_produces_year_suffixed_sheets(self) -> None:
-        # With year_data the workbook becomes one contiguous block of sheets per
-        # scope: All first, then each year.  Sheet names get a space-separated
-        # suffix; the un-suffixed "Summary" sheet must not appear.
+    def test_year_data_goes_in_a_period_column(self) -> None:
+        # With year_data every table stays one sheet, with a leading Period column: "All periods" for the
+        # full range, then each period — no per-period sheets, no truncated sheet names.
         from network.tables import write_robustness_table_xlsx
 
         import openpyxl
@@ -6994,32 +6998,13 @@ class WriteRobustnessTableXlsxTests(TestCase):
             out = os.path.join(tmp, "robustness_table.xlsx")
             write_robustness_table_xlsx(global_payload, output_filename=out, year_data=year_data)
             wb = openpyxl.load_workbook(out)
-            for expected in (
-                "Summary All",
-                "Summary 2019",
-                "Summary 2020",
-                "Curve pagerank All",
-                "Curve pagerank 2019",
-                "Curve pagerank 2020",
-                "Modular leiden All",
-                "Modular leiden 2019",
-                "Modular leiden 2020",
-            ):
-                self.assertIn(expected, wb.sheetnames, msg=f"missing sheet {expected!r}")
-            # Un-suffixed sheets must not coexist with the year-grouped layout.
-            self.assertNotIn("Summary", wb.sheetnames)
-            self.assertNotIn("Curve pagerank", wb.sheetnames)
-
-    def test_sheet_name_helper_respects_31_char_cap(self) -> None:
-        # Long partition name + year suffix must stay within Excel's 31-char limit.
-        from network.tables import _robustness_sheet_name
-
-        self.assertEqual(_robustness_sheet_name("Summary", ""), "Summary")
-        self.assertEqual(_robustness_sheet_name("Summary", "All"), "Summary All")
-        long_partition = "Modular leiden_directed_super_long"
-        out = _robustness_sheet_name(long_partition, "2020")
-        self.assertLessEqual(len(out), 31)
-        self.assertTrue(out.endswith(" 2020"))
+            self.assertEqual(wb.sheetnames[:2], ["Summary", "Curves"])
+            for title in ("Summary", "Curves", "Modular"):
+                ws = wb[title]
+                self.assertEqual(ws["A1"].value, "Period")
+                periods = {row[0] for row in ws.iter_rows(min_row=2, values_only=True)}
+                self.assertEqual(periods, {"All periods", "2019", "2020"})
+            self.assertFalse(any(" 2019" in name or "All" in name for name in wb.sheetnames))
 
 
 # ---------------------------------------------------------------------------
@@ -8426,11 +8411,15 @@ class WriteDominanceOutputsTests(TestCase):
             with open(os.path.join(tmp, "dominance_pairs.csv"), encoding="utf-8") as f:
                 lines = f.read().splitlines()
             self.assertEqual(len(lines), 3)
-            self.assertTrue(lines[0].startswith("Dependent,Dependent label,Dominant,Dominant label,Relation,Mutual"))
+            self.assertTrue(
+                lines[0].startswith(
+                    "dependent_id,dependent,dependent_label,dominant_id,dominant,dominant_label,relation,mutual"
+                )
+            )
             with open(os.path.join(tmp, "dominance_channels.csv"), encoding="utf-8") as f:
                 lines = f.read().splitlines()
             self.assertEqual(len(lines), 4)
-            self.assertTrue(lines[0].startswith("Channel,Label,Role,David's score"))
+            self.assertTrue(lines[0].startswith("channel_id,channel,label,role,david_s_score"))
 
     def test_xlsx_sheets_without_and_with_years(self) -> None:
         from network.tables import write_dominance_xlsx
@@ -8443,15 +8432,17 @@ class WriteDominanceOutputsTests(TestCase):
             write_dominance_xlsx(payload, output_filename=out, project_title="Test")
             wb = openpyxl.load_workbook(out)
             self.assertEqual(wb.sheetnames, ["Channels", "Pairs", "Hierarchy"])
-            self.assertEqual(wb["Channels"].cell(row=1, column=1).value, "Channel")
+            self.assertEqual(wb["Channels"].cell(row=1, column=2).value, "Channel")
             self.assertEqual(wb["Channels"].max_row, 4)
             self.assertEqual(wb["Pairs"].max_row, 3)
-            self.assertEqual(wb["Hierarchy"].cell(row=2, column=1).value, "n_ranked")
+            self.assertEqual(wb["Hierarchy"].cell(row=2, column=1).value, "N ranked")
             write_dominance_xlsx(payload, output_filename=out, year_data=[(2021, payload)])
             wb = openpyxl.load_workbook(out)
+            # The same three sheets, each with a Period column: "All periods", then 2021.
+            self.assertEqual(wb.sheetnames, ["Channels", "Pairs", "Hierarchy"])
+            self.assertEqual(wb["Channels"].cell(row=1, column=1).value, "Period")
             self.assertEqual(
-                wb.sheetnames,
-                ["Channels All", "Pairs All", "Hierarchy All", "Channels 2021", "Pairs 2021", "Hierarchy 2021"],
+                {r[0] for r in wb["Pairs"].iter_rows(min_row=2, values_only=True)}, {"All periods", "2021"}
             )
 
     def test_html_page_renders_from_real_template(self) -> None:
@@ -8468,18 +8459,23 @@ class WriteDominanceOutputsTests(TestCase):
             self.assertIn('id="dm-pairs"', content)
             self.assertIn("noindex", content)
 
-    def test_index_card_toggles(self) -> None:
-        from network.tables import write_index_html
+    def test_index_cards_follow_the_files_on_disk(self) -> None:
+        # The landing page is built from what the export holds: a dominance card only with its page or downloads.
+        from network import site
 
         with tempfile.TemporaryDirectory() as tmp:
-            out = os.path.join(tmp, "index.html")
-            write_index_html(output_filename=out, include_dominance_html=True, include_dominance_xlsx=True)
-            with open(out) as f:
+            for name in ("dominance.html", "dominance.xlsx"):
+                with open(os.path.join(tmp, name), "w") as f:
+                    f.write("x")
+            site.write_index(site.inventory(tmp), project_title="Demo", seo=False, public_url="")
+            with open(os.path.join(tmp, "index.html")) as f:
                 content = f.read()
             self.assertIn('href="dominance.html"', content)
             self.assertIn('href="dominance.xlsx"', content)
-            write_index_html(output_filename=out)
-            with open(out) as f:
+            os.remove(os.path.join(tmp, "dominance.html"))
+            os.remove(os.path.join(tmp, "dominance.xlsx"))
+            site.write_index(site.inventory(tmp), project_title="Demo", seo=False, public_url="")
+            with open(os.path.join(tmp, "index.html")) as f:
                 self.assertNotIn("dominance.html", f.read())
 
 
@@ -8742,7 +8738,7 @@ class NearCopyMeasuresTests(TestCase):
             with open(os.path.join(tmp, "edges.csv"), newline="", encoding="utf-8") as fh:
                 rows = list(csv.DictReader(fh))
             self.assertEqual(rows[0]["weight_copies"], "1.0")
-            self.assertEqual((rows[0]["source_label"], rows[0]["target_label"]), ("Copier", "Origin"))
+            self.assertEqual((rows[0]["source"], rows[0]["target"]), ("Copier", "Origin"))
             path = write_near_copies_csv(self.graph, self.graph_data, os.path.join(tmp, "data"))
             with open(path, newline="", encoding="utf-8") as fh:
                 audit = list(csv.DictReader(fh))

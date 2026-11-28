@@ -61,7 +61,7 @@ from typing import Any
 
 from network.parameters import FixedParameter
 from network.robustness.null_model import bh_adjust
-from network.utils import GraphData, citation_count
+from network.utils import GraphData, citation_count, int_id
 
 import networkx as nx
 import numpy as np
@@ -649,23 +649,27 @@ def inject_node_scores(graph_data: GraphData, payload: dict) -> list[tuple[str, 
 
 # ── Flat column layouts shared by the XLSX and CSV writers ───────────────────
 
+
+# Readable headers, as dominance.xlsx shows them; the CSVs write them in snake_case (data_dictionary.column_key).
 PAIR_COLUMNS: tuple[tuple[str, Any], ...] = (
+    ("Dependent ID", lambda r: int_id(r["dependent"]["id"])),
     ("Dependent", lambda r: r["dependent"]["label"]),
     ("Dependent label", lambda r: r["dependent"]["organization"]),
+    ("Dominant ID", lambda r: int_id(r["dominant"]["id"])),
     ("Dominant", lambda r: r["dominant"]["label"]),
     ("Dominant label", lambda r: r["dominant"]["organization"]),
     ("Relation", lambda r: r["relation"]),
     ("Mutual", lambda r: r["mutual"]),
-    ("Dependent→Dominant citations", lambda r: r["ds"]["count"] if r["ds"] else 0),
+    ("Dependent to dominant citations", lambda r: r["ds"]["count"] if r["ds"] else 0),
     ("Dependent content share", lambda r: r["ds"]["share"] if r["ds"] else None),
     ("Dominant reach share", lambda r: r["ds"]["reach"] if r["ds"] else None),
-    ("Dependent→Dominant p", lambda r: r["ds"]["p"] if r["ds"] else None),
-    ("Dependent→Dominant q", lambda r: r["ds"]["q"] if r["ds"] else None),
-    ("Dominant→Dependent citations", lambda r: r["sd"]["count"] if r["sd"] else 0),
+    ("Dependent to dominant p", lambda r: r["ds"]["p"] if r["ds"] else None),
+    ("Dependent to dominant q", lambda r: r["ds"]["q"] if r["ds"] else None),
+    ("Dominant to dependent citations", lambda r: r["sd"]["count"] if r["sd"] else 0),
     ("Dominant content share", lambda r: r["sd"]["share"] if r["sd"] else None),
     ("Dependent reach share", lambda r: r["sd"]["reach"] if r["sd"] else None),
-    ("Dominant→Dependent p", lambda r: r["sd"]["p"] if r["sd"] else None),
-    ("Dominant→Dependent q", lambda r: r["sd"]["q"] if r["sd"] else None),
+    ("Dominant to dependent p", lambda r: r["sd"]["p"] if r["sd"] else None),
+    ("Dominant to dependent q", lambda r: r["sd"]["q"] if r["sd"] else None),
     ("Dependence of dependent", lambda r: r["dependence_of_dependent"]),
     ("Dependence of dominant", lambda r: r["dependence_of_dominant"]),
     ("Net balance", lambda r: r["net"]),
@@ -673,6 +677,7 @@ PAIR_COLUMNS: tuple[tuple[str, Any], ...] = (
 )
 
 NODE_COLUMNS: tuple[tuple[str, Any], ...] = (
+    ("Channel ID", lambda r: int_id(r["id"])),
     ("Channel", lambda r: r["label"]),
     ("Label", lambda r: r["organization"]),
     ("Role", lambda r: r["role"]),
@@ -684,7 +689,7 @@ NODE_COLUMNS: tuple[tuple[str, Any], ...] = (
     ("Citations received", lambda r: r["cited"]),
     ("Citations made", lambda r: r["citing"]),
     ("Partners", lambda r: r["partners"]),
-    ("Supplies (Σ content shares)", lambda r: r["supplies"]),
+    ("Supplies (sum of content shares)", lambda r: r["supplies"]),
     ("Satellites", lambda r: r["satellites"]),
     ("Relies (max content share)", lambda r: r["relies"]),
     ("Reach concentration", lambda r: r["reach_concentration"]),

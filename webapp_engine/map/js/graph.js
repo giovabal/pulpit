@@ -3,8 +3,8 @@ import Graph from 'graphology';
 import EdgeCurveProgram, { EdgeCurvedArrowProgram } from '@sigma/edge-curve';
 import { NodeBorderProgram } from '@sigma/node-border';
 import { drawDiscNodeLabel, EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
-import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings, periodDataDir, readTimeline } from './utils.js';
+import { measure_label, strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, initialMapTheme, mergeColorings, periodDataDir, readTimeline, rememberMapTheme } from './utils.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
@@ -149,6 +149,7 @@ var THEMES = {
             // Sidebar accent uses indigo-300 — same Pulpit brand hue used app-wide,
             // shifted lighter so it stays readable on the dark navy panel.
             '--c-fg-raw': '255, 255, 255',
+            '--c-logo-filter': 'invert(1)',
             '--c-panel-bg': 'rgba(8, 24, 40, 0.55)',
             '--c-sidebar-bg': '#0d2035',
             '--c-sidebar-accent': '#a5b4fc',
@@ -170,6 +171,7 @@ var THEMES = {
         hoverFill: '#cddaeb',
         cssVars: {
             '--c-fg-raw': '20, 35, 60',
+            '--c-logo-filter': 'none',
             '--c-panel-bg': 'rgba(220, 232, 246, 0.78)',
             '--c-sidebar-bg': '#dce8f4',
             '--c-sidebar-accent': '#4338ca',
@@ -191,6 +193,7 @@ var THEMES = {
         hoverFill: '#eeeeee',
         cssVars: {
             '--c-fg-raw': '30, 30, 30',
+            '--c-logo-filter': 'none',
             '--c-panel-bg': 'rgba(248, 248, 248, 0.82)',
             '--c-sidebar-bg': '#f4f4f4',
             '--c-sidebar-accent': '#4f46e5',
@@ -213,6 +216,7 @@ var THEMES = {
         cssVars: {
             // Print stays monochrome — black accent reads identically on b&w printers.
             '--c-fg-raw': '0, 0, 0',
+            '--c-logo-filter': 'none',
             '--c-panel-bg': 'rgba(255, 255, 255, 0.90)',
             '--c-sidebar-bg': '#ffffff',
             '--c-sidebar-accent': '#000000',
@@ -322,10 +326,10 @@ function apply_theme(themeKey) {
     var sel = el('theme-select');
     if (sel && sel.value !== themeKey) sel.value = themeKey;
 
-    // The graph viewer's theme is a per-session display choice, deliberately
-    // not persisted: it always boots dark and never reads or writes the shared
-    // ``pulpit_theme`` key that the live webapp and table exports use.
 }
+
+// The theme a map starts in, and the one it remembers, are shared with the 3D map: utils.js initialMapTheme /
+// rememberMapTheme.
 
 // =============================================================================
 // Color helpers
@@ -427,7 +431,7 @@ function show_node_info(nodeId) {
             if (BASE_MEASURE_KEYS[m[0]]) return;
             var val = node[m[0]];
             var formatted = (val !== undefined && val !== null) ? val.toFixed(4) : 'N/A';
-            measures_html += '<br><abbr>' + escHtml(m[1]) + '</abbr>: ' + formatted;
+            measures_html += '<br><abbr>' + escHtml(measure_label(m[0], m[1])) + '</abbr>: ' + formatted;
         });
     }
     el('node_measures').innerHTML = measures_html;
@@ -820,7 +824,7 @@ function _apply_accessory(ch_data, comm_data, prev_strategy, prev_size) {
     }
 
     var size_items = ch_data.measures.map(function(m) {
-        return '<option value="' + m[0] + '">' + m[1] + '</option>';
+        return '<option value="' + m[0] + '">' + escHtml(measure_label(m[0], m[1])) + '</option>';
     });
     el('size-select').innerHTML = size_items.join('');
     if (prev_size) {
@@ -936,7 +940,7 @@ function init_year_switcher(timeline) {
         container.innerHTML = [
             '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous period" disabled>',
             '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
-            '<button class="year-btn year-btn--all" data-year="all">All</button>',
+            '<button class="year-btn year-btn--all" data-year="all" title="All periods">All periods</button>',
             '<span class="year-sep" aria-hidden="true"></span>',
             '<div class="year-drop-wrap">',
             '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
@@ -1300,11 +1304,7 @@ function reload_graph(data_dir) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // The graph always boots dark, independent of the shared pulpit_theme key:
-    // theme here is a display layout the user flips at will, not a remembered
-    // preference. The live webapp and table exports keep their own
-    // pulpit_theme-backed light/dark setting.
-    apply_theme('dark');
+    apply_theme(initialMapTheme());
 
     if (!window.VERTICAL_LAYOUT) el('menu_container').classList.add('menu--lateral');
 
@@ -1339,14 +1339,14 @@ document.addEventListener('DOMContentLoaded', function() {
             var dirs = [base_data_dir];
             if (years.length <= PRELOAD_LIMIT) dirs = dirs.concat(years.map(function(y) { return year_data_dir(y.key); }));
             var labels = {};
-            labels[base_data_dir] = 'All';
+            labels[base_data_dir] = 'All periods';
             years.forEach(function(y) { labels[year_data_dir(y.key)] = y.label; });
             var total = dirs.length,
                 done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year(dir).then(function() {
                     done++;
-                    el('loading_message').textContent = (labels[dir] || 'All') + ' (' + done + ' / ' + total + ')';
+                    el('loading_message').textContent = (labels[dir] || 'All periods') + ' (' + done + ' / ' + total + ')';
                 });
             }));
         });
@@ -1450,6 +1450,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     el('theme-select').addEventListener('change', function() {
         apply_theme(this.value);
+        rememberMapTheme(this.value);
         update_info_bar();
     });
     el('colored-edges-toggle').addEventListener('change', function() {

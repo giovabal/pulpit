@@ -226,7 +226,7 @@ class OperationsView(View):
                         for key in net_community.VALID_STRATEGIES
                         if key != "KCORE"
                     ]
-                    # Label groups are tagged "[custom label]" here — outside their own picker the
+                    # Label groups are tagged "(label group)" here — outside their own picker the
                     # option needs to read as a manual partition, not an algorithm.
                     + [(g.token, net_community.custom_label_display(g.name)) for g in partition_groups],
                     key=lambda kv: kv[1],

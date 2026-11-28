@@ -1,27 +1,16 @@
 import { addSvgZoomPan as _addSvgZoomPan, showTip as _showTip, moveTip as _moveTip, hideTip as _hideTip } from './_zoom_pan.js';
-import { fetchJson, fetchJsonOrNull } from './utils.js';
+import { fetchJson, fetchJsonOrNull, loadFailed, plurality, scopeLine } from './utils.js';
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
+// The community most of the methods put the channel in.
 function _pluralityComm(label, stratMaps, stratKeys) {
-    var counts = {};
-    stratKeys.forEach(function(sk) {
-        var comm = stratMaps[sk] && stratMaps[sk][label];
-        if (comm != null) counts[comm] = (counts[comm] || 0) + 1;
-    });
-    var best = "",
-        bestN = 0;
-    Object.keys(counts).forEach(function(c) {
-        if (counts[c] > bestN) {
-            best = c;
-            bestN = counts[c];
-        }
-    });
-    return best;
+    return plurality(stratKeys.map(function(sk) { return stratMaps[sk] ? stratMaps[sk][label] : null; }));
 }
 
+// From the theme's blue (one method agrees) to its red (all agree), as a CSS colour.
 function _agreementColor(count, maxCount) {
     var t = maxCount > 1 ? (count - 1) / (maxCount - 1) : 1;
-    return "rgb(" + Math.round(74 + t * (220 - 74)) + "," + Math.round(133 + t * (53 - 133)) + "," + Math.round(192 + t * (69 - 192)) + ")";
+    return "color-mix(in srgb, var(--series-8) " + Math.round(t * 100) + "%, var(--series-1))";
 }
 
 // ── Module-level state ─────────────────────────────────────────────────────────
@@ -37,17 +26,7 @@ function _render(d) {
     container.innerHTML = "";
     var strategies = Object.keys(data.strategies);
 
-    if (meta) {
-        var pEl = document.createElement("p");
-        pEl.className = "table-preamble";
-        var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
-        parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
-        if (meta.start_date || meta.end_date)
-            parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
-        parts.push("Exported " + meta.export_date + ".");
-        pEl.textContent = parts.join(" ");
-        container.appendChild(pEl);
-    }
+    if (meta) container.appendChild(scopeLine(meta));
 
     // Exclude the manual LABELGROUP<id> partitions (metadata labels, keyed `labelgroup<id>`), the
     // structural decomposition KCORE — a shell partition, not community detection, that would
@@ -66,7 +45,7 @@ function _render(d) {
     if (nonOrgKeys.length < 2) {
         var msg = document.createElement("p");
         msg.className = "text-muted";
-        msg.textContent = "At least two algorithmic (non-LABELGROUP) community detection strategies are required to build a consensus matrix.";
+        msg.textContent = "The consensus matrix needs at least two algorithmic grouping methods (label groups do not count).";
         container.appendChild(msg);
         return;
     }
@@ -132,12 +111,12 @@ function _render(d) {
     var noteEl = document.createElement("p");
     noteEl.className = "text-muted small mb-2";
     noteEl.textContent = n + " × " + n + " channels — " + maxCount + " partition" + (maxCount !== 1 ? "s" : "") +
-        " compared (LABELGROUP, component/shell, and derived Consensus partitions excluded). Balloon area ∝ agreement count; colour shifts blue→red with increasing agreement. Lower triangle; diagonal omitted.";
+        " compared (label groups, k-core shells and the consensus partition itself left out). A circle's area grows with the number of methods putting the two channels together, and its colour shifts from blue to red as they agree. Lower triangle only; the diagonal is left out.";
     container.appendChild(noteEl);
 
     var legendDiv = document.createElement("div");
     legendDiv.className = "mb-3";
-    legendDiv.style.cssText = "display:flex;align-items:center;gap:10px;font-size:11px;color:#555;max-width:min(100%,1340px);margin-left:auto;margin-right:auto;";
+    legendDiv.style.cssText = "display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);max-width:min(100%,1340px);margin-left:auto;margin-right:auto;";
     legendDiv.appendChild(document.createTextNode("Agreement → "));
     for (var k = 1; k <= maxCount; k++) {
         var legR = Math.max(1, maxR * Math.sqrt(k / maxCount));
@@ -150,7 +129,7 @@ function _render(d) {
         cL.setAttribute("cx", maxR + 1);
         cL.setAttribute("cy", maxR + 1);
         cL.setAttribute("r", legR);
-        cL.setAttribute("fill", _agreementColor(k, maxCount));
+        cL.style.fill = _agreementColor(k, maxCount);
         cL.setAttribute("opacity", "0.85");
         svgL.appendChild(cL);
         legendDiv.appendChild(svgL);
@@ -165,12 +144,12 @@ function _render(d) {
     var svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", svgW);
     svg.setAttribute("height", svgH);
-    svg.style.cssText = "display:block;background:white;";
+    svg.style.cssText = "display:block;background:var(--surface);";
     svg.setAttribute("role", "grid");
     svg.setAttribute("aria-label", "Consensus matrix, " + n + " by " + n + " channels, " + maxCount + " partitions");
 
     var gridG = document.createElementNS(NS, "g");
-    gridG.setAttribute("stroke", "#e4e4e4");
+    gridG.style.stroke = "var(--chart-grid)";
     gridG.setAttribute("stroke-width", "0.5");
     for (var gi = 0; gi <= n; gi++) {
         var hl = document.createElementNS(NS, "line");
@@ -195,7 +174,7 @@ function _render(d) {
     }
     var triPoly = document.createElementNS(NS, "polygon");
     triPoly.setAttribute("points", triPts.join(" "));
-    triPoly.setAttribute("fill", "#f2f2f2");
+    triPoly.style.fill = "color-mix(in srgb, var(--text) 5%, var(--surface))";
     svg.appendChild(triPoly);
 
     channelList.forEach(function(id, i) {
@@ -206,7 +185,7 @@ function _render(d) {
         tx.setAttribute("dy", "0.35em");
         tx.setAttribute("text-anchor", "end");
         tx.setAttribute("font-size", fontSize);
-        tx.setAttribute("fill", "#333");
+        tx.style.fill = "var(--text)";
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
         if (trunc !== lbl) {
@@ -226,7 +205,7 @@ function _render(d) {
         tx.setAttribute("y", cy);
         tx.setAttribute("text-anchor", "end");
         tx.setAttribute("font-size", fontSize);
-        tx.setAttribute("fill", "#333");
+        tx.style.fill = "var(--text)";
         tx.setAttribute("transform", "rotate(-45 " + cx + " " + cy + ")");
         var trunc = lbl.length > 22 ? lbl.slice(0, 20) + "…" : lbl;
         tx.textContent = trunc;
@@ -251,7 +230,7 @@ function _render(d) {
             circ.setAttribute("cx", ccx);
             circ.setAttribute("cy", ccy);
             circ.setAttribute("r", cr);
-            circ.setAttribute("fill", _agreementColor(cnt, maxCount));
+            circ.style.fill = _agreementColor(cnt, maxCount);
             circ.setAttribute("opacity", "0.85");
             circ.setAttribute("role", "gridcell");
             circ.setAttribute("tabindex", "0");
@@ -279,7 +258,5 @@ Promise.all([
 ]).then(function(results) {
     _render({ data: results[0], meta: results[1] });
 }).catch(function(err) {
-    var el = document.getElementById("consensus-matrix-container");
-    if (el) el.textContent = "Failed to load data.";
-    console.error("consensus_matrix:", err);
+    loadFailed(err);
 });

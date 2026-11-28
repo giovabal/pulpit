@@ -11,22 +11,19 @@
      blow the 1fr column out, stretching the canvas. Once the canvas is wider,
      Chart.js pins a pixel width on it that pegs the column open even after the
      table is hidden. min-width:0 keeps the column at 1fr regardless. */
-  .rb-chart-card { position: relative; min-width: 0; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: 1rem; background: var(--bs-body-bg, #fff); }
-  .rb-chart-card h5 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; padding-right: 2rem; }
+  .rb-chart-card { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; background: var(--surface); }
+  .rb-chart-card h3 { margin: 0 0 .75rem; font-size: .95rem; font-weight: 600; padding-right: 2rem; }
   .rb-chart-card .rb-chart-canvas { position: relative; height: 280px; }
   /* The top S(f) cards carry a 22-strategy legend (5 rows on the WCC card);
      bumping the height for that grid only keeps the plot from touching the
      legend without bloating the modular cards which need only 2 entries. */
   #rb-curves .rb-chart-canvas { height: 400px; }
   .rb-summary-table th, .rb-summary-table td { font-variant-numeric: tabular-nums; }
-  .rb-z-significant { font-weight: 600; }
-  .rb-z-pos { color: #198754; }
-  .rb-z-neg { color: #dc3545; }
-  .rb-empty { color: var(--bs-secondary-color, #6c757d); font-style: italic; }
+  .rb-empty { color: var(--muted); font-style: italic; }
   .rb-expand-btn {
     position: absolute; top: .5rem; right: .5rem;
     background: transparent; border: 1px solid transparent;
-    color: var(--bs-secondary-color, #6c757d);
+    color: var(--muted);
     padding: .15rem .35rem; border-radius: .25rem;
     font-size: .9rem; line-height: 1;
     opacity: .35;
@@ -35,8 +32,8 @@
   }
   .rb-expand-btn:hover, .rb-expand-btn:focus-visible {
     opacity: 1;
-    background: var(--bs-light, #f8f9fa);
-    border-color: var(--bs-border-color, #dee2e6);
+    background: var(--hover);
+    border-color: var(--border);
     outline: none;
   }
   #rb-chart-modal .modal-dialog { max-width: 96vw; }
@@ -46,79 +43,81 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Robustness Analysis</h2>
-  <div class="d-flex gap-2">
-    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network stats</a>
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="{{ repository_url }}/blob/main/docs/robustness-analysis.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
-  </div>
-</div>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>The page removes channels from the network one at a time, in the order an <em>attack strategy</em> ranks them
+  (the most cited first, the highest PageRank first, at random, and so on), and records how much of the network is
+  left after each removal. A strategy marked <em>dynamic</em> ranks the remaining channels again after every
+  removal.</p>
+  <p><code>S(f)</code> is the share of the network left once a share <code>f</code> of the channels is gone,
+  measured four ways. <strong>WCC</strong>: the largest group of channels still joined when the direction of the
+  ties is ignored. <strong>SCC</strong>: the largest group in which every channel still reaches every other along
+  the ties' direction. <strong>Reach</strong>: the share of ordered pairs of channels still joined by a directed
+  path. <strong>Strength</strong>: the share of the total tie weight still carried inside the largest surviving
+  group.</p>
+  <p>In the summary, <strong>R</strong> is the mean of <code>S(f)</code> over the whole removal: lower means the
+  network breaks faster. The <em>critical share</em> is the share of channels removed when what is left falls to
+  5%. The <em>random R</em> columns, z, p and q compare each R with the same attack on random networks that keep
+  every channel's tie strengths; q corrects p for the number of comparisons (Benjamini–Hochberg), and the stars
+  follow q.</p>
+  <p>In the charts, each strategy's shaded band, in its colour, is the mean ± one standard deviation of the same
+  curve on those random networks: a curve below its band fragments the network faster than chance. A dashed line is
+  a dynamic strategy. The weighted-efficiency chart tracks how well the surviving core stays knit
+  (Latora–Marchiori efficiency, on a coarse grid): it can collapse while the residual-size curves still look
+  healthy.</p>
+  <p><em>Ban-wave scenarios</em> remove a whole community in one step and set the result beside the damage that
+  removing the same number of channels at random would cause, shown in brackets: a value below its random baseline
+  marks a group whose loss damages the network more than its size alone explains. <em>Ban-replay validation</em>,
+  when the timeline holds recorded closures, removes the channels that actually disappeared in a period from the
+  previous period's network and compares that prediction with what the next period shows. <em>Modular
+  robustness</em> follows the ties within and between communities: a strategy that strips the ties between
+  communities first decouples the groups before it erodes them.</p>
+  <p>All of this is a simulation on the recorded citations. It shows where the structure is fragile, not what the
+  channels would do after a removal.</p>
+</details>
+<div id="timeline-nav" class="export-period-nav"></div>
+<div id="rb-preamble" class="mb-3"><p class="text-muted small">Loading…</p></div>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
 
-<p class="text-muted small mb-3" id="rb-summary">Loading…</p>
-
-<h3 class="mt-4 mb-2">Summary</h3>
+<h2 id="summary">Summary</h2>
 <div class="table-responsive export-wide mb-4">
-  <table class="table table-sm rb-summary-table" id="rb-summary-table" aria-label="Robustness summary">
-    <caption class="sr-only">Robustness summary: R-index, critical fraction and z-scores per attack strategy.</caption>
+  <table class="table table-sm sortable rb-summary-table" id="rb-summary-table" aria-label="Robustness summary">
+    <caption class="sr-only">Robustness summary: R-index, critical share and comparison with random networks per attack strategy.</caption>
     <thead></thead>
     <tbody></tbody>
   </table>
 </div>
+<p class="text-muted small" id="rb-summary-legend"></p>
 
-<h3 class="mt-4 mb-2">Residual size <code>S(f)</code> under each attack strategy</h3>
-<p class="text-muted small mb-3">
-  The shaded band shows the mean ± standard deviation of the same curves on the weight-rewiring null model.
-  A curve below the band indicates a strategy that fragments the network faster than chance.
-  The weighted-efficiency chart tracks how well the surviving core stays knit (Latora-Marchiori efficiency,
-  sampled on a coarse grid) — it can collapse while the residual-size curves still look healthy.
-</p>
+<h2 id="residual-size">Residual size <code>S(f)</code> under each attack strategy</h2>
+<p class="text-muted small mb-3">How much of the network is left as channels are removed: one chart per measure of what is left.</p>
 <div class="rb-grid export-wide mb-4" id="rb-curves"></div>
 
 <div id="rb-replay-section" class="export-wide d-none">
-  <h3 class="mt-4 mb-2">Ban-replay validation</h3>
-  <p class="text-muted small mb-3">
-    An out-of-sample check against reality: for each timeline period with recorded channel closures, the channels
-    that actually disappeared are removed from the <em>previous period's</em> network and the predicted residual
-    is compared against the equal-count random baseline and the <em>observed</em> next-period structure
-    (restricted to the pre-wave survivors, normalised against the same pre-wave baseline). When observed
-    exceeds predicted, the ecosystem re-wired around the gap — the static simulation cannot see that
-    adaptation; the vacancy analysis measures it channel by channel.
-  </p>
+  <h2 id="ban-replay">Ban-replay validation</h2>
+  <p class="text-muted small mb-3">For each period with recorded closures: the residual size predicted by removing the
+  closed channels from the previous period's network, the equal-size random baseline, and what the next period shows.</p>
   <div id="rb-replay-tables"></div>
 </div>
 
 <div id="rb-alpha-section" class="export-wide d-none">
-  <h3 class="mt-4 mb-2">Backbone α-sensitivity</h3>
-  <p class="text-muted small mb-3">
-    The R-index recomputed at several disparity-filter α thresholds (0 = full graph), so you can see
-    whether a strategy's ranking is stable or an artefact of the chosen backbone. Stable orderings across
-    α mean the vulnerability finding does not depend on the filter cut-off.
-  </p>
+  <h2 id="alpha-sensitivity">Backbone α-sensitivity</h2>
+  <p class="text-muted small mb-3">The R-index recomputed at several backbone thresholds α: a ranking of the
+  strategies that holds across α does not depend on the filter's cut-off.</p>
   <div id="rb-alpha-tables"></div>
 </div>
 
 <div id="rb-banwave-section" class="export-wide d-none">
-  <h3 class="mt-4 mb-2">Ban-wave scenarios</h3>
-  <p class="text-muted small mb-3">
-    Residual size after removing each whole community in one step, next to the damage that removing
-    the <em>same number</em> of channels uniformly at random would cause (<span class="text-muted">rnd</span>).
-    A red value sits below its random baseline: banning that block damages the network more than its
-    size alone explains — a load-bearing sub-ecosystem. Values at or above the baseline mark blocks the
-    network could absorb losing, however large.
-  </p>
+  <h2 id="ban-waves">Ban-wave scenarios</h2>
+  <p class="text-muted small mb-3">Residual size after removing each whole community in one step, with the
+  equal-size random baseline in brackets.</p>
   <div id="rb-banwave-tables"></div>
 </div>
 
 <div id="rb-modular-section" class="export-wide d-none">
-  <h3 class="mt-4 mb-2">Modular robustness</h3>
-  <p class="text-muted small mb-3">
-    Fraction of intra-community vs inter-community edges surviving the attack, normalised to
-    the q = 0 baseline.  Strategies that strip inter-community ties first (red below blue) tend
-    to decouple sub-ecosystems before eroding individual community cohesion.
-  </p>
+  <h2 id="modular">Modular robustness</h2>
+  <p class="text-muted small mb-3">Share of the ties within and between communities surviving each attack, relative
+  to the intact network.</p>
   <div id="rb-modular-tabs"></div>
 </div>
 
@@ -126,7 +125,7 @@
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="rb-chart-modal-title"></h5>
+        <h2 class="modal-title h5" id="rb-chart-modal-title"></h2>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">

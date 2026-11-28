@@ -1,0 +1,8 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<div class="export-record">
+  {{ body|safe }}
+</div>
+<p class="text-muted small mt-4">The same record as plain text: <a href="{{ source }}" download><code>{{ source }}</code></a>.</p>
+{% endblock %}

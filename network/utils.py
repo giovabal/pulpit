@@ -1,4 +1,6 @@
+import csv
 import datetime
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Exists, OuterRef, Q
@@ -231,6 +233,8 @@ def without_self_loops(graph: nx.DiGraph) -> nx.DiGraph:
 
 #: ``graph.graph`` key under which :func:`network.graph_builder.build_graph` stores the dead-leaf node ids.
 DEAD_LEAVES_KEY = "dead_leaves"
+# ``graph.graph`` key of the analysed messages' span, ``(first, last)`` ISO local days, ``None`` without messages.
+MESSAGE_SPAN_KEY = "message_span"
 
 
 def dead_leaf_ids(graph: nx.DiGraph) -> frozenset[str]:
@@ -261,3 +265,57 @@ def make_date_q(
     if end_date:
         q &= Q(**{f"{field}__date__lte": end_date})
     return q
+
+
+def int_id(value: Any) -> Any:
+    """A channel id as the tables write it: the integer when the stored id is numeric (graph node ids are
+    strings), the value unchanged otherwise."""
+    text = str(value)
+    return int(text) if text.isdigit() else value
+
+
+# Leading characters that make a spreadsheet run a text cell of a CSV as a formula. A channel's title is
+# text its owner chose: "=…", "+…", "-…" and "@…" are all evaluated by Excel and LibreOffice on opening.
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+# Written in front of such a cell, so that a spreadsheet reads it as the text it is.
+CSV_TEXT_GUARD = "'"
+
+
+def _is_number_text(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def csv_value(value: Any) -> Any:
+    """A cell as every CSV of an export writes it: booleans as 0/1, a missing value as an empty cell, and text
+    that a spreadsheet would run as a formula behind an apostrophe (:data:`CSV_TEXT_GUARD`). Numbers written
+    as text ("-0.25") are left alone, and a guarded cell is never guarded twice."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES) and not _is_number_text(value):
+        return CSV_TEXT_GUARD + value
+    return value
+
+
+class CsvWriter:
+    """``csv.writer`` with every cell passed through :func:`csv_value`, so no writer of an export can skip it."""
+
+    def __init__(self, handle: Any, **kwargs: Any) -> None:
+        self._writer = csv.writer(handle, **kwargs)
+
+    def writerow(self, row: "Iterable[Any]") -> None:
+        self._writer.writerow([csv_value(cell) for cell in row])
+
+    def writerows(self, rows: "Iterable[Iterable[Any]]") -> None:
+        for row in rows:
+            self.writerow(row)
+
+
+def csv_writer(handle: Any, **kwargs: Any) -> CsvWriter:
+    """The CSV writer of every export file (see :class:`CsvWriter`)."""
+    return CsvWriter(handle, **kwargs)

@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import re
@@ -7,16 +8,15 @@ from typing import TYPE_CHECKING, Any
 from django.conf import settings
 from django.template.loader import render_to_string
 
-from network import label_mixing, mrqap
+from network import label_mixing, mrqap, pages
 from network.community import labelgroup_display_labels, strategy_display_label
 from network.community_stats import PARTITION_COMPARISON_METRICS, SIGNIFICANCE_COLUMNS, network_summary_rows
-from network.exporter import sbm_confidence_columns
-from network.measures._registry import role_companions
+from network.exporter import channel_table, community_value
 from network.publication import robots_content
-from network.utils import CommunityTableData, GraphData
+from network.utils import CommunityTableData, GraphData, int_id
 
 import openpyxl
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import PatternFill
 
 if TYPE_CHECKING:
     from network.audience_layer import AudienceExport
@@ -25,18 +25,31 @@ if TYPE_CHECKING:
 _SHEET_TITLE_INVALID = re.compile(r"[\\/?*:]")
 
 
-def _safe_sheet_title(title: str, limit: int = 31) -> str:
+def _safe_sheet_title(title: str, limit: int = 31, suffix: str = "") -> str:
     """Sanitise an arbitrary string into a valid Excel sheet title.
 
     Strategy display labels can contain characters Excel bans in sheet names —
-    e.g. a label-group partition renders as ``"Nation [custom label]"`` and
-    ``[``/``]`` are illegal. Brackets read fine as parentheses; the other
+    a label group's own name may hold ``[``/``]``, ``:`` or ``/``, all illegal
+    there. Brackets read fine as parentheses; the other
     forbidden characters collapse to spaces. The result is whitespace-trimmed
-    and truncated to Excel's 31-char cap (never empty).
+    and truncated to Excel's 31-char cap (never empty), ``suffix`` (a continuation
+    or duplicate mark) always kept whole.
     """
     cleaned = _SHEET_TITLE_INVALID.sub(" ", title).replace("[", "(").replace("]", ")")
     cleaned = " ".join(cleaned.split()).strip()
-    return (cleaned or "Sheet")[:limit]
+    return (cleaned or "Sheet")[: limit - len(suffix)].rstrip() + suffix
+
+
+def _new_sheet(wb: Any, title: str, suffix: str = "") -> Any:
+    """A new sheet titled *title*, made unique within the workbook: two label groups whose names share their
+    first characters would otherwise truncate to one title, which openpyxl renames past Excel's limit."""
+    name = _safe_sheet_title(title, suffix=suffix)
+    taken = {existing.lower() for existing in wb.sheetnames}  # Excel compares sheet names case-insensitively
+    n = 2
+    while name.lower() in taken:
+        name = _safe_sheet_title(title, suffix=f"{suffix} ~{n}")
+        n += 1
+    return wb.create_sheet(title=name)
 
 
 def _pulpit_ctx() -> dict:
@@ -52,38 +65,64 @@ def _pulpit_ctx() -> dict:
     }
 
 
+def page_context(
+    page_file: str,
+    project_title: str,
+    *,
+    title: str = "",
+    description: str = "",
+    generated: str = "",
+    app_version: str = "",
+) -> dict:
+    """The context every export page's frame (``_table_base.html``) reads, from the page catalogue.
+
+    *title* / *description* override the catalogue's (the landing page, the methods and data pages).
+    The browser-tab title reads ``"<project> | <page>"``, the page's own heading the page title alone.
+    *generated* / *app_version*: the export's own date and version, for the pages the site pass renders again
+    later (``compare_analysis``); a page written during the run takes today's and the running version's.
+    """
+    found = pages.lookup(page_file)
+    page_title = title or pages.page_title(page_file)
+    version = app_version or getattr(settings, "APP_VERSION", "")
+    question = ""
+    doc_url = ""
+    if found is not None:
+        found_card, _entry, _compared = found
+        question = found_card.question
+        doc_url = pages.docs_url(getattr(settings, "REPOSITORY_URL", ""), version, found_card.doc)
+    return {
+        "title": " | ".join(part for part in (project_title, page_title) if part) or "Network analysis",
+        "description": description or pages.page_description(page_file),
+        "project_title": project_title,
+        "generated": generated or datetime.date.today().isoformat(),
+        "page": {"file": page_file, "title": page_title, "question": question, "doc_url": doc_url},
+        **_pulpit_ctx(),
+        "app_version": version,
+    }
+
+
 def _write_page(
     template: str,
     output_filename: str,
     *,
     seo: bool,
     project_title: str,
-    title_part: str,
-    seo_title_part: str | None = None,
     description: str = "",
+    extra: dict | None = None,
 ) -> None:
-    """Render a standard pulpit HTML page.
-
-    ``title_part`` is the human-facing page name used in the rendered title.
-    ``seo_title_part`` overrides ``title_part`` when SEO mode is on (used by
-    pages where the public/search-engine title differs from the in-app one).
-    ``project_title``, when set, prefixes the title as ``"<project> | <part>"``.
+    """Render an export page: its title, lede and method link come from the page catalogue (``network.pages``),
+    by the file name it is written to. ``description`` overrides the catalogue's (the channel table counts its
+    channels); ``extra`` adds to the template context.
     """
-    label = seo_title_part if (seo and seo_title_part) else title_part
-    title = f"{project_title} | {label}" if project_title else label
     context = {
-        "title": title,
+        **page_context(os.path.basename(output_filename), project_title, description=description),
         # Provisional: publication.publish() sets every page's policy tags once the export is complete.
         "robots_meta": robots_content(seo),
-        "description": description,
-        **_pulpit_ctx(),
+        **(extra or {}),
     }
     content = render_to_string(template, context)
-    with open(output_filename, "w") as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         f.write(content)
-
-
-_BASE_MEASURE_KEYS: frozenset[str] = frozenset({"in_deg", "out_deg", "fans", "messages_count"})
 
 
 def write_table_html(
@@ -98,13 +137,74 @@ def write_table_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Channels",
-        seo_title_part="Channel network data",
         description=(
             f"Network data for {n} Telegram channels, "
             "including activity metrics, inbound and outbound tie strength, and community assignments."
         ),
     )
+
+
+def _new_workbook(project_title: str) -> Any:
+    """An empty workbook (no sheet) with Pulpit's document properties."""
+    wb = openpyxl.Workbook()
+    wb.properties.creator = "Pulpit"
+    if project_title:
+        wb.properties.title = project_title
+    wb.remove(wb.active)
+    return wb
+
+
+def _table_sheet(wb: Any, title: str, headers: list[str], scopes: list[tuple[str, list[list[Any]]]]) -> Any:
+    """One table on one sheet. ``scopes`` are ``(period, rows)``: with a timeline (more than one scope) the table
+    gains a leading ``Period`` column, "All periods" for the full range, so every period sits in the same table.
+
+    Styling, widths, number formats and the About sheet are added once the export is complete
+    (``network.workbooks.finish``).
+    """
+    with_period = len(scopes) > 1
+    header = ([pages.PERIOD_HEADER] if with_period else []) + list(headers)
+    ws = _new_sheet(wb, title)
+    ws.append(header)
+    part = 1
+    for period, rows in scopes:
+        for row in rows:
+            if ws.max_row >= EXCEL_MAX_ROWS:
+                # A sheet cannot hold more: the table goes on in "<title> (2)", "<title> (3)"…, same header.
+                part += 1
+                ws = _new_sheet(wb, title, suffix=f" ({part})")
+                ws.append(header)
+            _append_row(ws, ([period] if with_period else []) + list(row))
+    return ws
+
+
+# Limits of the XLSX format (Excel's, which every reader of the format shares).
+EXCEL_MAX_ROWS = 1_048_576
+EXCEL_MAX_CELL_CHARS = 32_767
+_TRUNCATED = " […]"
+
+
+def _append_row(ws: Any, values: list[Any]) -> None:
+    """Append a data row as the workbooks hold values: yes/no as 1/0 (as in the CSVs), text never read as a
+    formula (a channel's title may open with "="), and no text beyond what a cell can hold."""
+    cleaned: list[Any] = []
+    formulas: list[int] = []
+    for index, value in enumerate(values, start=1):
+        if isinstance(value, bool):
+            value = int(value)
+        elif isinstance(value, str):
+            if len(value) > EXCEL_MAX_CELL_CHARS:
+                value = value[: EXCEL_MAX_CELL_CHARS - len(_TRUNCATED)] + _TRUNCATED
+            if value.startswith("="):
+                formulas.append(index)
+        cleaned.append(value)
+    ws.append(cleaned)
+    for index in formulas:
+        ws.cell(row=ws.max_row, column=index).data_type = "s"
+
+
+def _scopes(full: Any, year_data: "list[tuple[Any, Any]] | None") -> list[tuple[str, Any]]:
+    """The full range, then each timeline period, as ``(period label, payload)``."""
+    return [(pages.ALL_PERIODS, full)] + [(str(period), payload) for period, payload in year_data or []]
 
 
 def write_table_xlsx(
@@ -115,71 +215,24 @@ def write_table_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, GraphData]] | None" = None,
 ) -> None:
-    extra = [(k, lbl) for k, lbl in measures_labels if k not in _BASE_MEASURE_KEYS]
-    pagerank_col = next(((k, lbl) for k, lbl in extra if k == "pagerank"), None)
-    other_extra = [(k, lbl) for k, lbl in extra if k != "pagerank"]
-    # Categorical role label (Module role) rides alongside its numeric measure (within_module_z*)
-    # — one column per role-measure instance, carrying the instance's parameter annotation.
-    role_label_cols: list[tuple[str, str]] = []
-    for key, label in measures_labels:
-        comp = role_companions(key)
-        if comp:
-            annot = label[label.find(" (") :] if " (" in label else ""
-            role_label_cols.append((comp["role_key"], comp["role_label"] + annot))
-    # SBM(refine=MCMC) assignment-confidence companions, one per refined SBM instance.
-    conf_cols = sbm_confidence_columns(graph_data, strategies)
-
-    headers = ["Channel", "URL", "Label", "Environment depth", "Users", "Messages", "Inbound", "Outbound"]
-    if pagerank_col:
-        headers.append(pagerank_col[1])
-    headers += [lbl for _, lbl in other_extra]
-    headers += [hdr for _, hdr in role_label_cols]
-    headers += [strategy_display_label(s) for s in strategies]
-    headers += [lbl for _, lbl in conf_cols]
-    headers += ["Activity start", "Activity end"]
-
-    def _fill(ws: Any, gd: GraphData) -> None:
-        ws.append(headers)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for node in sorted(gd["nodes"], key=lambda n: n.get("in_deg") or 0, reverse=True):
-            communities = node.get("communities") or {}
-            row: list[Any] = [
-                node.get("label") or node["id"],
-                node.get("url") or "",
-                node.get("organization") or "",
-                node.get("environment_depth"),
-                node.get("fans"),
-                node.get("messages_count"),
-                node.get("in_deg"),
-                node.get("out_deg"),
-            ]
-            if pagerank_col:
-                row.append(node.get(pagerank_col[0]))
-            for key, _ in other_extra:
-                row.append(node.get(key))
-            for role_key, _ in role_label_cols:
-                row.append(node.get(role_key) or "")
-            for s in strategies:
-                row.append(communities.get(s, ""))
-            for key, _ in conf_cols:
-                row.append(node.get(key))
-            row.append(node.get("activity_start") or "")
-            row.append(node.get("activity_end") or "")
-            ws.append(row)
-
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    ws = wb.active
-    ws.title = "All" if year_data else "Channels"
-    _fill(ws, graph_data)
-
-    if year_data:
-        for yr, yr_gd in year_data:
-            _fill(wb.create_sheet(title=str(yr)), yr_gd)
-
+    """channel_table.xlsx: the channel table (``exporter.channel_table``), every period in one sheet."""
+    headers, _rows = channel_table(graph_data, measures_labels, strategies)
+    headers = list(headers)
+    tables_by_period = [
+        (period, channel_table(gd, measures_labels, strategies)) for period, gd in _scopes(graph_data, year_data)
+    ]
+    # A period's table has the columns its own channels carry (an SBM confidence column exists only where a
+    # channel holds the value), so its rows are placed under the shared headers by name, never by position.
+    for _period, (period_headers, _period_rows) in tables_by_period:
+        headers += [name for name in period_headers if name not in headers]
+    scopes = []
+    for period, (period_headers, period_rows) in tables_by_period:
+        position = {name: i for i, name in enumerate(period_headers)}
+        scopes.append(
+            (period, [[row[position[name]] if name in position else None for name in headers] for row in period_rows])
+        )
+    wb = _new_workbook(project_title)
+    _table_sheet(wb, "Channels", headers, scopes)
     wb.save(output_filename)
 
 
@@ -200,6 +253,8 @@ def write_network_metrics_json(
             display = _fmt(value)
         elif value is None:
             display = "—"
+        elif isinstance(value, int) and not isinstance(value, bool):
+            display = f"{value:,}"
         else:
             display = str(value)
         summary_rows.append({"label": label, "value": display, "group": group, "significance": significance})
@@ -251,8 +306,6 @@ def write_network_table_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Network",
-        seo_title_part="Network statistics",
     )
 
 
@@ -263,15 +316,23 @@ def write_network_table_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, CommunityTableData]] | None" = None,
 ) -> None:
-    def _fill(ws: Any, ctd: CommunityTableData) -> None:
-        summary = ctd["network_summary"]
-        rows = network_summary_rows(summary)
-        tested = {key for *_rest, significance in rows for key in (significance or ())}
-        columns = [(key, label) for key, label in SIGNIFICANCE_COLUMNS if key in tested]
-        ws.append(["Metric", "Value", *(f"{part} {label}" for _key, label in columns for part in ("z", "p"))])
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for label, value, _group, significance in rows:
+    """network_table.xlsx: one table per sheet (statistics, modularity, partition comparison, homophily, label flows,
+    the dyadic regression), every period of a timeline in the same table."""
+    periods = _scopes(community_table_data, year_data)
+    wb = _new_workbook(project_title)
+
+    # Whole-network statistics, with a z and a p per baseline any statistic of any period was tested against.
+    tested = {
+        key
+        for _period, ctd in periods
+        for *_rest, significance in network_summary_rows(ctd["network_summary"])
+        for key in (significance or ())
+    }
+    columns = [(key, label) for key, label in SIGNIFICANCE_COLUMNS if key in tested]
+
+    def _statistic_rows(ctd: CommunityTableData) -> list[list[Any]]:
+        rows = []
+        for label, value, group, significance in network_summary_rows(ctd["network_summary"]):
             cells: list[Any] = []
             for key, _label in columns:
                 test = (significance or {}).get(key)
@@ -281,139 +342,121 @@ def write_network_table_xlsx(
                     cells += ["held fixed", None]
                 else:
                     cells += [test.get("z"), test.get("p")]
-            ws.append([label, value, *cells])
-        if not summary["path_on_full"]:
-            ws.append([])
-            ws.append(["† Computed on the largest weakly connected component (undirected)"])
-        if summary.get("avg_path_length_directed") is not None and not summary.get("scc_path_on_full", True):
-            ws.append([])
-            ws.append(["‡ Computed on the largest strongly connected component (directed)"])
-        ws.append([])
-        ws.append(["Strategy", "Modularity", "Modularity z (vs random graphs)", "p (vs random graphs)"])
-        for cell in ws[ws.max_row]:
-            cell.font = Font(bold=True)
+            rows.append([group, label, value, *cells])
+        return rows
+
+    _table_sheet(
+        wb,
+        "Statistics",
+        ["Group", "Statistic", "Value", *(f"{part} {label}" for _key, label in columns for part in ("z", "p"))],
+        [(period, _statistic_rows(ctd)) for period, ctd in periods],
+    )
+
+    def _modularity_rows(ctd: CommunityTableData) -> list[list[Any]]:
+        rows = []
         for strategy_key in strategies:
             entry = ctd["strategies"].get(strategy_key) or {}
-            ws.append(
+            rows.append(
                 [
                     strategy_display_label(strategy_key),
                     entry.get("modularity"),
                     entry.get("modularity_z"),
                     entry.get("modularity_p"),
+                    entry.get("inter_community_edge_ratio"),
+                    entry.get("mean_ei_index"),
                 ]
             )
+        return rows
 
+    _table_sheet(
+        wb,
+        "Modularity",
+        ["Method", "Modularity", "Modularity z", "p (vs random graphs)", "Inter-community ratio", "Mean E-I index"],
+        [(period, _modularity_rows(ctd)) for period, ctd in periods],
+    )
+
+    def _comparison_rows(ctd: CommunityTableData) -> list[list[Any]]:
         comparison = ctd.get("partition_comparison")
-        if comparison and len(comparison.get("strategies", [])) >= 2:
-            cmp_strats = comparison["strategies"]
-            cmp_labels = [strategy_display_label(s) for s in cmp_strats]
-            for metric_key, abbr, name, _is_distance in PARTITION_COMPARISON_METRICS:
-                cells = comparison["metrics"].get(metric_key)
-                if not cells:
-                    continue
-                ws.append([])
-                ws.append([f"{name} ({abbr})"])
-                for cell in ws[ws.max_row]:
-                    cell.font = Font(bold=True)
-                ws.append([""] + cmp_labels)
-                for cell in ws[ws.max_row]:
-                    cell.font = Font(bold=True)
-                for i, lbl in enumerate(cmp_labels):
-                    ws.append([lbl] + [cells[i][j] for j in range(len(cmp_strats))])
+        if not comparison or len(comparison.get("strategies", [])) < 2:
+            return []
+        labels = [strategy_display_label(s) for s in comparison["strategies"]]
+        rows = []
+        for metric_key, abbr, name, _is_distance in PARTITION_COMPARISON_METRICS:
+            cells = comparison["metrics"].get(metric_key)
+            if not cells:
+                continue
+            for i, label_a in enumerate(labels):
+                for j, label_b in enumerate(labels):
+                    if i != j:
+                        rows.append([f"{name} ({abbr})", label_a, label_b, cells[i][j]])
+        return rows
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    ws = wb.active
-    ws.title = "All" if year_data else "Network"
-    _fill(ws, community_table_data)
+    comparison_scopes = [(period, _comparison_rows(ctd)) for period, ctd in periods]
+    if any(rows for _period, rows in comparison_scopes):
+        _table_sheet(wb, "Partition comparison", ["Index", "Method A", "Method B", "Value"], comparison_scopes)
 
-    if year_data:
-        for yr, yr_ctd in year_data:
-            _fill(wb.create_sheet(title=str(yr)), yr_ctd)
-
-    # Homophily, label flows and MRQAP: one long-format sheet each, the full range ("All") then every year.
-    periods: list[tuple[str, CommunityTableData]] = [("All", community_table_data)]
-    periods += [(str(yr), yr_ctd) for yr, yr_ctd in year_data or []]
-
-    def _bold_last_row(ws: Any) -> None:
-        for cell in ws[ws.max_row]:
-            cell.font = Font(bold=True)
-
+    # Homophily, label flows and MRQAP rows already carry their period in their first column.
     mixing = [(period, ctd["label_mixing"]) for period, ctd in periods if ctd.get("label_mixing")]
     if any(payload.get("groups") for _period, payload in mixing):
-        ws = wb.create_sheet(title="Homophily")
-        ws.append(list(label_mixing.GROUP_COLUMNS))
-        _bold_last_row(ws)
-        for period, payload in mixing:
-            for row in label_mixing.group_rows(payload, period):
-                ws.append(row)
-        ws.append([])
-        ws.append(list(label_mixing.LABEL_COLUMNS))
-        _bold_last_row(ws)
-        for period, payload in mixing:
-            for row in label_mixing.label_rows(payload, period):
-                ws.append(row)
-        ws = wb.create_sheet(title="Label flows")
-        ws.append(list(label_mixing.FLOW_COLUMNS))
-        _bold_last_row(ws)
-        for period, payload in mixing:
-            for row in label_mixing.flow_rows(payload, period):
-                ws.append(row)
+        for title, cols, rows_of in (
+            ("Homophily", label_mixing.GROUP_COLUMNS, label_mixing.group_rows),
+            ("Homophily by label", label_mixing.LABEL_COLUMNS, label_mixing.label_rows),
+            ("Label flows", label_mixing.FLOW_COLUMNS, label_mixing.flow_rows),
+        ):
+            _table_sheet(wb, title, list(cols), [("", [r for p, payload in mixing for r in rows_of(payload, p)])])
 
     regressions = [(period, ctd["mrqap"]) for period, ctd in periods if ctd.get("mrqap")]
     if any(payload.get("models") for _period, payload in regressions):
-        ws = wb.create_sheet(title="MRQAP")
-        ws.append(list(mrqap.MODEL_COLUMNS))
-        _bold_last_row(ws)
-        for period, payload in regressions:
-            for row in mrqap.model_rows(payload, period):
-                ws.append(row)
-        ws.append([])
-        ws.append(list(mrqap.COEFFICIENT_COLUMNS))
-        _bold_last_row(ws)
-        for period, payload in regressions:
-            for row in mrqap.coefficient_rows(payload, period):
-                ws.append(row)
+        for title, cols, rows_of in (
+            ("MRQAP models", mrqap.MODEL_COLUMNS, mrqap.model_rows),
+            ("MRQAP coefficients", mrqap.COEFFICIENT_COLUMNS, mrqap.coefficient_rows),
+        ):
+            _table_sheet(wb, title, list(cols), [("", [r for p, payload in regressions for r in rows_of(payload, p)])])
 
     wb.save(output_filename)
 
 
-_COMPARE_RENAMES: dict[str, str] = {
-    "graph.html": "graph_2.html",
-    "graph3d.html": "graph3d_2.html",
-    "channel_table.html": "channel_table_2.html",
-    "network_table.html": "network_table_2.html",
-    "community_table.html": "community_table_2.html",
-    "consensus_matrix.html": "consensus_matrix_2.html",
-    "structural_similarity.html": "structural_similarity_2.html",
-    "behavioural_equivalence.html": "behavioural_equivalence_2.html",
-    "channel_table.xlsx": "channel_table_2.xlsx",
-    "network_table.xlsx": "network_table_2.xlsx",
-    "community_table.xlsx": "community_table_2.xlsx",
-}
+# Files of the compared analysis copied in as ``<name>_2.<ext>`` (network.pages.compared_name).
+_COMPARED_FILES: tuple[str, ...] = (
+    "graph.html",
+    "graph3d.html",
+    "channel_table.html",
+    "network_table.html",
+    "community_table.html",
+    "consensus_matrix.html",
+    "structural_equivalence.html",
+    "behavioural_equivalence.html",
+    "channel_table.xlsx",
+    "network_table.xlsx",
+    "community_table.xlsx",
+)
+_COMPARE_RENAMES: dict[str, str] = {name: pages.compared_name(name) for name in _COMPARED_FILES}
 
-# Ordered so that graph3d.html is replaced before graph.html (avoid partial match)
-_HTML_LINK_RENAMES: list[tuple[str, str]] = [
-    ("graph3d.html", "graph3d_2.html"),
-    ("graph.html", "graph_2.html"),
-    ("channel_table.html", "channel_table_2.html"),
-    ("network_table.html", "network_table_2.html"),
-    ("community_table.html", "community_table_2.html"),
-    ("consensus_matrix.html", "consensus_matrix_2.html"),
-    ("structural_similarity.html", "structural_similarity_2.html"),
-    ("behavioural_equivalence.html", "behavioural_equivalence_2.html"),
-    ("channel_table.xlsx", "channel_table_2.xlsx"),
-    ("network_table.xlsx", "network_table_2.xlsx"),
-    ("community_table.xlsx", "community_table_2.xlsx"),
-]
+# Every page link a copied page may hold, longest first so that graph3d.html is replaced before graph.html.
+_HTML_LINK_RENAMES: list[tuple[str, str]] = sorted(
+    [(name, pages.compared_name(name)) for name in _COMPARED_FILES], key=lambda pair: -len(pair[0])
+)
+COMPARED_TITLE_SUFFIX = " (compared analysis)"
+_TITLE_RE = re.compile(r"(<title>)(.*?)(</title>)", re.S)
+_H1_RE = re.compile(r'(<h1 class="export-title">)(.*?)(</h1>)', re.S)
 
 
 def _patch_compare_html(content: str) -> str:
-    """Patch an HTML file from the compare project: rewrite internal links and inject DATA_DIR."""
+    """Patch a page copied from the compared analysis: its links point at the other copies, it reads its data
+    from ``data_2/``, and its browser title and heading say which analysis it shows."""
     for old, new in _HTML_LINK_RENAMES:
         content = content.replace(old, new)
+
+    def retitle(match: re.Match) -> str:
+        text = match.group(2)
+        return (
+            match.group(1)
+            + (text if text.endswith(COMPARED_TITLE_SUFFIX) else text + COMPARED_TITLE_SUFFIX)
+            + match.group(3)
+        )
+
+    content = _TITLE_RE.sub(retitle, content, count=1)
+    content = _H1_RE.sub(retitle, content, count=1)
     injection = '<script>window.DATA_DIR = "data_2/";</script>\n'
     for marker in ('<script src="js/', '<script type="module" src="js/'):
         idx = content.find(marker)
@@ -424,11 +467,17 @@ def _patch_compare_html(content: str) -> str:
 
 
 def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
-    """Copy files from a compare graph/ directory into graph/, renaming with _2 suffix.
+    """Copy the compared analysis' pages, workbooks and data from *compare_dir* into *graph_dir* as ``*_2``.
 
-    Returns the set of destination filenames that were actually written.
+    Copies left by an earlier comparison are removed first, so a page the new compared analysis does not have
+    is never offered as its own. The analysis' ``summary.json`` travels into ``data_2/`` with its data: the
+    site pass reads it for what a compared workbook's About sheet states. Returns the names written.
     """
     copied: set[str] = set()
+    for dst_name in _COMPARE_RENAMES.values():
+        stale = os.path.join(graph_dir, dst_name)
+        if os.path.isfile(stale):
+            os.remove(stale)
 
     # data/ → data_2/
     src_data = os.path.join(compare_dir, "data")
@@ -438,6 +487,9 @@ def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
     if os.path.isdir(src_data):
         shutil.copytree(src_data, dst_data)
         copied.add("data_2")
+        src_summary = os.path.join(compare_dir, "summary.json")
+        if os.path.isfile(src_summary):
+            shutil.copy2(src_summary, os.path.join(dst_data, "summary.json"))
 
     for src_name, dst_name in _COMPARE_RENAMES.items():
         src = os.path.join(compare_dir, src_name)
@@ -445,9 +497,9 @@ def copy_compare_project(compare_dir: str, graph_dir: str) -> set[str]:
             continue
         dst = os.path.join(graph_dir, dst_name)
         if src_name.endswith(".html"):
-            with open(src) as f:
+            with open(src, encoding="utf-8") as f:
                 content = f.read()
-            with open(dst, "w") as f:
+            with open(dst, "w", encoding="utf-8") as f:
                 f.write(_patch_compare_html(content))
         else:
             shutil.copy2(src, dst)
@@ -497,7 +549,6 @@ def write_network_compare_table_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Network comparison",
     )
 
 
@@ -508,86 +559,63 @@ def write_community_table_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, CommunityTableData]] | None" = None,
 ) -> None:
+    """community_table.xlsx: one row per community of every grouping method (and period), in one sheet."""
     headers = [
+        "Method",
         "Community",
-        "Color",
-        "Nodes",
-        "Internal Edges",
-        "External Edges",
-        "E-I Index",
-        "Density",
-        "Reciprocity",
-        "Avg Clustering",
-        "Avg Path Length",
-        "Diameter",
+        "Colour",
         "Channels",
+        "Internal ties",
+        "External ties",
+        "E-I index",
+        "Internal density",
+        "Reciprocity",
+        "Mean clustering",
+        "Mean path length",
+        "Diameter",
+        "Modularity contribution",
+        "Members",
     ]
 
-    def _fill_strategy(ws: Any, strategy_key: str, ctd: CommunityTableData, first: bool = True) -> None:
-        strategy_entry = ctd["strategies"].get(strategy_key)
-        if not strategy_entry:
-            return
-        if not first:
-            ws.append([])  # blank separator between strategies
-        # Bold after appending: openpyxl reports max_row == 1 for an *empty* sheet,
-        # so pre-computing max_row + 1 would bold the wrong row for the first
-        # strategy on each sheet.
-        ws.append([strategy_display_label(strategy_key)])
-        ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
-        ws.append(headers)
-        for cell in ws[ws.max_row]:
-            cell.font = Font(bold=True)
-        for entry in strategy_entry["rows"]:
-            _community_id, _count, label, hex_color = entry["group"]
-            hex_color = str(hex_color).lstrip("#")
-            metrics = entry["metrics"]
-            channels_str = ", ".join(c["label"] for c in entry.get("channels", []))
-            ws.append(
-                [
-                    str(label),
-                    f"#{hex_color}",
-                    entry["node_count"],
-                    metrics["internal_edges"],
-                    metrics["external_edges"],
-                    metrics.get("ei_index"),
-                    metrics["density"],
-                    metrics["reciprocity"],
-                    metrics["avg_clustering"],
-                    metrics["avg_path_length"],
-                    metrics["diameter"],
-                    channels_str,
-                ]
-            )
-            try:
-                fill = PatternFill(start_color=hex_color.upper(), end_color=hex_color.upper(), fill_type="solid")
-                ws.cell(row=ws.max_row, column=1).fill = fill
-            except (ValueError, TypeError):
-                pass
-
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
-
-    if year_data:
-        # One sheet per year; each sheet lists all strategies sequentially
-        ws_all = wb.create_sheet(title="All")
-        for i, sk in enumerate(strategies):
-            _fill_strategy(ws_all, sk, community_table_data, first=(i == 0))
-        for yr, yr_ctd in year_data:
-            ws_yr = wb.create_sheet(title=str(yr))
-            for i, sk in enumerate(strategies):
-                _fill_strategy(ws_yr, sk, yr_ctd, first=(i == 0))
-    else:
-        # One sheet per strategy (original format)
+    def _rows(ctd: CommunityTableData) -> list[list[Any]]:
+        rows = []
         for strategy_key in strategies:
-            ws = wb.create_sheet(title=_safe_sheet_title(strategy_display_label(strategy_key)))
-            _fill_strategy(ws, strategy_key, community_table_data)
-    if not wb.sheetnames:
-        # A workbook needs one sheet: an export without community strategies still writes a valid file.
-        wb.create_sheet(title="Communities").append(["No community strategy was selected for this export."])
+            strategy_entry = ctd["strategies"].get(strategy_key)
+            if not strategy_entry:
+                continue
+            for entry in strategy_entry["rows"]:
+                _community_id, _count, label, hex_color = entry["group"]
+                metrics = entry["metrics"]
+                rows.append(
+                    [
+                        strategy_display_label(strategy_key),
+                        community_value(label, strategy_key),
+                        f"#{str(hex_color).lstrip('#')}",
+                        entry["node_count"],
+                        metrics["internal_edges"],
+                        metrics["external_edges"],
+                        metrics.get("ei_index"),
+                        metrics["density"],
+                        metrics["reciprocity"],
+                        metrics["avg_clustering"],
+                        metrics["avg_path_length"],
+                        metrics["diameter"],
+                        metrics.get("modularity_contribution"),
+                        ", ".join(c["label"] for c in entry.get("channels", [])),
+                    ]
+                )
+        return rows
 
+    wb = _new_workbook(project_title)
+    ws = _table_sheet(
+        wb, "Communities", headers, [(p, _rows(ctd)) for p, ctd in _scopes(community_table_data, year_data)]
+    )
+    # The Colour cell shows the community's colour on the map.
+    colour_col = list(next(ws.iter_rows(min_row=1, max_row=1, values_only=True))).index("Colour") + 1
+    for (cell,) in ws.iter_rows(min_row=2, min_col=colour_col, max_col=colour_col):
+        hex_color = str(cell.value or "").lstrip("#").upper()
+        if re.fullmatch(r"[0-9A-F]{6}", hex_color):
+            cell.fill = PatternFill(start_color=hex_color, end_color=hex_color, fill_type="solid")
     wb.save(output_filename)
 
 
@@ -649,8 +677,6 @@ def write_community_table_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Communities",
-        seo_title_part="Community statistics",
     )
 
 
@@ -664,30 +690,27 @@ def write_consensus_matrix_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Consensus matrix",
     )
 
 
-def write_structural_similarity_json(sim_data: dict, graph_dir: str) -> None:
-    # Filename kept as structural_similarity.json for saved-config / URL compatibility;
-    # the page now shows true structural equivalence (Lorrain & White 1971).
+def write_structural_equivalence_json(sim_data: dict, graph_dir: str) -> None:
+    # The page shows structural equivalence (Lorrain & White 1971); file and page are named after it.
     data_dir = os.path.join(graph_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
-    with open(os.path.join(data_dir, "structural_similarity.json"), "w") as f:
+    with open(os.path.join(data_dir, "structural_equivalence.json"), "w") as f:
         f.write(json.dumps(sim_data))
 
 
-def write_structural_similarity_html(
+def write_structural_equivalence_html(
     output_filename: str,
     seo: bool = False,
     project_title: str = "",
 ) -> None:
     _write_page(
-        "network/structural_similarity.html",
+        "network/structural_equivalence.html",
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Structural equivalence",
     )
 
 
@@ -708,7 +731,6 @@ def write_behavioural_equivalence_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Behavioural equivalence",
     )
 
 
@@ -722,7 +744,6 @@ def write_vacancy_analysis_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Vacancy Analysis",
     )
 
 
@@ -736,56 +757,46 @@ def write_robustness_table_html(
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Robustness",
-        seo_title_part="Network robustness analysis",
     )
 
 
-def write_interest_structural_html(
+def write_interesting_messages_html(
     output_filename: str,
     seo: bool = False,
     project_title: str = "",
 ) -> None:
     _write_page(
-        "network/interest_structural.html",
+        "network/interesting_messages.html",
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Interesting messages",
-        seo_title_part="Structurally interesting messages",
     )
 
 
 _ROBUSTNESS_METRICS: tuple[str, ...] = ("wcc", "scc", "reach", "strength")
 
 
-def _robustness_sheet_name(prefix: str, suffix: str) -> str:
-    """Excel sheet names are capped at 31 chars.  With a non-empty *suffix*
-    (e.g. ``"All"``, ``"2019"``), the prefix is truncated to make room for
-    ``"<prefix> <suffix>"`` while keeping the suffix intact."""
-    if not suffix:
-        return prefix[:31]
-    full = f"{prefix} {suffix}"
-    if len(full) <= 31:
-        return full
-    return f"{prefix[: 30 - len(suffix)]} {suffix}"
+_ROBUSTNESS_MEASURE_LABELS = {"wcc": "WCC", "scc": "SCC", "reach": "Reach", "strength": "Strength"}
 
 
-def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
-    ws = wb.create_sheet(title=_robustness_sheet_name("Summary", suffix))
-    headers = ["Strategy", "Metric", "R", "R_null_mean", "R_null_std", "z", "p", "q", "f_c"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for s in payload.get("strategies", {}):
-        strat = payload["strategies"][s]
+def _robustness_strategy(payload: dict, key: str) -> str:
+    return (payload.get("strategies", {}).get(key) or {}).get("label") or key
+
+
+def _share_removed(i: int, n: int) -> float:
+    return i / (n - 1) if n > 1 else 0.0
+
+
+def _robustness_summary_rows(payload: dict) -> list[list[Any]]:
+    rows = []
+    for s, strat in payload.get("strategies", {}).items():
         null = strat.get("null") or {}
         for m in _ROBUSTNESS_METRICS:
             null_m = null.get(f"r_{m}") or {}
-            ws.append(
+            rows.append(
                 [
-                    s,
-                    m.upper(),
+                    _robustness_strategy(payload, s),
+                    _ROBUSTNESS_MEASURE_LABELS[m],
                     strat.get(f"r_{m}"),
                     null_m.get("mean"),
                     null_m.get("std"),
@@ -795,125 +806,78 @@ def _fill_robustness_summary(wb: Any, payload: dict, suffix: str) -> None:
                     strat.get(f"fc_{m}"),
                 ]
             )
+    return rows
 
 
-def _fill_robustness_curves(wb: Any, payload: dict, suffix: str) -> None:
-    for s in payload.get("strategies", {}):
-        strat = payload["strategies"][s]
+def _robustness_curve_rows(payload: dict) -> list[list[Any]]:
+    rows = []
+    for s, strat in payload.get("strategies", {}).items():
         null = strat.get("null") or {}
-        ws = wb.create_sheet(title=_robustness_sheet_name(f"Curve {s}", suffix))
-        cols: list[tuple[str, list]] = [("q", list(range(len(strat["curve_wcc"]))))]
         for m in _ROBUSTNESS_METRICS:
-            cols.append((f"S_{m}", strat.get(f"curve_{m}") or []))
-        if null:
-            for m in _ROBUSTNESS_METRICS:
-                cols.append((f"null_{m}_mean", null.get(f"curve_{m}_mean", [])))
-                cols.append((f"null_{m}_std", null.get(f"curve_{m}_std", [])))
-        ws.append([c[0] for c in cols])
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for q in range(len(cols[0][1])):
-            ws.append([col[1][q] if q < len(col[1]) else None for col in cols])
+            curve = strat.get(f"curve_{m}") or []
+            mean, std = null.get(f"curve_{m}_mean") or [], null.get(f"curve_{m}_std") or []
+            for i, value in enumerate(curve):
+                rows.append(
+                    [
+                        _robustness_strategy(payload, s),
+                        _ROBUSTNESS_MEASURE_LABELS[m],
+                        _share_removed(i, len(curve)),
+                        value,
+                        mean[i] if i < len(mean) else None,
+                        std[i] if i < len(std) else None,
+                    ]
+                )
+    return rows
 
 
-def _fill_robustness_efficiency(wb: Any, payload: dict, suffix: str) -> None:
+def _robustness_efficiency_rows(payload: dict) -> list[list[Any]]:
     eff = payload.get("efficiency") or {}
-    curves = eff.get("curves") or {}
-    if not curves:
-        return
-    ws = wb.create_sheet(title=_robustness_sheet_name("Efficiency", suffix))
-    strategies = [s for s in payload.get("strategies", {}) if s in curves]
-    ws.append(["f"] + [f"E_{s}" for s in strategies])
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    fractions = eff.get("fractions") or []
-    for i, f in enumerate(fractions):
-        ws.append([f] + [curves[s][i] if i < len(curves[s]) else None for s in strategies])
+    curves, fractions = eff.get("curves") or {}, eff.get("fractions") or []
+    return [
+        [_robustness_strategy(payload, s), f, curves[s][i] if i < len(curves[s]) else None]
+        for s in payload.get("strategies", {})
+        if s in curves
+        for i, f in enumerate(fractions)
+    ]
 
 
-def _fill_robustness_ban_waves(wb: Any, payload: dict, suffix: str) -> None:
-    ban_waves = payload.get("ban_waves") or {}
-    for partition_name, rows in ban_waves.items():
-        ws = wb.create_sheet(title=_robustness_sheet_name(f"Ban wave {partition_name}", suffix))
-        header = ["Community", "Channels", "Fraction"]
-        for m in _ROBUSTNESS_METRICS:
-            header += [f"S_{m}", f"random_{m}"]
-        ws.append(header)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for row in rows:
-            # Label-group communities carry a human name; algorithmic ones fall back to the id.
-            community = row.get("community_label") or row.get("community")
-            cells: list = [community, row.get("n"), row.get("fraction")]
+def _robustness_ban_wave_rows(payload: dict) -> list[list[Any]]:
+    rows = []
+    for partition, partition_rows in (payload.get("ban_waves") or {}).items():
+        for row in partition_rows:
             for m in _ROBUSTNESS_METRICS:
-                cells += [row.get(f"s_{m}"), row.get(f"random_{m}")]
-            ws.append(cells)
+                rows.append(
+                    [
+                        strategy_display_label(partition),
+                        # A label for a label group, the community's number for an algorithmic method.
+                        row.get("community_label") or int_id(row.get("community")),
+                        row.get("n"),
+                        row.get("fraction"),
+                        _ROBUSTNESS_MEASURE_LABELS[m],
+                        row.get(f"s_{m}"),
+                        row.get(f"random_{m}"),
+                    ]
+                )
+    return rows
 
 
-def _fill_robustness_ban_replay(wb: Any, payload: dict, suffix: str) -> None:
-    rows = payload.get("ban_replay") or []
-    if not rows:
-        return
-    ws = wb.create_sheet(title=_robustness_sheet_name("Ban replay", suffix))
-    header = ["Wave period", "Pre-wave nodes", "Closed", "Fraction"]
-    for m in _ROBUSTNESS_METRICS:
-        header += [f"predicted_{m}", f"random_{m}", f"observed_{m}"]
-    ws.append(header)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in rows:
-        cells: list = [
-            row.get("label") or row.get("period"),
-            row.get("n_pre"),
-            row.get("n_closed"),
-            row.get("fraction"),
-        ]
-        for m in _ROBUSTNESS_METRICS:
-            cells += [row.get(f"predicted_{m}"), row.get(f"random_{m}"), row.get(f"observed_{m}")]
-        ws.append(cells)
-
-
-def _fill_robustness_alpha_sensitivity(wb: Any, payload: dict, suffix: str) -> None:
-    sens = payload.get("alpha_sensitivity") or {}
-    rows = sens.get("rows") or []
-    if not rows:
-        return
-    strategies = [s for s in sens.get("strategies", []) if s in payload.get("strategies", {})]
-    ws = wb.create_sheet(title=_robustness_sheet_name("Alpha sensitivity", suffix))
-    header = ["alpha", "backbone_n", "backbone_m", "Metric"] + list(strategies)
-    ws.append(header)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in rows:
-        for m in _ROBUSTNESS_METRICS:
-            cells: list = [row.get("alpha"), row.get("backbone_n"), row.get("backbone_m"), m.upper()]
-            for s in strategies:
-                r = (row.get("r") or {}).get(s) or {}
-                cells.append(r.get(m))
-            ws.append(cells)
-
-
-def _fill_robustness_modular(wb: Any, payload: dict, suffix: str) -> None:
-    strategies = list(payload.get("strategies", {}).keys())
-    modular = payload.get("modular") or {}
-    for partition_name, per_strategy in modular.items():
-        ws = wb.create_sheet(title=_robustness_sheet_name(f"Modular {partition_name}", suffix))
-        any_strategy = next(iter(per_strategy.values()))
-        n_points = len(any_strategy["intra"])
-        header = ["q"]
-        rows_cols: list[list] = [list(range(n_points))]
-        for s in strategies:
-            curves = per_strategy.get(s)
-            if curves is None:
-                continue
-            for key in ("intra", "inter", "ratio"):
-                header.append(f"{key}_{s}")
-                rows_cols.append(curves[key])
-        ws.append(header)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for q in range(n_points):
-            ws.append([col[q] if q < len(col) else None for col in rows_cols])
+def _robustness_modular_rows(payload: dict) -> list[list[Any]]:
+    rows = []
+    for partition, per_strategy in (payload.get("modular") or {}).items():
+        for s, curves in per_strategy.items():
+            n = len(curves.get("intra") or [])
+            for i in range(n):
+                rows.append(
+                    [
+                        strategy_display_label(partition),
+                        _robustness_strategy(payload, s),
+                        _share_removed(i, n),
+                        curves["intra"][i],
+                        curves["inter"][i] if i < len(curves.get("inter") or []) else None,
+                        curves["ratio"][i] if i < len(curves.get("ratio") or []) else None,
+                    ]
+                )
+    return rows
 
 
 def write_robustness_table_xlsx(
@@ -922,52 +886,106 @@ def write_robustness_table_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, dict]] | None" = None,
 ) -> None:
-    """Write the robustness payload(s) as an Excel workbook.
+    """robustness_table.xlsx: one table per sheet (summary, curves, efficiency, ban waves, modular robustness, and for
+    the full range the ban replay and the α sensitivity), every period of a timeline in the same table."""
+    periods = _scopes(rob_payload, year_data)
+    wb = _new_workbook(project_title)
+    for title, headers, rows_of in (
+        (
+            "Summary",
+            ["Strategy", "Measure", "R", "Random R, mean", "Random R, SD", "z", "p", "q", "Critical share"],
+            _robustness_summary_rows,
+        ),
+        (
+            "Curves",
+            ["Strategy", "Measure", "Share removed", "Residual size", "Random, mean", "Random, SD"],
+            _robustness_curve_rows,
+        ),
+        ("Efficiency", ["Strategy", "Share removed", "Efficiency"], _robustness_efficiency_rows),
+        (
+            "Ban waves",
+            [
+                "Method",
+                "Community",
+                "Channels",
+                "Share of the network",
+                "Measure",
+                "Residual size",
+                "Random residual",
+            ],
+            _robustness_ban_wave_rows,
+        ),
+        (
+            "Modular",
+            ["Method", "Strategy", "Share removed", "Within communities", "Between communities", "Ratio"],
+            _robustness_modular_rows,
+        ),
+    ):
+        scopes = [(period, rows_of(payload)) for period, payload in periods]
+        if any(rows for _period, rows in scopes):
+            _table_sheet(wb, title, headers, scopes)
 
-    Without *year_data* sheets are named ``"Summary"``, ``"Curve <strategy>"``,
-    ``"Efficiency"``, ``"Modular <partition>"``, and ``"Ban wave <partition>"``.
-
-    With *year_data* (a list of ``(year, year_payload)`` from the timeline
-    loop), one contiguous block of sheets is emitted per scope — ``"All"``
-    for the global payload first, then ``"<year>"`` for each per-year
-    payload — so sheet names become ``"Summary All"``, ``"Curve pagerank
-    All"``, …, ``"Summary 2019"``, ``"Curve pagerank 2019"``, etc.  Sheet
-    titles are truncated to fit Excel's 31-char cap while preserving the
-    year suffix.
-    """
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
-
-    if year_data:
-        scopes: list[tuple[str, dict]] = [("All", rob_payload)]
-        for yr, yr_payload in year_data:
-            scopes.append((str(yr), yr_payload))
-    else:
-        scopes = [("", rob_payload)]
-
-    for suffix, payload in scopes:
-        _fill_robustness_summary(wb, payload, suffix)
-        _fill_robustness_curves(wb, payload, suffix)
-        _fill_robustness_efficiency(wb, payload, suffix)
-        _fill_robustness_alpha_sensitivity(wb, payload, suffix)
-        _fill_robustness_ban_replay(wb, payload, suffix)
-        _fill_robustness_modular(wb, payload, suffix)
-        _fill_robustness_ban_waves(wb, payload, suffix)
-
+    replay = [
+        [
+            row.get("label") or row.get("period"),
+            row.get("n_pre"),
+            row.get("n_closed"),
+            row.get("fraction"),
+            _ROBUSTNESS_MEASURE_LABELS[m],
+            row.get(f"predicted_{m}"),
+            row.get(f"random_{m}"),
+            row.get(f"observed_{m}"),
+        ]
+        for row in rob_payload.get("ban_replay") or []
+        for m in _ROBUSTNESS_METRICS
+    ]
+    if replay:
+        _table_sheet(
+            wb,
+            "Ban replay",
+            [
+                "Wave period",
+                "Channels before",
+                "Closed",
+                "Share of the network",
+                "Measure",
+                "Predicted",
+                "Random",
+                "Observed",
+            ],
+            [("", replay)],
+        )
+    sens = rob_payload.get("alpha_sensitivity") or {}
+    alpha_rows = [
+        [
+            row.get("alpha"),
+            row.get("backbone_n"),
+            row.get("backbone_m"),
+            _ROBUSTNESS_MEASURE_LABELS[m],
+            _robustness_strategy(rob_payload, s),
+            ((row.get("r") or {}).get(s) or {}).get(m),
+        ]
+        for row in sens.get("rows") or []
+        for m in _ROBUSTNESS_METRICS
+        for s in sens.get("strategies", [])
+        if s in rob_payload.get("strategies", {})
+    ]
+    if alpha_rows:
+        _table_sheet(
+            wb,
+            "Alpha sensitivity",
+            ["Alpha", "Backbone channels", "Backbone ties", "Measure", "Strategy", "R"],
+            [("", alpha_rows)],
+        )
     wb.save(output_filename)
 
 
 def write_event_impact_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
     _write_page(
-        "network/events.html",
+        "network/event_impact.html",
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Event impact",
-        seo_title_part="Event impact",
     )
 
 
@@ -975,24 +993,10 @@ def write_event_impact_xlsx(payload: dict, output_filename: str, project_title: 
     """``Effects`` (one row per event × metric) and ``Weekly series`` (the network's weekly metrics) sheets."""
     from network.event_impact import EFFECT_COLUMNS, effect_rows, series_rows
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    ws = wb.active
-    ws.title = "Effects"
-    ws.append(list(EFFECT_COLUMNS))
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in effect_rows(payload):
-        ws.append(row)
-    ws = wb.create_sheet(title="Weekly series")
+    wb = _new_workbook(project_title)
+    _table_sheet(wb, "Effects", list(EFFECT_COLUMNS), [("", effect_rows(payload))])
     header, rows = series_rows(payload)
-    ws.append(header)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in rows:
-        ws.append(row)
+    _table_sheet(wb, "Weekly series", header, [("", rows)])
     wb.save(output_filename)
 
 
@@ -1002,8 +1006,6 @@ def write_links_html(output_filename: str, seo: bool = False, project_title: str
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Outbound links",
-        seo_title_part="Outbound links",
     )
 
 
@@ -1013,39 +1015,48 @@ def write_links_xlsx(
     project_title: str = "",
     year_data: "list[tuple[str, dict]] | None" = None,
 ) -> None:
-    """The outbound-link layer as a workbook: ``Channels``, ``Sites``, ``Categories``, ``Co-linking`` and one
-    ``Matrix <group>`` sheet per partition label group; with *year_data* ``[(period key, payload), …]`` the
-    channel and site sheets get ``… All`` plus one sheet per period."""
-    from network.link_layer import CATEGORY_COLUMNS, CHANNEL_COLUMNS, PAIR_COLUMNS, SITE_COLUMNS, flat_rows
+    """The outbound-link layer as a workbook: ``Channels``, ``Sites`` (every period of a timeline in the same table),
+    ``Categories``, ``Co-linking``, ``Channel sites`` and one ``Matrix <group>`` sheet per partition label group."""
+    from network.link_layer import (
+        CATEGORY_COLUMNS,
+        CHANNEL_COLUMNS,
+        CHANNEL_SITE_COLUMNS,
+        PAIR_COLUMNS,
+        SITE_COLUMNS,
+        channel_site_rows,
+        flat_rows,
+    )
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
-
-    def _sheet(title: str, headers: list[str], rows: list[list]) -> None:
-        ws = wb.create_sheet(title=_safe_sheet_title(title))
-        ws.append(headers)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for row in rows:
-            ws.append(row)
-
-    scopes: list[tuple[str, dict]] = [("All", payload)] if year_data else [("", payload)]
-    scopes += [(str(key), period_payload) for key, period_payload in year_data or []]
-    for suffix, scope_payload in scopes:
-        _sheet(f"Channels {suffix}".strip(), *flat_rows(CHANNEL_COLUMNS, scope_payload.get("channels", [])))
-        _sheet(f"Sites {suffix}".strip(), *flat_rows(SITE_COLUMNS, scope_payload.get("sites", [])))
-    _sheet("Categories", *flat_rows(CATEGORY_COLUMNS, payload.get("categories", [])))
-    _sheet("Co-linking", *flat_rows(PAIR_COLUMNS, payload.get("colinking", {}).get("pairs", [])))
+    wb = _new_workbook(project_title)
+    periods = _scopes(payload, year_data)
+    for title, columns, key in (("Channels", CHANNEL_COLUMNS, "channels"), ("Sites", SITE_COLUMNS, "sites")):
+        headers = [name for name, _ in columns]
+        _table_sheet(wb, title, headers, [(p, flat_rows(columns, scope.get(key, []))[1]) for p, scope in periods])
+    _table_sheet(wb, "Categories", *_single(flat_rows(CATEGORY_COLUMNS, payload.get("categories", []))))
+    _table_sheet(wb, "Co-linking", *_single(flat_rows(PAIR_COLUMNS, payload.get("colinking", {}).get("pairs", []))))
+    _table_sheet(wb, "Channel sites", list(CHANNEL_SITE_COLUMNS), [("", channel_site_rows(payload))])
     for matrix in payload.get("matrices", []):
-        _sheet(
+        _table_sheet(
+            wb,
             f"Matrix {matrix['group']}",
             [matrix["group"], *matrix["categories"], "Total"],
-            [[label, *counts, sum(counts)] for label, counts in zip(matrix["labels"], matrix["counts"], strict=True)],
+            [
+                (
+                    "",
+                    [
+                        [label, *counts, sum(counts)]
+                        for label, counts in zip(matrix["labels"], matrix["counts"], strict=True)
+                    ],
+                )
+            ],
         )
     wb.save(output_filename)
+
+
+def _single(table: tuple[list[str], list[list[Any]]]) -> tuple[list[str], list[tuple[str, list[list[Any]]]]]:
+    """``(headers, rows)`` as the ``(headers, scopes)`` of a table with no period."""
+    headers, rows = table
+    return headers, [("", rows)]
 
 
 def write_audience_html(output_filename: str, seo: bool = False, project_title: str = "") -> None:
@@ -1054,9 +1065,6 @@ def write_audience_html(output_filename: str, seo: bool = False, project_title: 
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Audience",
-        seo_title_part="Audience of the channels",
-        description="The commenters of the channels: participation inequality, breadth, audience overlap and retention.",
     )
 
 
@@ -1066,24 +1074,14 @@ def write_audience_xlsx(
     project_title: str = "",
     year_data: "list[tuple[str, AudienceExport]] | None" = None,
 ) -> None:
-    """The Audience sections as a workbook: a ``Summary`` sheet, each section's main table (the CSVs' layout)
-    and the tables the page shows beside them; with *year_data* ``[(period key, result), …]`` the summary
-    gets a column per period and the participation and overlap-pair sheets one sheet per period
-    (:func:`network.audience_layer.xlsx_sheets`)."""
+    """The Audience sections as a workbook: a ``Summary`` sheet, each section's main table and the tables the page
+    shows beside them; with *year_data* ``[(period key, result), …]`` the summary, participation and overlap pairs
+    carry a Period column (:func:`network.audience_layer.xlsx_sheets`)."""
     from network.audience_layer import xlsx_sheets
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
+    wb = _new_workbook(project_title)
     for title, headers, rows in xlsx_sheets(result, year_data):
-        ws = wb.create_sheet(title=_safe_sheet_title(title))
-        ws.append(headers)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for row in rows:
-            ws.append(row)
+        _table_sheet(wb, title, headers, [("", rows)])
     wb.save(output_filename)
 
 
@@ -1093,9 +1091,33 @@ def write_dominance_html(output_filename: str, seo: bool = False, project_title:
         output_filename,
         seo=seo,
         project_title=project_title,
-        title_part="Dominance",
-        seo_title_part="Dominance analysis",
     )
+
+
+_HIERARCHY_LABELS = {
+    "total_events": "Citation events",
+    "links": "Directed links",
+    "tested_links": "Links tested",
+    "validated_links": "Links validated",
+    "pairs": "Connected pairs",
+    "share_basis": "Share basis",
+}
+
+
+def _hierarchy_rows(payload: dict) -> list[list[Any]]:
+    """The whole-network hierarchy tests and the counts of a dominance payload, as readable ``Statistic, Value`` rows."""
+    meta = payload.get("meta") or {}
+    rows = [[_readable_key(key), value] for key, value in (meta.get("hierarchy") or {}).items()]
+    rows += [[_HIERARCHY_LABELS[key], meta.get(key)] for key in _HIERARCHY_LABELS]
+    for group, title in (("relations", "Pairs"), ("roles", "Channels")):
+        rows += [[f"{title}: {key}", value] for key, value in (meta.get(group) or {}).items()]
+    return rows
+
+
+def _readable_key(key: str) -> str:
+    """``springrank_energy`` → ``SpringRank energy``: a payload key as a spreadsheet label."""
+    text = str(key).replace("_", " ").replace("springrank", "SpringRank").replace("null mean", "random mean")
+    return text[:1].upper() + text[1:]
 
 
 def write_dominance_xlsx(
@@ -1104,116 +1126,14 @@ def write_dominance_xlsx(
     project_title: str = "",
     year_data: "list[tuple[int, dict]] | None" = None,
 ) -> None:
-    """Write the dominance analysis as an Excel workbook: a ``Channels`` sheet (ranked nodes) and a
-    ``Pairs`` sheet, plus a ``Hierarchy`` sheet with the whole-network tests; with *year_data*
-    ``[(year, payload), …]`` each family gets ``… All`` plus one sheet per year."""
+    """The dominance analysis as a workbook: ``Channels`` (the ranked channels), ``Pairs`` and ``Hierarchy`` (the
+    whole-network tests), every period of a timeline in the same table."""
     from network.dominance import flat_node_rows, flat_pair_rows
 
-    wb = openpyxl.Workbook()
-    wb.properties.creator = "Pulpit"
-    if project_title:
-        wb.properties.title = project_title
-    wb.remove(wb.active)
-    scopes: list[tuple[str, dict]] = [("All", payload)] if year_data else [("", payload)]
-    for yr, yr_payload in year_data or []:
-        scopes.append((str(yr), yr_payload))
-    for suffix, scope_payload in scopes:
-        for prefix, (headers, rows) in (
-            ("Channels", flat_node_rows(scope_payload)),
-            ("Pairs", flat_pair_rows(scope_payload)),
-        ):
-            ws = wb.create_sheet(title=_safe_sheet_title(f"{prefix} {suffix}".strip()))
-            ws.append(headers)
-            for cell in ws[1]:
-                cell.font = Font(bold=True)
-            for row in rows:
-                ws.append(row)
-        ws = wb.create_sheet(title=_safe_sheet_title(f"Hierarchy {suffix}".strip()))
-        ws.append(["Statistic", "Value"])
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        meta = scope_payload.get("meta") or {}
-        for key, value in (meta.get("hierarchy") or {}).items():
-            ws.append([key, value])
-        for key in ("total_events", "links", "tested_links", "validated_links", "pairs", "share_basis"):
-            ws.append([key, meta.get(key)])
-        for group in ("relations", "roles"):
-            for key, value in (meta.get(group) or {}).items():
-                ws.append([f"{group}.{key}", value])
+    periods = _scopes(payload, year_data)
+    wb = _new_workbook(project_title)
+    for title, flat in (("Channels", flat_node_rows), ("Pairs", flat_pair_rows)):
+        headers = flat(payload)[0]
+        _table_sheet(wb, title, headers, [(p, flat(scope)[1]) for p, scope in periods])
+    _table_sheet(wb, "Hierarchy", ["Statistic", "Value"], [(p, _hierarchy_rows(scope)) for p, scope in periods])
     wb.save(output_filename)
-
-
-def write_index_html(
-    output_filename: str,
-    seo: bool = False,
-    project_title: str = "",
-    include_graph: bool = False,
-    include_3d_graph: bool = False,
-    include_channel_html: bool = False,
-    include_channel_xlsx: bool = False,
-    include_network_html: bool = False,
-    include_network_xlsx: bool = False,
-    include_community_html: bool = False,
-    include_community_xlsx: bool = False,
-    include_consensus_matrix_html: bool = False,
-    include_structural_similarity: bool = False,
-    include_behavioural_equivalence: bool = False,
-    include_compare_html: bool = False,
-    compare_files: set[str] | None = None,
-    strategies: list[str] | None = None,
-    timeline_entries: list[dict] | None = None,
-    include_vacancy_analysis: bool = False,
-    include_robustness_html: bool = False,
-    include_robustness_xlsx: bool = False,
-    include_interest_structural: bool = False,
-    include_coordination_2d: bool = False,
-    include_coordination_3d: bool = False,
-    include_dominance_html: bool = False,
-    include_dominance_xlsx: bool = False,
-    include_dyads: bool = False,
-    include_event_impact_html: bool = False,
-    include_event_impact_xlsx: bool = False,
-    include_links_html: bool = False,
-    include_links_xlsx: bool = False,
-    include_audience_html: bool = False,
-    include_audience_xlsx: bool = False,
-) -> None:
-    context = {
-        "title": project_title or "Network Analysis",
-        "robots_meta": robots_content(seo),
-        "project_title": project_title,
-        "include_graph": include_graph,
-        "include_3d_graph": include_3d_graph,
-        "include_channel_html": include_channel_html,
-        "include_channel_xlsx": include_channel_xlsx,
-        "include_network_html": include_network_html,
-        "include_network_xlsx": include_network_xlsx,
-        "include_community_html": include_community_html,
-        "include_community_xlsx": include_community_xlsx,
-        "include_consensus_matrix_html": include_consensus_matrix_html,
-        "include_structural_similarity": include_structural_similarity,
-        "include_behavioural_equivalence": include_behavioural_equivalence,
-        "include_compare_html": include_compare_html,
-        "compare_files": compare_files or set(),
-        "strategies": [strategy_display_label(s) for s in (strategies or [])],
-        "timeline_entries": timeline_entries or [],
-        "include_vacancy_analysis": include_vacancy_analysis,
-        "include_robustness_html": include_robustness_html,
-        "include_robustness_xlsx": include_robustness_xlsx,
-        "include_interest_structural": include_interest_structural,
-        "include_coordination_2d": include_coordination_2d,
-        "include_coordination_3d": include_coordination_3d,
-        "include_dominance_html": include_dominance_html,
-        "include_dominance_xlsx": include_dominance_xlsx,
-        "include_dyads": include_dyads,
-        "include_event_impact_html": include_event_impact_html,
-        "include_event_impact_xlsx": include_event_impact_xlsx,
-        "include_links_html": include_links_html,
-        "include_links_xlsx": include_links_xlsx,
-        "include_audience_html": include_audience_html,
-        "include_audience_xlsx": include_audience_xlsx,
-        **_pulpit_ctx(),
-    }
-    content = render_to_string("network/index.html", context)
-    with open(output_filename, "w") as f:
-        f.write(content)

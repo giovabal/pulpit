@@ -86,7 +86,7 @@ COORDINATION_MEASURES: list[tuple[str, str]] = [
 _CONTEXT_MEASURES: list[tuple[str, str]] = [
     ("in_deg", "In-strength"),
     ("out_deg", "Out-strength"),
-    ("fans", "Users"),
+    ("fans", "Subscribers"),
     ("messages_count", "Messages"),
 ]
 

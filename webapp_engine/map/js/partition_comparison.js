@@ -51,12 +51,9 @@ var PARTITION_COMPARISON_METRICS = [{
 }, ];
 
 // White → muted blue ramp; `t` in [0, 1], higher = more agreement = more saturated.
-function _comparison_cell_color(t) {
-    t = Math.max(0, Math.min(1, t));
-    var r = Math.round(255 - t * 70),
-        g = Math.round(255 - t * 40),
-        b = Math.round(255 - t * 20);
-    return "rgb(" + r + "," + g + "," + b + ")";
+// The cell's tint from the theme (format.js heatmapBg): darker = more agreement.
+function _comparison_cell_style(t) {
+    return heatmapBg(Math.max(0, Math.min(1, t)), 0, 1);
 }
 
 function _comparison_matrix_el(strats, cells, metric) {
@@ -92,21 +89,21 @@ function _comparison_matrix_el(strats, cells, metric) {
     var tbody = document.createElement("tbody");
     strats.forEach(function(sk_a, i) {
         var tr = document.createElement("tr");
-        var td0 = document.createElement("td");
+        var td0 = document.createElement("th");
+        td0.scope = "row";
         td0.textContent = _strat_label(sk_a);
-        td0.style.fontWeight = "500";
         tr.appendChild(td0);
         strats.forEach(function(_sk_b, j) {
             var val = cells[i][j];
             var td = document.createElement("td");
             td.className = "number";
             if (i === j || val === null || val === undefined) {
-                td.textContent = "—";
-                td.style.color = "#adb5bd";
+                td.textContent = MISSING;
+                td.classList.add("text-muted");
             } else {
-                td.textContent = val.toFixed(metric.dec);
+                td.textContent = fmtFixed(val, metric.dec);
                 var t = metric.dist ? (vmax > 0 ? 1 - val / vmax : 1) : val;
-                td.style.backgroundColor = _comparison_cell_color(t);
+                td.setAttribute("style", _comparison_cell_style(t));
             }
             tr.appendChild(td);
         });
@@ -125,7 +122,7 @@ export function render_partition_comparison(target, pc) {
     if (!pc || !pc.strategies || pc.strategies.length < 2 || !pc.metrics) {
         var note = document.createElement("p");
         note.className = "text-muted";
-        note.textContent = "Partition comparison needs at least two comparable strategies for this selection.";
+        note.textContent = "Partition comparison needs at least two comparable grouping methods in this selection.";
         target.appendChild(note);
         return;
     }
@@ -137,14 +134,14 @@ export function render_partition_comparison(target, pc) {
         if (!cells) return;
         var col = document.createElement("div");
         col.className = "col-12 col-xl-6";
-        var h5 = document.createElement("h5");
-        h5.className = "mb-1";
-        h5.textContent = metric.name + " (" + metric.abbr + ")";
-        h5.title = metric.tip;
-        col.appendChild(h5);
+        var h3 = document.createElement("h3");
+        h3.textContent = metric.name + " (" + metric.abbr + ")";
+        col.appendChild(h3);
         var p = document.createElement("p");
         p.className = "text-muted small mb-2";
-        p.textContent = metric.desc;
+        // The tooltip's reference ("Hubert & Arabie 1985") is shown with the description, not hidden in a title.
+        var ref = /\(([^()]*\d{4})\)/.exec(metric.tip || "");
+        p.textContent = metric.desc + (ref ? " (" + ref[1] + ")" : "");
         col.appendChild(p);
         col.appendChild(_comparison_matrix_el(strats, cells, metric));
         grid.appendChild(col);

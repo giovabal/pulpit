@@ -21,7 +21,7 @@ account is identified; channels are, as on the page. See docs/audience.md.
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from network.utils import GraphData, dead_leaf_ids
@@ -45,6 +45,8 @@ class AudienceExport:
 
     sections: dict[str, dict[str, Any]]
     payload: dict[str, Any]
+    # Channel id → the graph's window-resolved primary label, the label every table of the export shows.
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def has_data(self) -> bool:
@@ -222,7 +224,8 @@ def compute_audience(
         "retention": _retention(sections["retention"]),
         "channel_commenters": _channel_commenters(sections["channel-commenters"], ref),
     }
-    return AudienceExport(sections=sections, payload=payload)
+    labels = {str(node["id"]): node.get("organization") or "" for node in graph_data.get("nodes", [])}
+    return AudienceExport(sections=sections, payload=payload, labels=labels)
 
 
 # ── Tables ───────────────────────────────────────────────────────────────────
@@ -233,9 +236,31 @@ def csv_tables(result: AudienceExport) -> list[tuple[str, tuple[str, ...], list[
     from webapp.audience.tables import TABLE_SECTIONS, section_table
 
     return [
-        (f"audience_{CSV_STEMS[section]}.csv", *section_table(section, result.sections[section]))
+        (
+            f"audience_{CSV_STEMS[section]}.csv",
+            *_graph_labelled(result, *section_table(section, result.sections[section])),
+        )
         for section in TABLE_SECTIONS
     ]
+
+
+def _graph_labelled(result: AudienceExport, columns: Any, rows: list[list]) -> tuple[Any, list[list]]:
+    """A per-channel table with its ``label`` column set to the graph's label of the channel.
+
+    The web app's tables give a channel's *current, directly held* label, which is empty wherever the primary
+    label group is a container group; an export shows the label resolved for the analysis window, as its
+    channel table and every other sheet do.
+    """
+    names = list(columns)
+    if not result.labels or "channel_id" not in names or "label" not in names:
+        return columns, rows
+    id_at, label_at = names.index("channel_id"), names.index("label")
+    out = []
+    for row in rows:
+        row = list(row)
+        row[label_at] = result.labels.get(str(row[id_at]), row[label_at])
+        out.append(row)
+    return columns, out
 
 
 def _summary_rows(payload: dict) -> list[list]:
@@ -283,6 +308,23 @@ def _summary_rows(payload: dict) -> list[list]:
     ]
 
 
+# Words of a column name that are not written in lower case in a header.
+_HEADER_WORDS = {"id": "ID", "telegram": "Telegram", "a": "A", "b": "B", "gini": "Gini"}
+# p- and q-values keep their lower-case symbol, as in every other table.
+_SYMBOL_HEADERS = frozenset({"p", "q"})
+
+
+def _readable(column: str) -> str:
+    """A section table's CSV column (``channel_a_id``) as a spreadsheet header (``Channel A ID``): the same
+    words, so the header's ``column_key`` is the CSV column again."""
+    name = str(column).strip()
+    if name in _SYMBOL_HEADERS:
+        return name
+    words = [_HEADER_WORDS.get(word, word) for word in name.split("_") if word]
+    text = " ".join(words)
+    return text[:1].upper() + text[1:]
+
+
 def xlsx_sheets(
     result: AudienceExport, periods: "list[tuple[str, AudienceExport]] | None" = None
 ) -> list[tuple[str, list[str], list[list]]]:
@@ -290,30 +332,41 @@ def xlsx_sheets(
     the CSVs, numbers kept numeric) and the tables the page shows beside them.
 
     With *periods* ``[(period key, its result), …]`` (a timeline export; periods without a reply are left
-    out) the summary gets one column per period next to ``All``, and the per-channel participation and the
-    overlap pairs get ``… All`` plus one sheet per period."""
+    out) the summary, the per-channel participation and the overlap pairs hold every period in one table,
+    under a leading ``Period`` column (``All periods`` for the full range)."""
+    from network.pages import ALL_PERIODS, PERIOD_HEADER
     from webapp.audience.tables import section_table
 
     payload = result.payload
     periods = periods or []
-    summary = _summary_rows(payload)
-    if periods:
-        by_period = [_summary_rows(period.payload) for _key, period in periods]
-        sheets: list[tuple[str, list[str], list[list]]] = [
-            (
-                "Summary",
-                ["Figure", "All", *[key for key, _period in periods]],
-                [[label, value, *[rows[i][1] for rows in by_period]] for i, (label, value) in enumerate(summary)],
-            )
-        ]
-    else:
-        sheets = [("Summary", ["Figure", "Value"], summary)]
+    # With a timeline, the summary and the per-period tables carry a leading Period column ("All periods" for the
+    # full range): every period sits in the same table, as in every workbook of the export.
+    scopes: list[tuple[str, AudienceExport]] = [(ALL_PERIODS, result), *periods] if periods else [("", result)]
+
+    def _with_period(headers: list[str], scoped_rows: list[tuple[str, list[list]]]) -> tuple[list[str], list[list]]:
+        if not periods:
+            return headers, [row for _period, rows in scoped_rows for row in rows]
+        return [PERIOD_HEADER, *headers], [[period, *row] for period, rows in scoped_rows for row in rows]
+
+    sheets: list[tuple[str, list[str], list[list]]] = [
+        (
+            "Summary",
+            *_with_period(["Figure", "Value"], [(key, _summary_rows(scoped.payload)) for key, scoped in scopes]),
+        )
+    ]
 
     def _table(title: str, section: str, *, per_period: bool = False) -> None:
-        scopes = [("All", result), *periods] if per_period and periods else [("", result)]
-        for suffix, scoped in scopes:
-            columns, rows = section_table(section, scoped.sections[section], as_text=False)
-            sheets.append((f"{title} {suffix}".strip(), list(columns), rows))
+        section_scopes = scopes if per_period else [scopes[0]]
+        columns: list[str] = []
+        scoped_rows = []
+        for key, scoped in section_scopes:
+            cols, rows = _graph_labelled(scoped, *section_table(section, scoped.sections[section], as_text=False))
+            columns = [_readable(c) for c in cols]
+            scoped_rows.append((key, rows))
+        if per_period:
+            sheets.append((title, *_with_period(columns, scoped_rows)))
+        else:
+            sheets.append((title, columns, scoped_rows[0][1]))
 
     _table("Participation", "participation", per_period=True)
     sheets.append(
@@ -367,7 +420,7 @@ def xlsx_sheets(
             ],
         )
     )
-    _table("Retention monthly", "retention")
+    _table("Retention by month", "retention")
     retention = payload["retention"]
     quarters = retention.get("cohort_quarters") or []
     sheets.append(

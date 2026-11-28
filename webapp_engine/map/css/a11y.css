@@ -50,3 +50,9 @@
   outline: 2px solid var(--accent, #4338ca);
   outline-offset: -2px;
 }
+
+/* Dark theme: the accent is light, so the skip link's text turns dark to stay readable on it. */
+[data-theme="dark"] .skip-link,
+[data-theme="dark"] .skip-link:focus {
+  color: #0f0f12;
+}

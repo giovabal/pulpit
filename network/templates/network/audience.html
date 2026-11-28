@@ -5,57 +5,44 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-2">
-  <h2 class="mb-0">Audience</h2>
-  <div class="d-flex gap-2">
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-house" aria-hidden="true"></i> Index</a>
-    <a href="{{ repository_url }}/blob/main/docs/audience.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Method</a>
-  </div>
-</div>
-<p class="text-muted small mb-2">
-  <strong>Who reads these channels?</strong> Telegram shows a channel's subscribers only to its admins, so the part of the
-  audience that can be followed person by person is the <em>commenters</em>: the user accounts replying in the observed
-  channels' discussion groups, to posts inside the channels' in-target periods and the export's dates. Telegram bots and
-  bulk posters are left out. Commenters are a self-selected minority of any audience, and only the channels with comments
-  are described — not the whole network's audience. Aggregates only: no account is named.
-</p>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>Telegram shows a channel's subscribers only to its admins, so the part of the audience that can be followed
+  person by person is the <em>commenters</em>: the user accounts replying in the observed channels' discussion groups,
+  to posts inside the channels' observed periods and the export's dates. Telegram bots and bulk posters are left out.</p>
+  <p>Commenters are a self-selected minority of any audience, and only the channels with comments are described, not
+  the whole network's audience. Aggregates only: no account is named.</p>
+</details>
+<div id="timeline-nav" class="export-period-nav"></div>
 <div id="au-preamble" class="mb-2"></div>
-<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Audience sections">
-  <a href="#participation" class="btn btn-outline-secondary btn-sm">Participation</a>
-  <a href="#breadth" class="btn btn-outline-secondary btn-sm">Breadth</a>
-  <a href="#overlap" class="btn btn-outline-secondary btn-sm">Audience overlap</a>
-  <a href="#retention" class="btn btn-outline-secondary btn-sm">Retention</a>
-  <a href="#channel-commenters" class="btn btn-outline-secondary btn-sm">Channels as commenters</a>
-</nav>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
 
 <section id="participation" class="audience-section" aria-labelledby="au-participation-title">
-  <h3 class="h4 mt-3" id="au-participation-title">Participation inequality</h3>
+  <h2 id="au-participation-title">Participation inequality</h2>
   <p class="text-muted small">How unevenly the replies are spread over the accounts writing them: a comment section can look like a crowd while a few regulars write most of it.</p>
   <div id="au-participation"></div>
 </section>
 
 <section id="breadth" class="audience-section" aria-labelledby="au-breadth-title">
-  <h3 class="h4 mt-4" id="au-breadth-title">Breadth</h3>
+  <h2 id="au-breadth-title">Breadth</h2>
   <p class="text-muted small">Over how many channels, and across how many labels, each commenter spreads — against what chance would give, since an account that writes more replies reaches more channels anyway (rarefaction; Hill number of order 1 across labels).</p>
   <div id="au-breadth"></div>
 </section>
 
 <section id="overlap" class="audience-section" aria-labelledby="au-overlap-title">
-  <h3 class="h4 mt-4" id="au-overlap-title">Audience overlap</h3>
+  <h2 id="au-overlap-title">Audience overlap</h2>
   <p class="text-muted small">Which channels share commenters beyond chance: two big channels share many anyway, so each pair is tested against a null that keeps every commenter's number of channels exactly (exact p-values, Benjamini–Hochberg q over every pair).</p>
   <div id="au-overlap"></div>
 </section>
 
 <section id="retention" class="audience-section" aria-labelledby="au-retention-title">
-  <h3 class="h4 mt-4" id="au-retention-title">Retention</h3>
+  <h2 id="au-retention-title">Retention</h2>
   <p class="text-muted small">Whether the comment audience renews itself or rests on a core that ages: commenters per month, and how much of each quarter's newcomers comes back.</p>
   <div id="au-retention"></div>
 </section>
 
 <section id="channel-commenters" class="audience-section" aria-labelledby="au-channel-commenters-title">
-  <h3 class="h4 mt-4" id="au-channel-commenters-title">Channels as commenters</h3>
+  <h2 id="au-channel-commenters-title">Channels as commenters</h2>
   <p class="text-muted small">Comments written by a channel under its own name. On another channel's posts, that is a channel-to-channel tie the citation network — built from forwards and mentions — does not see. Channels are public actors, so they are named here.</p>
   <div id="au-channel-commenters"></div>
 </section>

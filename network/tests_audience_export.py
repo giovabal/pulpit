@@ -126,11 +126,15 @@ class AudienceExportTests(TestCase):
         self.assertEqual(q3["participation"]["overall"]["replies"], 2)  # the September post
         self.assertEqual((q3["start_date"], q3["end_date"]), ("2024-07-01", "2024-09-30"))
         wb = openpyxl.load_workbook(export / "audience.xlsx")
-        self.assertEqual([c.value for c in wb["Summary"][1]], ["Figure", "All", "2024Q2", "2024Q3"])
-        replies = next(row for row in wb["Summary"].iter_rows(min_row=2, values_only=True) if row[0] == "Replies")
-        self.assertEqual(replies[1:], (7, 5, 2))
-        for name in ("Participation All", "Participation 2024Q2", "Overlap pairs 2024Q3"):
-            self.assertIn(name, wb.sheetnames)
+        self.assertEqual([c.value for c in wb["Summary"][1]], ["Period", "Figure", "Value"])
+        replies = {
+            row[0]: row[2] for row in wb["Summary"].iter_rows(min_row=2, values_only=True) if row[1] == "Replies"
+        }
+        self.assertEqual(replies, {"All periods": 7, "2024Q2": 5, "2024Q3": 2})
+        # Every period in one table per section: a Period column, no sheet per period.
+        for name in ("Participation", "Overlap pairs"):
+            self.assertEqual(wb[name]["A1"].value, "Period")
+        self.assertFalse(any("2024Q2" in name for name in wb.sheetnames))
 
     def test_a_period_without_replies_has_no_audience(self) -> None:
         self.reply(self.post_a, _SENDERS[0], n=2)  # May only

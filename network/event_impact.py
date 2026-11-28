@@ -651,29 +651,30 @@ def compute_event_impact(
 
 # ── Flat rows for XLSX / CSV ──────────────────────────────────────────────────────────────────────
 
+# Readable headers, as event_impact.xlsx shows them; event_impact.csv writes them in snake_case.
 EFFECT_COLUMNS: tuple[str, ...] = (
-    "event_date",
-    "event",
-    "type",
-    "scope",
-    "design",
-    "metric",
-    "unit",
-    "weeks_pre",
-    "weeks_post",
-    "level_change",
-    "level_change_pct",
-    "level_se",
-    "level_p_hac",
-    "level_p_placebo",
-    "level_q",
-    "slope_change",
-    "slope_se",
-    "slope_p_hac",
-    "slope_p_placebo",
-    "slope_q",
-    "placebos",
-    "confounded_by",
+    "Event date",
+    "Event",
+    "Type",
+    "Scope",
+    "Design",
+    "Metric",
+    "Unit",
+    "Weeks before",
+    "Weeks after",
+    "Level change",
+    "Level change (%)",
+    "Level SE",
+    "Level p (HAC)",
+    "Level p (placebo)",
+    "Level q",
+    "Slope change",
+    "Slope SE",
+    "Slope p (HAC)",
+    "Slope p (placebo)",
+    "Slope q",
+    "Placebo dates",
+    "Confounded by",
 )
 
 
@@ -716,7 +717,7 @@ def effect_rows(payload: dict[str, Any]) -> list[list[Any]]:
 def series_rows(payload: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
     """The network's weekly series: a ``week`` column then one column per metric."""
     metrics = payload.get("metrics") or []
-    header = ["week", *(m["label"] for m in metrics)]
+    header = ["Week", *(m["label"] for m in metrics)]
     series = payload.get("series") or {}
     rows = [
         [week, *((series.get(m["key"]) or [None] * len(payload["weeks"]))[i] for m in metrics)]

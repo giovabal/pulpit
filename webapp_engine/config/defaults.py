@@ -107,7 +107,7 @@ STRUCTURAL_DEFAULTS: dict = {
         # "none" | "year" | "quarter" | "month"; timeline_window = sliding-window length in months (0 = tumbling).
         "timeline_step": "none",
         "timeline_window": 0,
-        # Interrupted time series around the recorded events (events.html, data/event_impact.json).
+        # Interrupted time series around the recorded events (event_impact.html, data/event_impact.json).
         "event_impact": False,
         # Outbound-link layer: the sites the channels link to, by domain category (links.html, data/links.json).
         "links": False,

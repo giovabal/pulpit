@@ -1,5 +1,5 @@
 import { build_year_nav } from './year_nav.js';
-import { fetchJson, fetchJsonOrNull, isCompareDataDir, periodDataDir, readTimeline } from './utils.js';
+import { communityName, fetchJson, fetchJsonOrNull, isCompareDataDir, loadFailed, loadRecovered, periodDataDir, readTimeline, scopeLine } from './utils.js';
 import { strategy_label as _strat_label, canonical_strategy_key } from './labels.js';
 import { build_community_alluvial, build_strategy_intersection_sankey } from './community_alluvial.js';
 import { render_partition_comparison } from './partition_comparison.js';
@@ -195,16 +195,15 @@ function _build_partition_comparison_section() {
         if (!pc || !pc.strategies || pc.strategies.length < 2) return; // nothing comparable → stay empty
         section.innerHTML = "";
 
-        var h3 = document.createElement("h3");
-        h3.className = "mt-4 mb-1";
-        h3.textContent = "Partition comparison";
-        section.appendChild(h3);
+        var h2 = document.createElement("h2");
+        h2.textContent = "Partition comparison";
+        section.appendChild(h2);
         var intro = document.createElement("p");
         intro.className = "text-muted small mb-3";
-        intro.textContent = "Pairwise agreement between every community strategy and every label-group " +
-            "partition, under four standard clustering-comparison indices. Each pair is scored on the " +
-            "channels assigned by both partitions. Read a label-group row against the algorithmic " +
-            "strategies to see how closely the analyst's manual grouping matches the structural communities.";
+        intro.textContent = "Agreement between every pair of grouping methods and label groups, under four standard " +
+            "indices for comparing partitions. Each pair is scored on the channels both partitions assign. Read a " +
+            "label group's row against the algorithmic methods to see how closely the analyst's grouping matches the " +
+            "structural communities.";
         section.appendChild(intro);
 
         var body = document.createElement("div");
@@ -252,10 +251,9 @@ function _build_strategy_sankey_section(stratKeys) {
     if (!section || stratKeys.length < 2) return;
     section.innerHTML = "";
 
-    var h3 = document.createElement("h3");
-    h3.className = "mt-4 mb-1";
-    h3.textContent = "Community intersection";
-    section.appendChild(h3);
+    var h2 = document.createElement("h2");
+    h2.textContent = "Community intersection";
+    section.appendChild(h2);
     var intro = document.createElement("p");
     intro.className = "text-muted small mb-3";
     intro.textContent = "Pick two strategies and a period to see how their communities overlap: each ribbon's " +
@@ -341,19 +339,10 @@ function _render(d) {
 
     // Preamble
     if (meta) {
-        var pEl = document.createElement("p");
-        pEl.className = "table-preamble";
-        var parts = ["Network of " + fmtInt(meta.total_nodes) + " channels and " + fmtInt(meta.total_edges) + " edges."];
-        parts.push("Edges represent " + meta.edge_weight_label + "; " + meta.edge_direction + ".");
-        if (meta.start_date || meta.end_date)
-            parts.push("Data range: " + (meta.start_date || "–") + " to " + (meta.end_date || "present") + ".");
-        if (meta.community_backbone_alpha)
-            parts.push("Community detection ran on the disparity-filter backbone (α = " +
-                meta.community_backbone_alpha + "); modularity is reported against that backbone, " +
-                "while all other metrics describe the full graph.");
-        parts.push("Exported " + meta.export_date + ".");
-        pEl.textContent = parts.join(" ");
-        container.appendChild(pEl);
+        container.appendChild(scopeLine(meta, [meta.community_backbone_alpha ?
+            "Community detection ran on the disparity-filter backbone (α = " + meta.community_backbone_alpha +
+            "): modularity is reported against that backbone, every other figure describes the full network." : ""
+        ]));
     }
 
     strategies.forEach(function(strategyKey) {
@@ -391,36 +380,35 @@ function _render(d) {
         });
 
         var COL_DEFS = [
-            { key: null, label: "Community", cls: "", fmt: null, tip: "Community name and color swatch" },
-            { key: "node_count", label: "Nodes", cls: "number", fmt: "int", tip: "Number of channels in this community" },
-            { key: "internal_edges", label: "Internal Edges", cls: "number", fmt: "int", tip: "Directed edges between channels within this community" },
-            { key: "external_edges", label: "Ext. Edges", cls: "number", fmt: "int", tip: "Sum of external connections crossing community boundaries (external in-degrees + out-degrees)" },
-            { key: "ei_index", label: "E-I Index (−1–1)", cls: "number", fmt: "sig3", tip: "Krackhardt & Stern (1988): (external − internal) / (external + internal). −1 = fully cohesive (no external ties); +1 = fully competitive (no internal ties)" },
-            { key: "_ext_frac", label: "Ext. Fraction (0–1)", cls: "number", fmt: "sig3", tip: "Share of all connections that cross community boundaries; 0 = isolated cluster, 1 = fully peripheral" },
-            { key: "density", label: "Int. Density (0–1)", cls: "number", fmt: "sig3", tip: "Fraction of possible directed within-community edges that exist" },
-            { key: "reciprocity", label: "Reciprocity (0–1)", cls: "number", fmt: "sig3", tip: "Proportion of within-community directed edges that are bidirectional" },
-            { key: "avg_clustering", label: "Avg Clustering (0–1)", cls: "number", fmt: "sig3", tip: "Mean local clustering coefficient of community nodes" },
-            { key: "avg_path_length", label: "Avg Path Length", cls: "number", fmt: "sig3", tip: "Average shortest path in the largest weakly connected component (undirected)" },
-            { key: "diameter", label: "Diameter", cls: "number", fmt: "int", tip: "Longest shortest path in the largest weakly connected component (undirected)" },
+            { key: null, label: "Community", cls: "", fmt: null, tip: "The community and its colour on the map" },
+            { key: "node_count", label: "Channels", cls: "number", fmt: "int", tip: "Number of channels in this community" },
+            { key: "internal_edges", label: "Internal ties", cls: "number", fmt: "int", tip: "Directed ties between channels of this community" },
+            { key: "external_edges", label: "External ties", cls: "number", fmt: "int", tip: "Ties crossing the community's boundary, in either direction" },
+            { key: "ei_index", label: "E-I index (−1 to 1)", cls: "number", fmt: "sig3", tip: "Krackhardt & Stern (1988): (external − internal) / (external + internal). −1 = no external ties; +1 = no internal ties" },
+            { key: "_ext_frac", label: "External share", cls: "number", fmt: "share", tip: "Share of the community's ties that cross its boundary; 0% = closed, 100% = no internal tie" },
+            { key: "density", label: "Internal density (0–1)", cls: "number", fmt: "sig3", tip: "Share of the possible directed ties inside the community that exist" },
+            { key: "reciprocity", label: "Reciprocity (0–1)", cls: "number", fmt: "sig3", tip: "Share of the community's internal ties that are returned" },
+            { key: "avg_clustering", label: "Mean clustering (0–1)", cls: "number", fmt: "sig3", tip: "Mean local clustering coefficient of the community's channels" },
+            { key: "avg_path_length", label: "Mean path length", cls: "number", fmt: "sig3", tip: "Mean shortest path in the community's largest weakly connected component (undirected)" },
+            { key: "diameter", label: "Diameter", cls: "number", fmt: "int", tip: "Longest shortest path in the community's largest weakly connected component (undirected)" },
         ];
         if (hasMod) {
             var modTip = UNDIRECTED_BASIS_STRATEGIES.indexOf(canonical_strategy_key(strategyKey)) !== -1 ?
-                "Community's contribution to network modularity (undirected Newman formula, computed on the symmetrised graph this strategy optimised)" :
+                "Community's contribution to network modularity (undirected Newman formula, computed on the undirected network this method works on)" :
                 "Community's contribution to network modularity (Leicht & Newman 2008 directed formula)";
             COL_DEFS.push({
                 key: "modularity_contribution",
-                label: "Mod. Contribution",
+                label: "Modularity contribution",
                 cls: "number",
                 fmt: "sig3",
                 tip: modTip,
             });
         }
 
-        var h3 = document.createElement("h3");
-        h3.id = "strategy-" + strategyKey;
-        h3.className = "mt-4 mb-1";
-        h3.textContent = _strat_label(strategyKey);
-        container.appendChild(h3);
+        var h2 = document.createElement("h2");
+        h2.id = "strategy-" + strategyKey;
+        h2.textContent = _strat_label(strategyKey);
+        container.appendChild(h2);
 
         var stratNote = document.createElement("p");
         stratNote.className = "text-muted small mb-2";
@@ -428,11 +416,10 @@ function _render(d) {
         var modStr = (stratData.modularity !== null && stratData.modularity !== undefined) ?
             " Network modularity Q = " + sigFig(stratData.modularity, 3) +
             ((stratData.modularity_z !== null && stratData.modularity_z !== undefined) ?
-                " (z = " + sigFig(stratData.modularity_z, 3) + " against random graphs with the same degrees" +
-                ((stratData.modularity_p !== null && stratData.modularity_p !== undefined) ?
-                    ", p = " + sigFig(stratData.modularity_p, 2) : "") + ")" : "") + "." : "";
-        stratNote.textContent = nComm + " " + (nComm === 1 ? "community" : "communities") + "." + modStr +
-            " Avg Path Length and Diameter computed on the largest weakly connected component (undirected).";
+                " (z = " + sigFig(stratData.modularity_z, 3) + " against random networks with the same degrees" +
+                (isNil(stratData.modularity_p) ? "" : ", " + pText(stratData.modularity_p)) + ")" : "") + "." : "";
+        stratNote.textContent = fmtInt(nComm) + " " + (nComm === 1 ? "community" : "communities") + "." + modStr +
+            " Mean path length and diameter are computed on each community's largest weakly connected component (undirected).";
         container.appendChild(stratNote);
 
         var tableDiv = document.createElement("div");
@@ -468,13 +455,14 @@ function _render(d) {
             COL_DEFS.forEach(function(col) {
                 if (col.key === null) {
                     var nameTd = document.createElement("td");
-                    nameTd.setAttribute("data-sort-value", row.label);
+                    // Sorts on what is shown: the community's number, or the label's name.
+                    nameTd.setAttribute("data-sort-value", communityName(row.label));
                     var swatch = document.createElement("span");
                     swatch.className = "color-swatch color-swatch--lg";
                     swatch.style.background = row.hex_color;
                     swatch.setAttribute("aria-hidden", "true");
                     nameTd.appendChild(swatch);
-                    nameTd.appendChild(document.createTextNode(row.label));
+                    nameTd.appendChild(document.createTextNode(communityName(row.label)));
                     tr.appendChild(nameTd);
                     return;
                 }
@@ -485,7 +473,7 @@ function _render(d) {
                 if (range) td.setAttribute("style", heatmapBg(val, range[0], range[1]));
                 var sv = numSortVal(val);
                 if (sv) td.setAttribute("data-sort-value", sv);
-                td.textContent = col.fmt === "int" ? fmtInt(val) : sigFig(val, 3);
+                td.textContent = col.fmt === "int" ? fmtInt(val) : (col.fmt === "share" ? fmtShare(val) : sigFig(val, 3));
                 tr.appendChild(td);
             });
             tbodyFrag.appendChild(tr);
@@ -523,7 +511,7 @@ function _render(d) {
             labelSwatch.style.background = row.hex_color;
             labelSwatch.setAttribute("aria-hidden", "true");
             labelSpan.appendChild(labelSwatch);
-            labelSpan.appendChild(document.createTextNode(row.label));
+            labelSpan.appendChild(document.createTextNode(communityName(row.label)));
             group.appendChild(labelSpan);
             var listSpan = document.createElement("span");
             listSpan.className = "community-channels-list";
@@ -548,19 +536,19 @@ function _render(d) {
         });
         container.appendChild(details);
 
-        // Distribution cross-tabs shown under the strategy table: Organisation first, then one per
+        // Distribution cross-tabs shown under the strategy table: the primary label group first, then one per
         // label-group partition (Area, Nation, …). Each is precomputed server-side as
         // {label, label_lc, orgs (row labels), communities, comm_colors, pct_by_org, pct_by_community}.
         // Label-group strategy tables carry no cross_tabs (cross-tabbing a label partition is uninformative).
         (stratData.cross_tabs || []).forEach(function(ct) {
             if (!ct || !ct.orgs || ct.orgs.length < 2) return;
-            var dimLabel = ct.label || "Organisation";
+            var dimLabel = ct.label || "Label";
             var dimLabelLc = ct.label_lc || dimLabel;
             var crossDetails = document.createElement("details");
             crossDetails.className = "community-channels mt-2 mb-4";
             var crossSummary = document.createElement("summary");
             crossSummary.className = "text-muted small";
-            crossSummary.textContent = dimLabel + " × community distribution";
+            crossSummary.textContent = dimLabel + " × community";
             crossDetails.appendChild(crossSummary);
 
             var crossWrapper = document.createElement("div");
@@ -586,10 +574,13 @@ function _render(d) {
                 var outerDiv = document.createElement("div");
                 outerDiv.style.cssText = "overflow-x:auto;";
                 var titleP = document.createElement("p");
-                titleP.className = "small fw-semibold mb-1";
-                titleP.title = tableTooltip;
+                titleP.className = "small fw-semibold mb-0";
                 titleP.textContent = tableTitle;
                 outerDiv.appendChild(titleP);
+                var noteP = document.createElement("p");
+                noteP.className = "small text-muted mb-1";
+                noteP.textContent = tableTooltip;
+                outerDiv.appendChild(noteP);
                 var tbl = document.createElement("table");
                 tbl.className = "table table-sm table-hover";
                 tbl.style.cssText = "font-size:.8rem;white-space:nowrap;";
@@ -608,7 +599,7 @@ function _render(d) {
                     sw.style.background = crossColors[ci];
                     sw.setAttribute("aria-hidden", "true");
                     th.appendChild(sw);
-                    th.appendChild(document.createTextNode(crossComm[ci]));
+                    th.appendChild(document.createTextNode(communityName(crossComm[ci])));
                     htr.appendChild(th);
                 });
                 thead.appendChild(htr);
@@ -624,10 +615,10 @@ function _render(d) {
                         var val = matrix[oi][ci];
                         var td = document.createElement("td");
                         td.className = "number";
-                        if (val !== null && val !== undefined && val >= 5) {
-                            td.setAttribute("style", heatmapBg(val, 0, 100));
-                            td.textContent = val.toFixed(1) + "%";
-                        } else { td.textContent = "—"; }
+                        if (val !== null && val !== undefined) {
+                            if (val > 0) td.setAttribute("style", heatmapBg(val, 0, 100));
+                            td.textContent = fmtFixed(val, 1) + "%";
+                        } else { td.textContent = MISSING; }
                         tr.appendChild(td);
                     });
                     frag.appendChild(tr);
@@ -638,8 +629,8 @@ function _render(d) {
                 if (hiddenCount > 0) {
                     var hiddenNote = document.createElement("p");
                     hiddenNote.className = "small text-muted mt-1 mb-0";
-                    hiddenNote.textContent = hiddenCount + " communit" + (hiddenCount === 1 ? "y" : "ies") +
-                        " hidden — all values < " + distThreshold + "%.";
+                    hiddenNote.textContent = fmtInt(hiddenCount) + " communit" + (hiddenCount === 1 ? "y" : "ies") +
+                        " not shown: every value under " + distThreshold + "%.";
                     outerDiv.appendChild(hiddenNote);
                 }
                 return outerDiv;
@@ -647,13 +638,13 @@ function _render(d) {
 
             crossWrapper.appendChild(buildCrossTable(
                 crossPctByOrg,
-                "% of " + dimLabelLc + " nodes per community",
-                "For each " + dimLabelLc + ": share of its nodes assigned to each community. Rows sum to 100%."
+                "Where each " + dimLabelLc + "'s channels fall",
+                "For each " + dimLabelLc + ", the share of its channels in each community. Rows add up to 100%."
             ));
             crossWrapper.appendChild(buildCrossTable(
                 crossPctByCommunity,
-                "% of community nodes per " + dimLabelLc,
-                "For each community: share of its nodes coming from each " + dimLabelLc + ". Columns sum to 100%."
+                "What each community is made of",
+                "For each community, the share of its channels from each " + dimLabelLc + ". Columns add up to 100%."
             ));
 
             crossDetails.appendChild(crossWrapper);
@@ -672,14 +663,16 @@ function _switch_year(year) {
     _loading = true;
     build_year_nav(_ty, _current_year, _switch_year, _tl_events);
     _fetch_year(year).then(function(d) {
+        loadRecovered();
         _render(d);
         _loading = false;
-    }).catch(function() {
+    }).catch(function(err) {
         // Fetch failed: roll back to the year still on screen so the nav highlight matches the
         // displayed table and a re-click on the failed year (now != _current_year) can retry it.
         _current_year = prev;
         _loading = false;
         build_year_nav(_ty, _current_year, _switch_year, _tl_events);
+        loadFailed(err, "the communities of " + year);
     });
 }
 
@@ -704,22 +697,6 @@ Promise.all([
     _load_year_comms();
     _build_partition_comparison_section();
     _build_strategy_sankey_section(Object.keys(results[0].strategies || {}));
-
-    // Consensus matrix button — injected once based on full-range meta
-    var meta = results[1];
-    if (meta && meta.has_consensus_matrix) {
-        var nav = document.querySelector(".d-flex.gap-2");
-        if (nav) {
-            var cmLink = document.createElement("a");
-            var _cmpSuffix = (window.DATA_DIR || "").match(/^data_\d{1,3}\/$/) ? "_2" : "";
-            cmLink.href = "consensus_matrix" + _cmpSuffix + ".html";
-            cmLink.className = "btn btn-outline-secondary btn-sm";
-            cmLink.innerHTML = '<i class="bi bi-grid" aria-hidden="true"></i> Consensus matrix';
-            nav.insertBefore(cmLink, nav.firstChild);
-        }
-    }
 }).catch(function(err) {
-    var el = document.getElementById("community-tables");
-    if (el) el.textContent = "Failed to load data.";
-    console.error("community_table:", err);
+    loadFailed(err);
 });

@@ -210,7 +210,7 @@ def apply_hits(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]
     for node in graph_data["nodes"]:
         node["hits_hub"] = None if node["id"] in dead else hubs.get(node["id"], 0.0)
         node["hits_authority"] = authorities.get(node["id"], 0.0)
-    return [("hits_hub", "HITS Hub"), ("hits_authority", "HITS Authority")]
+    return [("hits_hub", "HITS hub"), ("hits_authority", "HITS authority")]
 
 
 def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -237,7 +237,7 @@ def apply_in_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list
     Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
     """
     values = nx.in_degree_centrality(without_self_loops(graph))
-    return apply_measure(graph_data, values, "in_degree_centrality", "In-degree Centrality")
+    return apply_measure(graph_data, values, "in_degree_centrality", "In-degree centrality")
 
 
 def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -265,7 +265,7 @@ def apply_out_degree_centrality(graph_data: GraphData, graph: nx.DiGraph) -> lis
     Refs: Freeman 1978, *Social Networks* 1(3); Wasserman & Faust 1994 §5.
     """
     values = _censor_dead_leaves(graph, nx.out_degree_centrality(without_self_loops(graph)))
-    return apply_measure(graph_data, values, "out_degree_centrality", "Out-degree Centrality", default=None)
+    return apply_measure(graph_data, values, "out_degree_centrality", "Out-degree centrality", default=None)
 
 
 def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -307,7 +307,7 @@ def apply_burt_constraint(graph_data: GraphData, graph: nx.DiGraph) -> list[tupl
     for node in graph_data["nodes"]:
         val = values.get(node["id"])
         node[key] = None if (val is None or isnan(val)) else round(val, BURT_CONSTRAINT_DECIMALS)
-    return [(key, "Burt's Constraint")]
+    return [(key, "Burt's constraint")]
 
 
 def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tuple[str, str]]:
@@ -329,7 +329,7 @@ def apply_local_clustering(graph_data: GraphData, graph: nx.DiGraph) -> list[tup
     # elsewhere; mixed types corrupt GEXF/GraphML attribute typing on export.
     values = {node: float(value) for node, value in nx.clustering(graph, weight=LOCAL_CLUSTERING_WEIGHT).items()}
     return apply_measure(
-        graph_data, _censor_dead_leaves(graph, values), "local_clustering", "Local Clustering", default=None
+        graph_data, _censor_dead_leaves(graph, values), "local_clustering", "Local clustering", default=None
     )
 
 
@@ -457,7 +457,7 @@ def apply_module_role(graph_data: GraphData, graph: nx.DiGraph, strategy_key: st
         node["module_role"] = _ga_role(z, p)
     return [
         ("within_module_z", "Within-module z"),
-        ("participation", "Participation Coefficient"),
+        ("participation", "Participation coefficient"),
         ("participation_weighted", "Participation (weighted)"),
     ]
 

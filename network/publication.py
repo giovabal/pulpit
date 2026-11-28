@@ -34,7 +34,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
-LANDING_PAGE = "index.html"
+from network.pages import LANDING_PAGE, page_description
+
 ROBOTS_TXT = "robots.txt"
 SITEMAP_XML = "sitemap.xml"
 HTACCESS = ".htaccess"
@@ -89,70 +90,6 @@ AI_USER_AGENTS: tuple[str, ...] = (
 # robots.txt tokens that name what an ordinary search crawler's pages may be used for (AI training,
 # grounding) rather than a crawler of their own. No request carries them, so only robots.txt names them.
 AI_ROBOTS_TOKENS: tuple[str, ...] = ("Google-Extended", "Applebot-Extended", "Webzio-Extended")
-
-# Description of each page an export can hold, used when the page carries none of its own (the channel
-# table writes its own, counting the channels). A compared export's copy, ``<page>_2.html``, reuses
-# its original's description.
-PAGE_DESCRIPTIONS: dict[str, str] = {
-    "graph.html": "An interactive map of Telegram channels, showing how they connect through forwards and mentions.",
-    "graph3d.html": "An interactive 3D map of Telegram channels and the connections between them.",
-    "coordination.html": (
-        "An interactive map of temporal co-forwarding coordination: Telegram channels linked when they "
-        "repeatedly forwarded the same origin message within a short time window."
-    ),
-    "coordination3d.html": "An interactive 3D map of temporal co-forwarding coordination between Telegram channels.",
-    "channel_table.html": (
-        "One row per Telegram channel: how active and connected it is, its influence scores and the "
-        "communities it falls in."
-    ),
-    "network_table.html": (
-        "The whole network of Telegram channels in one table: its size, density, reciprocity, clustering, "
-        "distances and communities."
-    ),
-    "community_table.html": (
-        "The communities of Telegram channels: how big each is, how tightly its members are linked and how "
-        "much they cite outside it."
-    ),
-    "consensus_matrix.html": (
-        "How often each pair of Telegram channels lands in the same community across the community-detection methods."
-    ),
-    "structural_similarity.html": (
-        "Which Telegram channels hold interchangeable positions in the network: they cite, and are cited by, "
-        "the same channels."
-    ),
-    "behavioural_equivalence.html": (
-        "Which Telegram channels behave alike: how much they amplify others, how original and fast they are, "
-        "and how much they post."
-    ),
-    "vacancy_analysis.html": (
-        "For each Telegram channel that closed, the channels most likely to have taken its place, by shared "
-        "audience, connections and content."
-    ),
-    "robustness_table.html": (
-        "How well the network of Telegram channels holds together as channels are removed, against random networks."
-    ),
-    "interest_structural.html": (
-        "Telegram posts ranked by how far they travelled: the communities they reached and the channels "
-        "that picked them up."
-    ),
-    "events.html": (
-        "Whether the activity of the network of Telegram channels changed around recorded events, tested as "
-        "interrupted time series."
-    ),
-    "links.html": (
-        "The web sites Telegram channels send their readers to, by category, and which channels link to the same sites."
-    ),
-    "audience.html": (
-        "The commenters of Telegram channels: how concentrated the commenting is, how far commenters spread, "
-        "and whether they return."
-    ),
-    "dominance.html": (
-        "Which Telegram channels depend on which when a forward is an endorsement: pairwise dependence and a "
-        "dominance ranking."
-    ),
-    "network_compare_table.html": "Side-by-side statistics and scatter plots of two analyses of a network of Telegram channels.",
-}
-_COMPARED_COPY_SUFFIX = "_2.html"
 
 # Keywords of the landing page's Dataset description.
 DATASET_KEYWORDS: tuple[str, ...] = (
@@ -238,6 +175,20 @@ class _Facts:
     modified: str | None = None
 
 
+def analysed_range(summary: dict[str, Any]) -> tuple[str | None, str | None]:
+    """The period an export covers, as ISO days: each side is the requested bound (``--startdate`` /
+    ``--enddate``) or, without one, the first / last day of the analysed messages. ``None`` = unknown."""
+    options = summary.get("options") if isinstance(summary.get("options"), dict) else {}
+
+    def day(value: Any) -> str | None:
+        return value[:10] if isinstance(value, str) and value else None
+
+    return (
+        day(options.get("startdate")) or day(summary.get("first_message")),
+        day(options.get("enddate")) or day(summary.get("last_message")),
+    )
+
+
 def _read_facts(root: str) -> _Facts:
     try:
         with open(os.path.join(root, "summary.json"), encoding="utf-8") as f:
@@ -246,13 +197,13 @@ def _read_facts(root: str) -> _Facts:
         return _Facts()
     if not isinstance(summary, dict):
         return _Facts()
-    options = summary.get("options") if isinstance(summary.get("options"), dict) else {}
     created = summary.get("created_at")
+    start, end = analysed_range(summary)
     return _Facts(
         nodes=summary.get("nodes") if isinstance(summary.get("nodes"), int) else None,
         edges=summary.get("edges") if isinstance(summary.get("edges"), int) else None,
-        start=options.get("startdate") or None,
-        end=options.get("enddate") or None,
+        start=start,
+        end=end,
         modified=created[:10] if isinstance(created, str) and created else None,
     )
 
@@ -271,17 +222,6 @@ def _landing_description(facts: _Facts) -> str:
     elif facts.end:
         subject += f", up to {facts.end}"
     return subject + ": interactive maps, channel and community statistics, and the data behind them."
-
-
-def page_description(page: str) -> str:
-    """The stock description of *page*, ``""`` for a page this module does not know."""
-    if page in PAGE_DESCRIPTIONS:
-        return PAGE_DESCRIPTIONS[page]
-    if page.endswith(_COMPARED_COPY_SUFFIX):
-        original = PAGE_DESCRIPTIONS.get(page[: -len(_COMPARED_COPY_SUFFIX)] + ".html")
-        if original:
-            return f"{original.rstrip('.')}, in the compared analysis."
-    return ""
 
 
 def _linked_pages(root: str) -> set[str] | None:

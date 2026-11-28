@@ -1,21 +1,33 @@
 {% extends "network/_table_base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-2">
-  <h2 class="mb-0">Channels</h2>
-  <div class="d-flex gap-2">
-    <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
-    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-    <a href="{{ repository_url }}/blob/main/docs/network-measures.md" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-book" aria-hidden="true"></i> Measures explained</a>
-  </div>
-</div>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>One row per channel. The first columns give its position by volume: <em>in-strength</em>, how much it is cited;
+  <em>out-strength</em>, how much it cites; its subscribers and its messages. The table opens sorted by
+  in-strength.</p>
+  <p><em>Influence</em> measures read the whole pattern of citations: PageRank rates a channel by the standing of
+  the channels citing it, and the HITS scores tell authorities, cited by many hubs, from hubs, citing many
+  authorities.</p>
+  <p><em>Structural</em> measures describe a channel's surroundings. Burt's constraint is low for a channel that
+  bridges groups otherwise apart. The within-module z and the participation coefficient say whether a channel is a
+  hub inside its community and how far its ties spread over the others; the <em>Module role</em> column sums the
+  two up.</p>
+  <p><em>Content</em> measures come from the messages: the share that is original rather than forwarded, how often
+  the other channels forward the channel, and how many hours it usually takes to forward what others publish.</p>
+  <p>Every heading carries its definition as a tooltip, and a bracket after a name gives the setting the measure was
+  computed with. A dash means the measure does not exist for that channel: a channel that is only cited, for
+  instance, has no citations of its own to measure. The last columns give the community each method puts the
+  channel in. With a timeline, the button beside a channel's name draws its measures period by period.</p>
+  <p>Every score is relative to the channels studied: it describes a channel's place among them, not on Telegram at
+  large.</p>
+</details>
+<div id="timeline-nav" class="export-period-nav"></div>
 <div id="channel-preamble" class="mb-3"></div>
-<p class="text-muted" id="channel-count">Loading…</p>
+<p class="text-muted small" id="channel-count">Loading…</p>
 <div class="table-responsive export-wide">
-  <table class="table table-hover table-sm sortable" id="channel-table" aria-label="Channel network data">
-    <caption class="sr-only">Per-channel network measures. Sort by clicking a column header.</caption>
+  <table class="table table-hover table-sm sortable" id="channel-table" aria-label="Channels">
+    <caption class="sr-only">Per-channel network measures. Sort by clicking a column heading.</caption>
     <thead></thead>
     <tbody></tbody>
   </table>

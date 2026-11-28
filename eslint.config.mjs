@@ -10,15 +10,32 @@ const RULES = {
     "no-empty": ["error", { allowEmptyCatch: true }],
 };
 
-// Globals published by the classic (non-module) tables_sort.js to the export bundle.
+// Globals published by the classic (non-module) format.js and tables_sort.js to the export bundle.
 const TABLES_SORT_GLOBALS = {
+    MISSING: "readonly",
+    isNil: "readonly",
     fmtInt: "readonly",
     sigFig: "readonly",
+    fmtFixed: "readonly",
+    fmtShare: "readonly",
+    fmtP: "readonly",
+    pText: "readonly",
+    qHtml: "readonly",
+    sigStars: "readonly",
+    sigLegend: "readonly",
     heatmapBg: "readonly",
     divergingHeatmapBg: "readonly",
+    pulpitTheme: "readonly",
     numSortVal: "readonly",
     initSortableTables: "readonly",
 };
+
+// The classic scripts of the export bundle (loaded with <script src>, not as modules).
+const EXPORT_CLASSIC_SCRIPTS = [
+    "webapp_engine/map/js/format.js",
+    "webapp_engine/map/js/tables_sort.js",
+    "webapp_engine/map/js/page.js",
+];
 
 export default [
     {
@@ -30,7 +47,7 @@ export default [
     // ── Static HTML export bundle — ES modules (graph.js, graph3d.js, *_table.js, …) ──
     {
         files: ["webapp_engine/map/js/**/*.js"],
-        ignores: ["webapp_engine/map/js/tables_sort.js"],
+        ignores: EXPORT_CLASSIC_SCRIPTS,
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: "module",
@@ -52,12 +69,12 @@ export default [
         rules: RULES,
     },
     {
-        // tables_sort.js — classic script that publishes the table helpers above.
-        files: ["webapp_engine/map/js/tables_sort.js"],
+        // format.js / tables_sort.js / page.js — classic scripts; the first two publish the helpers above.
+        files: EXPORT_CLASSIC_SCRIPTS,
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: "script",
-            globals: { ...globals.browser, PulpitA11y: "readonly" },
+            globals: { ...globals.browser, PulpitA11y: "readonly", Chart: "readonly" },
         },
         rules: RULES,
     },

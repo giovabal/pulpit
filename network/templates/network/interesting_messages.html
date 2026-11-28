@@ -1,0 +1,175 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>Each post's structural reach is measured twice. <strong>C</strong> (Goel et&nbsp;al. 2016) counts the distinct
+  neighbouring communities whose channels re-forwarded the post; <strong>D</strong> (Cha et&nbsp;al. 2010) adds up the
+  authority of the studied channels that forwarded it. The <strong>interest score</strong> is the post's engagement,
+  z-scored within its own channel (Salganik 2006; Suh 2010), so a post is compared with its channel's usual level.</p>
+  <p>Only forwards made within the reaction window after the post count, so that anniversary and archive re-shares
+  do not inflate a post's reach.</p>
+</details>
+<div id="is-preamble" class="mb-3"><p class="text-muted small">Loading…</p></div>
+<div id="is-scope-callout"></div>
+
+<div class="table-responsive export-wide" id="is-root"></div>
+
+<style>
+  .is-org-dot {
+    display: inline-block;
+    width: .65em; height: .65em;
+    border-radius: 50%;
+    margin-right: .3em;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .is-empty { color: var(--muted); font-style: italic; }
+  .is-cap-note { color: var(--muted); font-size: .85em; margin-top: .5rem; }
+</style>
+
+<script type="module">
+import { escHtml as esc, fetchJson, fetchJsonOrNull, loadFailed, scopeLine } from "./js/utils.js";
+import { measure_label, strategy_label } from "./js/labels.js";
+import { numCell } from "./js/table_cells.js";
+
+(function () {
+  var dataDir = (typeof window.DATA_DIR !== "undefined" ? window.DATA_DIR : "data/");
+  var ROW_CAP = 1000;
+
+  Promise.all([
+    fetchJson(dataDir + "interesting_messages.json"),
+    fetchJsonOrNull(dataDir + "channels.json"),
+    fetchJsonOrNull(dataDir + "meta.json")
+  ])
+    // channels.json and meta.json only supply display metadata; if one is missing, still render the
+    // table (render tolerates empty channel data) rather than blaming the wrong file.
+    .then(function (results) { render(results[0], results[1] || { nodes: [] }, results[2]); })
+    .catch(function (err) { loadFailed(err); });
+
+  // The display name of the authority measure: the label the export gives its key, else the key in plain words.
+  function authorityLabel(key, channelsData) {
+    if (!key) return MISSING;
+    var found = ((channelsData && channelsData.measures) || []).filter(function (m) { return m[0] === key; })[0];
+    if (found) return measure_label(found[0], found[1]);
+    var words = String(key).replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
+  function render(data, channelsData, meta) {
+    var msgs = data.by_message || [];
+    var nodes = (channelsData && channelsData.nodes) || [];
+    var byPk = {};
+    nodes.forEach(function (n) { byPk[String(n.id)] = n; });
+
+    var total = msgs.length;
+    var sorted = msgs.slice().sort(function (a, b) {
+      return (b.c_cross_community || 0) - (a.c_cross_community || 0);
+    });
+    var capped = sorted.slice(0, ROW_CAP);
+
+    var hotScope = data.hot_layer_scope || "all-time";
+    var structScope = data.structural_scope || "all-time";
+
+    // The shared scope line of the export pages, then what this page scored and how.
+    var scored = [
+      fmtInt(total) + " message" + (total === 1 ? "" : "s") + " scored.",
+      "Communities: " + (data.community_strategy ? strategy_label(data.community_strategy) : MISSING) +
+        "; authority: " + authorityLabel(data.authority_key, channelsData) + ".",
+      data.window_days > 0
+        ? "Reaction window: " + fmtInt(data.window_days) + " day" + (data.window_days === 1 ? "" : "s") + " after the post."
+        : "No reaction window: every forward counts.",
+    ];
+    if (data.computed_at) scored.push("Computed on " + String(data.computed_at).slice(0, 10) + ".");
+    var line = scopeLine(meta, scored);
+    if (!meta) line.textContent = scored.join(" ");
+    var preamble = document.getElementById("is-preamble");
+    preamble.innerHTML = "";
+    preamble.appendChild(line);
+
+    var callout = document.getElementById("is-scope-callout");
+    callout.innerHTML = "";
+    if (hotScope !== "all-time" || structScope !== "all-time") {
+      var alert = document.createElement("div");
+      alert.className = "alert alert-info py-2 small mb-3";
+      alert.innerHTML =
+        "Interest, C and D are computed here over <strong>" + esc(structScope) + "</strong>. " +
+        "A post's interest score may differ from its score in an analysis of the whole period, " +
+        "which compares it with its channel's level over all its history.";
+      callout.appendChild(alert);
+    }
+
+    var root = document.getElementById("is-root");
+    if (!total) {
+      root.innerHTML = '<p class="is-empty">No post was re-forwarded by a studied channel inside the reaction window.</p>';
+      return;
+    }
+
+    var cMin = Infinity, cMax = -Infinity;
+    var dMin = Infinity, dMax = -Infinity;
+    var iMin = Infinity, iMax = -Infinity;
+    capped.forEach(function (m) {
+      var c = m.c_cross_community, d = m.d_authority_reach, iv = m.interest_score;
+      if (c != null) { if (c < cMin) cMin = c; if (c > cMax) cMax = c; }
+      if (d != null) { if (d < dMin) dMin = d; if (d > dMax) dMax = d; }
+      if (iv != null) { if (iv < iMin) iMin = iv; if (iv > iMax) iMax = iv; }
+    });
+
+    var head = "<thead><tr>" +
+      '<th scope="col">Channel</th>' +
+      '<th class="date" scope="col">Date</th>' +
+      '<th class="number" scope="col" title="Cross-community reach (Goel et al. 2016): distinct neighbouring communities that re-forwarded the post.">C</th>' +
+      '<th class="number" scope="col" title="Authority-weighted reach (Cha et al. 2010): sum of the authority scores of the channels that forwarded the post.">D</th>' +
+      '<th class="number" scope="col" title="Studied channels that forwarded the post.">Forwarding channels, studied</th>' +
+      '<th class="number" scope="col" title="Other channels that forwarded the post.">Forwarding channels, others</th>' +
+      '<th class="number" scope="col" title="The post\'s engagement, z-scored within its channel (Suh 2010; Salganik 2006).">Interest</th>' +
+      '<th scope="col">Open</th>' +
+      "</tr></thead>";
+
+    var body = "<tbody>" + capped.map(function (m) {
+      var node = byPk[String(m.channel_pk)] || {};
+      var chTitle = node.label || ("channel " + m.channel_pk);
+      var chUrl = node.url || "";
+      var dot = node.color ? '<span class="is-org-dot" style="background:' + esc(node.color) + '"></span>' : "";
+      var chCell = dot + (chUrl
+        ? '<a href="' + esc(chUrl) + '" target="_blank" rel="noopener">' + esc(chTitle) + "</a>"
+        : esc(chTitle));
+
+      var dateIso = m.date || "";
+      var dateShown = dateIso ? dateIso.substring(0, 10) : MISSING;
+
+      var msgUrl = chUrl && m.telegram_id ? chUrl + "/" + m.telegram_id : "";
+      var openCell = msgUrl
+        ? '<a href="' + esc(msgUrl) + '" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" aria-label="Open message on Telegram"><i class="bi bi-telegram" aria-hidden="true"></i></a>'
+        : MISSING;
+
+      var cVal = m.c_cross_community, dVal = m.d_authority_reach, iVal = m.interest_score;
+
+      return "<tr>" +
+        '<td data-sort-value="' + esc(chTitle) + '">' + chCell + "</td>" +
+        '<td data-sort-value="' + esc(dateIso) + '">' + esc(dateShown) + "</td>" +
+        numCell(cVal, fmtInt(cVal), heatmapBg(cVal, cMin, cMax)) +
+        numCell(dVal, sigFig(dVal, 3), heatmapBg(dVal, dMin, dMax)) +
+        numCell(m.forwarder_count_in_target, fmtInt(m.forwarder_count_in_target)) +
+        numCell(m.forwarder_count_out_of_target, fmtInt(m.forwarder_count_out_of_target)) +
+        numCell(iVal, fmtFixed(iVal, 3), heatmapBg(iVal, iMin, iMax)) +
+        "<td>" + openCell + "</td>" +
+        "</tr>";
+    }).join("") + "</tbody>";
+
+    var note = total > ROW_CAP
+      ? '<p class="is-cap-note">Showing the ' + fmtInt(ROW_CAP) + ' messages with the widest reach (C). All of them: <code>data/interesting_messages.json</code>.</p>'
+      : "";
+
+    root.innerHTML =
+      '<table class="table table-hover table-sm sortable">' +
+        '<caption class="sr-only">Top messages by structural reach.</caption>' +
+        head + body +
+      "</table>" + note;
+
+    initSortableTables();
+  }
+
+})();
+</script>
+{% endblock %}

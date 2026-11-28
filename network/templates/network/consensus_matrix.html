@@ -1,15 +1,17 @@
 {% extends "network/_table_base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Consensus Matrix</h2>
-  <div class="d-flex gap-2">
-    <a href="community_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-diagram-3" aria-hidden="true"></i> Communities</a>
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-  </div>
-</div>
-<div id="timeline-nav" class="mb-2"></div>
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>Every pair of channels is compared across the community detection methods of this analysis: the more methods
+  put the two channels in the same community, the larger and the redder the circle.</p>
+  <p>The channels are ordered by the community most methods give them. A group every method agrees on shows as a
+  dense red block along the diagonal; small or blue circles mark the pairs only some methods join, the uncertain
+  borders between communities.</p>
+  <p>Only independent detections count: label groups, k-core shells and the consensus partition itself are left
+  out. Only the lower triangle is drawn. Hover a circle, or reach it with the keyboard, for the two channels and
+  the number of methods that agree.</p>
+</details>
 <div id="consensus-matrix-container" class="export-wide"></div>
 <script type="module" src="js/consensus_matrix.js"></script>
 {% endblock %}

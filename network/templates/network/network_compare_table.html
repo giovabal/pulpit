@@ -6,19 +6,32 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <h2 class="mb-0">Network Comparison</h2>
-  <div class="d-flex gap-2">
-    <a href="network_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bar-chart" aria-hidden="true"></i> Network stats</a>
-    <a href="channel_table.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-table" aria-hidden="true"></i> Channels</a>
-    <a href="graph.html" class="btn btn-outline-secondary btn-sm"><i class="bi bi-map" aria-hidden="true"></i> Back to map</a>
-  </div>
-</div>
-
+<details class="export-method">
+  <summary>How to read this page</summary>
+  <p>This page sets two analyses side by side: the one this export belongs to (<em>This analysis</em>) and a second
+  one chosen for comparison (<em>Compared analysis</em>), for instance another period or another selection of
+  channels.</p>
+  <p>The first table gives each whole-network statistic for both. A dash means the statistic was not computed in
+  that analysis. A difference means something only where the two analyses were built the same way: the same
+  weighting of ties, the same kinds of channels, the same community methods. The methods record of each analysis
+  lists its settings.</p>
+  <p>Several statistics depend on size alone: density falls and path lengths grow as a network gains channels.
+  Compare networks of similar size, or read those rows with that in mind.</p>
+  <p>The histogram and the scatter plot overlay the two sets of channels. The scatter's axes are logarithmic, so a
+  channel with a zero on either measure is left out; normalising rescales each analysis to its own 0–1 range, which
+  compares shapes rather than sizes. The dashed lines are each analysis' power-law trend.</p>
+</details>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
 <div id="compare-tables-section" class="mb-4"></div>
-<h3 class="mt-4 mb-3">Degree distribution</h3>
-<div id="degree-dist-section"></div>
-<h3 class="mt-4 mb-3">Measure comparison</h3>
-<div id="scatter-section"></div>
+<section id="degree-distribution" class="d-none" aria-labelledby="degree-dist-title">
+  <h2 id="degree-dist-title">Degree distribution</h2>
+  <p class="text-muted small">How many channels of each analysis fall in each band of in-strength or out-strength:
+  the summed weight of the ties a channel receives or sends, its weighted degree.</p>
+  <div id="degree-dist-section"></div>
+</section>
+<section id="measure-comparison" class="d-none" aria-labelledby="scatter-title">
+  <h2 id="scatter-title">Measure comparison</h2>
+  <div id="scatter-section"></div>
+</section>
 <script type="module" src="js/network_compare_table.js"></script>
 {% endblock %}

@@ -1,0 +1,574 @@
+/* ── Shared components of every export page ──────────────────────────────────
+   The top bar (breadcrumb, Contents menu), the page header, the method blocks, the
+   "On this page" list, the download menus, the landing page, the methods record and
+   the data dictionary. Colours come from the design tokens of tables.css (table
+   pages); the maps restyle the top bar for their canvas in graph.css.            */
+
+/* ── Top bar ───────────────────────────────────────────────── */
+.export-topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e3e0d8);
+  box-shadow: var(--shadow-sm, none);
+}
+
+.export-topnav-inner {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  height: 52px;
+  max-width: calc(1340px + 6rem);
+  margin: 0 auto;
+  padding: 0 3rem;
+}
+
+.export-topnav-brand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.export-topnav-brand img {
+  height: 30px;
+  width: auto;
+}
+
+.export-crumbs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: .82rem;
+  color: var(--muted, #6b6560);
+}
+
+.export-crumbs li {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-crumbs li+li::before {
+  content: "/";
+  margin: 0 .5rem;
+  color: var(--border, #e3e0d8);
+}
+
+.export-crumbs a {
+  color: var(--muted, #6b6560);
+  text-decoration: none;
+}
+
+.export-crumbs a:hover {
+  color: var(--accent, #4338ca);
+}
+
+.export-crumbs li[aria-current] {
+  color: var(--text, #1c1917);
+  font-weight: 600;
+}
+
+.export-contents {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.export-contents-toggle {
+  border: 1px solid var(--border, #e3e0d8);
+  color: var(--text, #1c1917);
+  background: transparent;
+}
+
+.export-contents-toggle:hover,
+.export-contents-toggle:focus-visible,
+.export-contents-toggle.show {
+  border-color: var(--accent, #4338ca);
+  color: var(--accent, #4338ca);
+}
+
+.export-contents-menu {
+  width: min(600px, 92vw);
+  padding: .5rem .75rem .75rem;
+}
+
+.export-contents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 0 1rem;
+}
+
+.export-contents-head {
+  margin: .65rem 0 .2rem;
+  padding: 0 .5rem;
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-contents-menu .dropdown-item {
+  padding: .2rem .5rem;
+  border-radius: .25rem;
+  font-size: .84rem;
+  white-space: normal;
+}
+
+.export-contents-menu .dropdown-item.active,
+.export-contents-menu .dropdown-item:active {
+  background: var(--accent-bg, #eef2ff);
+  color: var(--accent, #4338ca);
+  font-weight: 600;
+}
+
+.export-contents-overview {
+  display: flex !important;
+  gap: .4rem;
+  align-items: center;
+  padding-bottom: .4rem !important;
+  border-bottom: 1px solid var(--border, #e3e0d8);
+  border-radius: 0 !important;
+  font-weight: 600;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .export-topnav-inner {
+    padding: 0 1rem;
+    gap: .5rem;
+  }
+
+  .export-crumbs li:not(:last-child) {
+    display: none;
+  }
+
+  .export-crumbs li+li::before {
+    content: none;
+  }
+}
+
+/* ── Page header ───────────────────────────────────────────── */
+.export-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem 2rem;
+  margin-bottom: 1.25rem;
+}
+
+.export-page-head-text {
+  min-width: 0;
+  flex: 1 1 28rem;
+}
+
+.export-title {
+  margin: 0 0 .35rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.export-lede {
+  max-width: 72ch;
+  margin: 0;
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.02rem;
+  color: var(--muted, #6b6560);
+}
+
+.export-page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+
+/* Headings inside a page: the page title is the only h1; sections are h2, their parts h3, h4. */
+.export-wrap h2 {
+  margin: 2.25rem 0 .75rem;
+  font-size: 1.3rem;
+}
+
+.export-wrap h3 {
+  margin: 1.5rem 0 .5rem;
+  font-size: 1.05rem;
+}
+
+.export-wrap h4 {
+  margin: 1.1rem 0 .4rem;
+  font-size: .92rem;
+}
+
+/* Code in the export's prose and tables reads as the text it sits in, in the monospaced face. */
+.export-wrap code {
+  color: inherit;
+}
+
+.export-wrap h2 code,
+.export-wrap h3 code {
+  font-size: .9em;
+}
+
+.export-section>h2:first-child {
+  margin-top: 1.25rem;
+}
+
+/* ── How to read this page ─────────────────────────────────── */
+.export-method {
+  max-width: 1340px;
+  margin-bottom: 1.25rem;
+  padding: .55rem 1rem;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: var(--radius, .5rem);
+  background: var(--surface, #fff);
+  font-size: .85rem;
+}
+
+.export-method summary {
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text, #1c1917);
+}
+
+.export-method[open] summary {
+  margin-bottom: .5rem;
+}
+
+.export-method p {
+  max-width: 85ch;
+  margin-bottom: .55rem;
+}
+
+.export-method p:last-child {
+  margin-bottom: .2rem;
+}
+
+/* ── On this page / period selector ────────────────────────── */
+.export-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  align-items: center;
+  margin: 0 0 1.25rem;
+}
+
+.export-toc:empty,
+.export-period-nav:empty {
+  display: none;
+}
+
+.export-toc-label {
+  margin-right: .25rem;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-toc a {
+  padding: .15rem .6rem;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  font-size: .78rem;
+  color: var(--text, #1c1917);
+  text-decoration: none;
+}
+
+.export-toc a:hover,
+.export-toc a:focus-visible {
+  border-color: var(--accent, #4338ca);
+  color: var(--accent, #4338ca);
+}
+
+.export-period-nav {
+  margin-bottom: .9rem;
+}
+
+/* ── Downloads ─────────────────────────────────────────────── */
+.export-downloads {
+  min-width: 330px;
+}
+
+.export-download {
+  display: grid !important;
+  grid-template-columns: 4.25rem 1fr auto;
+  gap: .6rem;
+  align-items: baseline;
+  white-space: normal;
+}
+
+.export-format {
+  font-family: var(--font-mono, monospace);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--accent, #4338ca);
+}
+
+.export-download-name {
+  min-width: 0;
+  font-size: .84rem;
+}
+
+.export-download-file {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, monospace);
+  font-size: .72rem;
+  color: var(--muted, #6b6560);
+}
+
+.export-size {
+  font-family: var(--font-mono, monospace);
+  font-size: .72rem;
+  color: var(--muted, #6b6560);
+  white-space: nowrap;
+}
+
+/* ── Landing page ──────────────────────────────────────────── */
+.export-study {
+  margin-bottom: 1.75rem;
+  padding: .5rem 0 1.25rem;
+  border-bottom: 1px solid var(--border, #e3e0d8);
+}
+
+.export-kicker {
+  margin-bottom: .35rem;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: .75rem 2rem;
+  margin: 1rem 0 1.1rem;
+}
+
+.export-fact dt {
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-fact dd {
+  margin: .1rem 0 0;
+  font-size: .9rem;
+}
+
+.export-study-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1.5rem;
+  margin: 0;
+  font-size: .86rem;
+}
+
+.export-study-links a {
+  text-decoration: none;
+}
+
+.export-study-links .bi {
+  margin-right: .25rem;
+}
+
+.export-section {
+  margin-bottom: 2.25rem;
+}
+
+.export-wrap .export-section-title {
+  margin: 0 0 .9rem;
+  padding-bottom: .4rem;
+  border-bottom: 1px solid var(--border, #e3e0d8);
+  font-family: var(--font-sans, sans-serif);
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 1rem;
+}
+
+.export-card {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border, #e3e0d8);
+  border-radius: var(--radius, .5rem);
+  background: var(--surface, #fff);
+}
+
+.export-wrap .export-card-title {
+  display: flex;
+  gap: .5rem;
+  align-items: baseline;
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.export-card-title .bi {
+  font-size: .9rem;
+  color: var(--muted, #6b6560);
+}
+
+.export-card-text {
+  flex: 1;
+  margin: 0;
+  font-size: .84rem;
+  color: var(--muted, #6b6560);
+}
+
+/* Two columns only where each can hold a page title on one line. */
+.export-card-links {
+  columns: 2 11rem;
+  column-gap: 1.75rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: .84rem;
+}
+
+.export-card-links li {
+  break-inside: avoid;
+}
+
+.export-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  align-items: center;
+}
+
+/* Format chips: the file type alone, so "Open", two formats and "Method" share one row on the narrowest card. */
+.export-card-actions .btn {
+  white-space: nowrap;
+}
+
+.export-card-format,
+.export-card-actions .dropdown-toggle {
+  font-family: var(--font-mono, monospace);
+  font-size: .72rem;
+  letter-spacing: .03em;
+}
+
+.export-card-method {
+  margin-left: auto;
+  padding-inline: .25rem;
+  color: var(--muted, #6b6560);
+  text-decoration: none;
+}
+
+.export-card-method:hover {
+  color: var(--accent, #4338ca);
+}
+
+.export-periods {
+  max-width: 760px;
+}
+
+.export-periods>summary {
+  margin-bottom: .5rem;
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.export-file-size {
+  white-space: nowrap;
+}
+
+/* A link to a section must not land under the sticky top bar. */
+html {
+  scroll-padding-top: 4.25rem;
+}
+
+.export-files td {
+  vertical-align: top;
+}
+
+.export-files code {
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.export-columns-link {
+  margin-left: .35rem;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.export-citation {
+  max-width: 90ch;
+  margin: 0 0 1rem;
+  padding: .5rem 1rem;
+  border-left: 3px solid var(--accent, #4338ca);
+  background: var(--surface, #fff);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: .92rem;
+}
+
+/* ── Methods record and data dictionary ───────────────────── */
+.export-record {
+  max-width: 1100px;
+}
+
+.export-record>p {
+  max-width: 85ch;
+}
+
+.export-record-table td:first-child {
+  font-weight: 500;
+}
+
+.export-dictionary-entry {
+  margin-bottom: 1.75rem;
+}
+
+.export-wrap .export-dictionary-entry h3 code {
+  font-size: .98rem;
+  color: inherit;
+}
+
+.export-dictionary {
+  max-width: 1100px;
+}
+
+.export-dictionary td:first-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.export-period-label {
+  margin-right: .35rem;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted, #6b6560);
+}
+
+.export-record-table code {
+  white-space: nowrap;
+}

@@ -1,0 +1,34 @@
+{% extends "network/_table_base.html" %}
+
+{% block content %}
+<p class="text-muted small">Shares are fractions from 0 to 1. An empty cell is a value that does not exist for that row,
+not a zero. CSV files are UTF-8 with snake_case column names; spreadsheets carry the same columns with readable names
+and an <em>About</em> sheet. In a CSV, text that a spreadsheet would run as a formula (a channel title beginning with
+<code>=</code>, <code>+</code>, <code>-</code> or <code>@</code>) is written behind an apostrophe: strip it when reading
+that column with other software. The same dictionary as plain text: <a href="DATA.md" download><code>DATA.md</code></a>.</p>
+<nav id="export-toc" class="export-toc" aria-label="On this page"></nav>
+{% regroup entries by group as groups %}
+{% for group in groups %}
+<section class="export-section" aria-labelledby="dd-{{ forloop.counter }}">
+  <h2 id="dd-{{ forloop.counter }}">{{ group.grouper }}</h2>
+  {% for entry in group.list %}
+  <article class="export-dictionary-entry" id="{{ entry.anchor }}">
+    <h3><code>{{ entry.name }}</code></h3>
+    <p>{{ entry.description }}</p>
+    {% for sheet in entry.sheets %}
+    {% if sheet.sheet %}<h4>Sheet <em>{{ sheet.sheet }}</em></h4>{% if sheet.description %}<p class="text-muted small">{{ sheet.description }}</p>{% endif %}{% endif %}
+    <div class="table-responsive">
+      <table class="table table-sm export-dictionary">
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          {% for header, meaning in sheet.columns %}<tr><td><code>{{ header }}</code></td><td>{{ meaning|default:"—" }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -1,26 +1,12 @@
-// Event impact page (events.html).
+// Event impact page (event_impact.html).
 //
 // Renders data/event_impact.json, written by network/event_impact.py: the network's weekly series with the
 // recorded events marked, and per event the interrupted-time-series fit of every metric — level and slope
 // changes, HAC and placebo p-values, BH q — with a chart of the observed series, the fitted segments and the
 // counterfactual continuation of the pre-event trend.
-import { fetchJson } from './utils.js';
+import { fetchJson, loadFailed } from './utils.js';
 
-var Q_THRESHOLD = 0.05;
 var _charts = {};
-
-function _css(name, fallback) {
-    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-}
-
-function _stars(q) {
-    if (q === null || q === undefined) return "";
-    if (q < 0.001) return "***";
-    if (q < 0.01) return "**";
-    if (q < Q_THRESHOLD) return "*";
-    return "";
-}
 
 function _el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -30,7 +16,7 @@ function _el(tag, cls, text) {
 }
 
 function _fmt(v, n) {
-    return v === null || v === undefined ? "—" : sigFig(v, n || 3);
+    return sigFig(v, n || 3);
 }
 
 function _unit(metric) {
@@ -45,7 +31,7 @@ function _eventLines(events, weeks) {
             type: "line",
             xMin: e.week,
             xMax: e.week,
-            borderColor: e.color || "#d00",
+            borderColor: e.color || pulpitTheme().series[7],
             borderWidth: 1.5,
             borderDash: [5, 4],
             label: { display: false, content: e.subject },
@@ -54,9 +40,11 @@ function _eventLines(events, weeks) {
     return lines;
 }
 
+// A chart with a single series needs no legend: its title and axis say what it shows.
 function _chart(canvas, labels, datasets, annotations, yTitle) {
-    var text = _css("--text", "#1c1917"),
-        grid = _css("--border", "#e3e0d8");
+    var theme = pulpitTheme();
+    var text = theme.text,
+        grid = theme.grid;
     return new Chart(canvas, {
         type: "line",
         data: { labels: labels, datasets: datasets },
@@ -66,7 +54,7 @@ function _chart(canvas, labels, datasets, annotations, yTitle) {
             animation: false,
             interaction: { mode: "index", intersect: false },
             plugins: {
-                legend: { labels: { color: text, boxWidth: 14 } },
+                legend: { display: datasets.length > 1, labels: { color: text, boxWidth: 14 } },
                 annotation: { annotations: annotations || {} },
             },
             scales: {
@@ -80,7 +68,7 @@ function _chart(canvas, labels, datasets, annotations, yTitle) {
 function _overview(target, data) {
     target.innerHTML = "";
     if (!data.weeks || !data.weeks.length) return;
-    target.appendChild(_el("h3", "h5 mb-1", "Weekly series of the network"));
+    target.appendChild(_el("h2", "", "Weekly series of the network"));
     var row = _el("div", "d-flex align-items-end gap-2 mb-2");
     var label = _el("label", "form-label mb-0 small", "Metric");
     label.setAttribute("for", "ei-overview-metric");
@@ -105,102 +93,97 @@ function _overview(target, data) {
         _charts.overview = _chart(canvas, data.weeks, [{
             label: metric.label,
             data: data.series[metric.key],
-            borderColor: _css("--accent", "#4338ca"),
-            backgroundColor: "transparent",
+            borderColor: pulpitTheme().series[0],
+            backgroundColor: pulpitTheme().series[0],
             pointRadius: 0,
             borderWidth: 1.5,
             spanGaps: false,
-        }], _eventLines(data.events, data.weeks), metric.kind === "count" ? metric.label : "share");
+        }], _eventLines(data.events, data.weeks), metric.kind === "count" ? metric.label : "Share");
     }
     sel.addEventListener("change", draw);
     draw();
 }
 
+// A coefficient, for a count with its reading as a percentage change; the cell sorts on the coefficient.
 function _effectCell(effect, pct) {
-    var td = _el("td", "number");
-    if (!effect) return td;
+    var td = _el("td", "number nowrap");
+    if (!effect || isNil(effect.coef)) {
+        td.textContent = MISSING;
+        return td;
+    }
     var text = _fmt(effect.coef, 3);
-    if (pct && effect.pct !== null && effect.pct !== undefined) text += " (" + (effect.pct > 0 ? "+" : "") + sigFig(effect.pct, 3) + "%)";
+    if (pct && !isNil(effect.pct)) text += " (" + (effect.pct > 0 ? "+" : "") + sigFig(effect.pct, 3) + "%)";
     td.textContent = text;
+    td.setAttribute("data-sort-value", String(effect.coef));
     td.title = "standard error " + _fmt(effect.se, 3);
     return td;
 }
 
-function _pText(p) {
-    // A p-value that rounds to zero is reported as a bound, not as an impossible 0.
-    if (p === 0) return "< 0.0001";
-    return _fmt(p, 2);
+function _pCell(p) {
+    var td = _el("td", "number", fmtP(p));
+    if (!isNil(p)) td.setAttribute("data-sort-value", String(p));
+    return td;
 }
 
-function _pCell(p, q) {
-    var td = _el("td", "number", _pText(p));
-    if (q !== undefined) {
-        td.textContent = _fmt(q, 2);
-        var star = _stars(q);
-        if (star) td.appendChild(_el("span", "text-muted ms-1", star));
-    }
+// The q-value (Benjamini–Hochberg over events × metrics) with the stars of every export page.
+function _qCell(q) {
+    var td = _pCell(q);
+    var star = sigStars(q);
+    if (star) td.appendChild(_el("span", "text-muted ms-1", star));
     return td;
 }
 
 function _effectsTable(event, idx) {
     var wrap = _el("div", "table-responsive");
-    var table = _el("table", "table table-sm table-hover");
+    var table = _el("table", "table table-sm table-hover sortable");
     table.setAttribute("aria-labelledby", "ei-event-" + idx);
     var thead = _el("thead");
-    var h1 = _el("tr");
-    [
-        ["Metric", "", 1],
-        ["Level change", "number", 4],
-        ["Slope change (per week)", "number", 4],
-        ["", "", 1],
-    ].forEach(function(h) {
-        var th = _el("th", h[1], h[0]);
-        th.colSpan = h[2];
-        th.scope = "colgroup";
-        h1.appendChild(th);
-    });
-    var h2 = _el("tr");
-    ["", "Effect", "p (HAC)", "p (placebo)", "q", "Effect", "p (HAC)", "p (placebo)", "q", "Notes"].forEach(function(lbl, i) {
+    var head = _el("tr");
+    // One header row (a grouped two-row header cannot be sorted): the level change at the event's week, then the
+    // change of slope per week after it, each with its two p-values and the corrected q.
+    ["Metric", "Level change", "Level p (HAC)", "Level p (placebo)", "Level q", "Slope change per week", "Slope p (HAC)",
+        "Slope p (placebo)", "Slope q", "Notes"
+    ].forEach(function(lbl, i) {
         var th = _el("th", i > 0 && i < 9 ? "number" : "", lbl);
         th.scope = "col";
-        h2.appendChild(th);
+        head.appendChild(th);
     });
-    thead.appendChild(h1);
-    thead.appendChild(h2);
+    thead.appendChild(head);
     table.appendChild(thead);
     var tbody = _el("tbody");
     event.metrics.forEach(function(m) {
         var tr = _el("tr");
         tr.appendChild(_el("td", "", m.label));
         if (m.insufficient) {
-            var td = _el("td", "text-muted", "not enough weeks with data around the event");
-            td.colSpan = 9;
-            tr.appendChild(td);
+            // Every cell kept, so the table still sorts: the effects are missing, the note says why.
+            for (var k = 0; k < 8; k++) tr.appendChild(_el("td", "number text-muted", MISSING));
+            tr.appendChild(_el("td", "small text-muted", "not enough weeks with data around the event"));
             tbody.appendChild(tr);
             return;
         }
         tr.appendChild(_effectCell(m.level, m.kind === "count"));
         tr.appendChild(_pCell(m.level.p_hac));
         tr.appendChild(_pCell(m.level.p_placebo));
-        tr.appendChild(_pCell(null, m.level.q));
+        tr.appendChild(_qCell(m.level.q));
         tr.appendChild(_effectCell(m.slope, false));
         tr.appendChild(_pCell(m.slope.p_hac));
         tr.appendChild(_pCell(m.slope.p_placebo));
-        tr.appendChild(_pCell(null, m.slope.q));
+        tr.appendChild(_qCell(m.slope.q));
         var notes = [];
-        if (m.truncated) notes.push("window cut by the data edge");
+        if (m.truncated) notes.push("window cut short by the start or the end of the data");
         if (m.placebo_coarse) notes.push("few placebo dates (" + m.placebos + ")");
         tr.appendChild(_el("td", "small text-muted", notes.join("; ")));
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
     wrap.appendChild(table);
+    wrap.appendChild(_el("p", "text-muted small mt-1", sigLegend("q")));
     return wrap;
 }
 
 function _eventChart(box, event, metric, key) {
-    var accent = _css("--accent", "#4338ca"),
-        muted = _css("--muted", "#78716c");
+    var accent = pulpitTheme().series[0],
+        muted = pulpitTheme().muted;
     var datasets;
     if (event.design === "comparative") {
         datasets = [
@@ -229,10 +212,10 @@ function _eventChart(box, event, metric, key) {
 function _eventCard(event, idx) {
     var card = _el("section", "card mb-4");
     var body = _el("div", "card-body");
-    var h = _el("h3", "h5 card-title mb-1");
+    var h = _el("h2", "card-title");
     h.id = "ei-event-" + idx;
     var dot = _el("span", "color-swatch color-swatch--sm me-2");
-    dot.style.background = event.color || "#d00";
+    dot.style.background = event.color || pulpitTheme().series[7];
     dot.setAttribute("aria-hidden", "true");
     h.appendChild(dot);
     h.appendChild(document.createTextNode(event.date + " — " + event.subject));
@@ -247,7 +230,7 @@ function _eventCard(event, idx) {
     var fitted = event.metrics.filter(function(m) { return !m.insufficient; });
     if (fitted.length) {
         var row = _el("div", "d-flex align-items-end gap-2 mb-2");
-        var label = _el("label", "form-label mb-0 small", "Chart");
+        var label = _el("label", "form-label mb-0 small", "Metric");
         label.setAttribute("for", "ei-metric-" + idx);
         var sel = _el("select", "form-select form-select-sm");
         sel.id = "ei-metric-" + idx;
@@ -280,17 +263,18 @@ function _render(data) {
     var n = data.events.length;
     pre.innerHTML = "";
     pre.appendChild(_el("p", "small mb-0",
-        n + " event" + (n === 1 ? "" : "s") + " inside the data, " + (data.weeks || []).length + " weeks, a window of ±" +
+        fmtInt(n) + " event" + (n === 1 ? "" : "s") + " inside the data, " + fmtInt((data.weeks || []).length) + " weeks, a window of ±" +
         data.window_weeks + " weeks around each event."));
-    if (!n) pre.appendChild(_el("p", "text-muted small", "No recorded event falls inside the data: add events in Manage → Events and re-run the export."));
+    if (!n) pre.appendChild(_el("p", "text-muted small", "No recorded event falls inside the period of this analysis."));
     _overview(document.getElementById("ei-overview"), data);
     var list = document.getElementById("ei-events");
     list.innerHTML = "";
     data.events.forEach(function(e, i) { list.appendChild(_eventCard(e, i)); });
+    initSortableTables();
 }
 
-fetchJson("data/event_impact.json").then(_render).catch(function(err) {
-    var el = document.getElementById("ei-preamble");
-    if (el) el.textContent = "Failed to load data/event_impact.json.";
-    console.error("event_impact:", err);
+var _dataDir = window.DATA_DIR || "data/";
+
+fetchJson(_dataDir + "event_impact.json").then(_render).catch(function(err) {
+    loadFailed(err);
 });

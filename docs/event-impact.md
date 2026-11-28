@@ -62,7 +62,7 @@ Weekly series are autocorrelated — a busy week tends to follow a busy week —
 ## Outputs
 
 - `data/event_impact.json` — the weekly series of the network and, per event, every metric's coefficients, standard errors, p-values, q, and the fitted lines and counterfactual for the charts.
-- `events.html` (with `--html`) — a weekly overview with the events marked and one card per event with a chart and the effects table.
+- `event_impact.html` (with `--html`) — a weekly overview with the events marked and one card per event with a chart and the effects table.
 - `event_impact.xlsx` (with `--xlsx`: `Effects`, `Weekly series`) and `event_impact.csv` (with `--csv`, the effects).
 - With a timeline export, the period navigators mark the periods containing events.
 

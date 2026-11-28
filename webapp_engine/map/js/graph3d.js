@@ -4,8 +4,8 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
-import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, mergeColorings, periodDataDir, readTimeline } from './utils.js';
+import { measure_label, strategy_label, layout_label, layout_long_label, LABELS_MODE_LABELS, THEME_LABELS } from './labels.js';
+import { ENV_DEPTH_KEY, envDepthLabel, groupLabelOf, initialMapTheme, mergeColorings, periodDataDir, readTimeline, rememberMapTheme } from './utils.js';
 import { escHtml, fetchJson, fetchJsonOrNull, buildCommunityColorMaps, avgColor, makeEdgeWidthScale, arrMin, arrMax } from './utils.js';
 
 // =============================================================================
@@ -643,10 +643,10 @@ function apply_theme_3d(theme) {
             if (Object.keys(nodes_index).length) apply_strategy_colors(active_strategy);
         }
     }
-    // The 3D viewer's theme is a per-session display choice, deliberately not
-    // persisted: it always boots dark and never reads or writes the shared
-    // ``pulpit_theme`` key that the live webapp and table exports use.
 }
+
+// The theme a map starts in, and the one it remembers, are shared with the 2D map: utils.js initialMapTheme /
+// rememberMapTheme.
 
 // =============================================================================
 // Info bar
@@ -983,7 +983,7 @@ function show_node_info(id) {
         accessory_data.measures.forEach(function(m) {
             if (BASE_MEASURE_KEYS[m[0]]) return;
             var val = node[m[0]];
-            mhtml += '<br><abbr>' + escHtml(m[1]) + '</abbr>: ' + (val != null ? val.toFixed(4) : 'N/A');
+            mhtml += '<br><abbr>' + escHtml(measure_label(m[0], m[1])) + '</abbr>: ' + (val != null ? val.toFixed(4) : 'N/A');
         });
     }
     el('node_measures').innerHTML = mhtml;
@@ -1135,7 +1135,7 @@ function get_data() {
         if (active_strategy) build_legend(community_strategy_data[active_strategy]);
 
         el('size-select').innerHTML = ch_data.measures.map(function(m) {
-            return '<option value="' + m[0] + '">' + m[1] + '</option>';
+            return '<option value="' + m[0] + '">' + escHtml(measure_label(m[0], m[1])) + '</option>';
         }).join('');
 
         el('loading_message').innerHTML = 'Building 3D graph…';
@@ -1194,7 +1194,7 @@ function _apply_accessory_3d(ch_data, comm_data) {
     }
 
     el('size-select').innerHTML = ch_data.measures.map(function(m) {
-        return '<option value="' + m[0] + '">' + m[1] + '</option>';
+        return '<option value="' + m[0] + '">' + escHtml(measure_label(m[0], m[1])) + '</option>';
     }).join('');
     var found = false;
     if (prev_size) {
@@ -1602,7 +1602,7 @@ function init_year_switcher(timeline) {
         container.innerHTML = [
             '<button class="year-btn year-btn--nav" id="year-prev" aria-label="Previous period" disabled>',
             '<i class="bi bi-chevron-left" aria-hidden="true"></i></button>',
-            '<button class="year-btn year-btn--all" data-year="all">All</button>',
+            '<button class="year-btn year-btn--all" data-year="all" title="All periods">All periods</button>',
             '<span class="year-sep" aria-hidden="true"></span>',
             '<div class="year-drop-wrap">',
             '<button class="year-btn year-drop-toggle" id="year-drop-btn" aria-haspopup="listbox" aria-expanded="false">',
@@ -1671,12 +1671,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     init_three();
 
-    // The graph always boots dark, independent of the shared pulpit_theme key:
-    // theme here is a display layout the user flips at will, not a remembered
-    // preference. The live webapp and table exports keep their own
-    // pulpit_theme-backed light/dark setting.
-    el('theme-select').value = 'dark';
-    apply_theme_3d('dark');
+    var start_theme = initialMapTheme();
+    el('theme-select').value = start_theme;
+    apply_theme_3d(start_theme);
 
     build_layout_selector();
 
@@ -1704,14 +1701,14 @@ document.addEventListener('DOMContentLoaded', function() {
             var dirs = [base_data_dir];
             if (years.length <= PRELOAD_LIMIT) dirs = dirs.concat(years.map(function(y) { return year_data_dir(y.key); }));
             var labels = {};
-            labels[base_data_dir] = 'All';
+            labels[base_data_dir] = 'All periods';
             years.forEach(function(y) { labels[year_data_dir(y.key)] = y.label; });
             var total = dirs.length,
                 done = 0;
             return Promise.all(dirs.map(function(dir) {
                 return preload_year_3d(dir).then(function() {
                     done++;
-                    el('loading_message').textContent = (labels[dir] || 'All') + ' (' + done + ' / ' + total + ')';
+                    el('loading_message').textContent = (labels[dir] || 'All periods') + ' (' + done + ' / ' + total + ')';
                 });
             }));
         });
@@ -1726,6 +1723,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     el('theme-select').addEventListener('change', function() {
         apply_theme_3d(this.value);
+        rememberMapTheme(this.value);
         update_info_bar();
     });
 

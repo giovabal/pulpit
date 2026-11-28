@@ -38,6 +38,7 @@ permuted like the rest); self-loops are left out.
 import logging
 from typing import Any
 
+from network.pages import PERIOD_HEADER
 from network.parameters import FixedParameter
 from network.robustness.null_model import bh_adjust, empirical_p, z_score
 from network.utils import citation_count, dead_leaf_ids
@@ -462,29 +463,31 @@ def compute_label_mixing(
     return {"permutations": permutations, "groups": groups}
 
 
-# ── Flat row layouts shared by the XLSX sheets and label_flows.csv ─────────────────────────────
+# ── Flat row layouts shared by the XLSX sheets and network_label_flows.csv ─────────────────────────────
 
+# Readable headers, as the spreadsheet shows them; network_label_flows.csv writes them in snake_case. The first column
+# is the timeline period ("All periods" for the full range).
 GROUP_COLUMNS: tuple[str, ...] = (
-    "Year",
+    PERIOD_HEADER,
     "Group",
     "Labelled channels",
     "Ties",
     "Citations",
     "Assortativity r (ties)",
-    "Null mean",
-    "z",
-    "p",
+    "Null mean (ties)",
+    "z (ties)",
+    "p (ties)",
     "Assortativity r (citations)",
-    "Null mean",
-    "z",
-    "p",
+    "Null mean (citations)",
+    "z (citations)",
+    "p (citations)",
     "E-I index (labelled ties)",
     "Expected E-I",
-    "z",
-    "p",
+    "z (E-I)",
+    "p (E-I)",
 )
 LABEL_COLUMNS: tuple[str, ...] = (
-    "Year",
+    PERIOD_HEADER,
     "Group",
     "Label",
     "Channels",
@@ -507,18 +510,18 @@ LABEL_COLUMNS: tuple[str, ...] = (
     "Citations received",
 )
 FLOW_COLUMNS: tuple[str, ...] = (
-    "year",
-    "group",
-    "citing_label",
-    "cited_label",
-    "ties",
-    "expected_ties",
-    "ratio",
+    PERIOD_HEADER,
+    "Group",
+    "Citing label",
+    "Cited label",
+    "Ties",
+    "Expected ties",
+    "Ratio",
     "z",
     "p",
     "q",
-    "citations",
-    "expected_citations",
+    "Citations",
+    "Expected citations",
 )
 
 

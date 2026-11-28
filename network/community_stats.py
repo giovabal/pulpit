@@ -29,7 +29,7 @@ from network.utils import (
     to_undirected_sum,
     without_self_loops,
 )
-from webapp.models import Message
+from webapp.models import LabelGroup, Message
 
 import networkx as nx
 import numpy as np
@@ -1116,8 +1116,11 @@ def _compute_strategy_entry(
     label_group_labels: "dict[str, str] | None" = None,
     detection_graph: "nx.DiGraph | None" = None,
     null_cache: "dict[tuple[int, bool], list[float]] | None" = None,
+    primary_group: "tuple[str, str] | None" = None,
 ) -> dict[str, Any]:
     """Compute metrics for a single community-detection strategy.
+
+    ``primary_group`` — ``(partition key, name)`` of the primary label group, whose labels ``pk_to_org`` holds.
 
     ``detection_graph`` is the graph community detection actually ran on when it differs from
     ``graph`` — the disparity-filtered backbone under ``--community-backbone-alpha``. Reported
@@ -1233,17 +1236,19 @@ def _compute_strategy_entry(
                     cache=null_cache if null_cache is not None else {},
                 )
             )
-    # Distribution cross-tabs shown under the strategy table: Organisation first, then one per
-    # label-group partition (Area, Nation, …) so the analyst sees how this strategy's communities
-    # overlap each grouping. Skipped for the label-group partitions themselves — cross-tabbing a
-    # label partition against the primary-group labels (or another label partition) is uninformative.
+    # Distribution cross-tabs shown under the strategy table: the primary label group first (under its
+    # own name), then one per label-group partition (Area, Nation, …) so the analyst sees how this
+    # strategy's communities overlap each grouping. Skipped for the label-group partitions themselves —
+    # cross-tabbing a label partition against the primary-group labels (or another label partition) is
+    # uninformative. A primary group that is itself among the selected partitions is tabulated once.
     label_group_labels = label_group_labels or {}
+    primary_key, primary_name = primary_group or ("", "")
     if strategy_key not in label_group_labels:
         cross_tabs: list[dict] = []
-        if pk_to_org:
+        if pk_to_org and primary_key not in label_group_labels:
             org_ct = _compute_cross_tab(graph_data["nodes"], rows, strategy_key, pk_to_org)
             if org_ct is not None:
-                org_ct["label"], org_ct["label_lc"] = "Organisation", "organisation"
+                org_ct["label"] = org_ct["label_lc"] = primary_name or "Label"
                 cross_tabs.append(org_ct)
         for lg_key, lg_name in label_group_labels.items():
             pk_to_label = {
@@ -1359,6 +1364,9 @@ def compute_community_metrics(
     # an extra "<group> × community distribution" cross-tab under every non-label-group strategy table.
     strategy_set = set(strategies)
     label_group_labels = {k: v for k, v in labelgroup_display_labels().items() if k in strategy_set}
+    # The primary label group: its labels are every channel's "organization", tabulated under the group's name.
+    primary = LabelGroup.objects.filter(is_primary=True).values_list("pk", "name").first()
+    primary_group = (f"labelgroup{primary[0]}", primary[1]) if primary else None
     if status_callback:
         status_callback("network")
     # Random graphs behind the modularity significance, shared by every strategy reported on the same graph.
@@ -1379,6 +1387,7 @@ def compute_community_metrics(
             label_group_labels,
             detection_graph,
             null_cache=null_cache,
+            primary_group=primary_group,
         )
         if status_callback:
             status_callback(strategy_key)
@@ -1441,7 +1450,7 @@ _DISPLAY_GROUP_TO_KEY: dict[str, str] = {
     "Cohesion": "COHESION",
     "Component structure": "COMPONENTS",
     "Degree correlation": "DEGCORRELATION",
-    "Centralization": "CENTRALIZATION",
+    "Centralisation": "CENTRALIZATION",
     "Content": "CONTENT",
     "Homophily": "HOMOPHILY",
 }
@@ -1487,38 +1496,48 @@ def network_summary_rows(summary: dict[str, Any]) -> list[SummaryRow]:
     scc_has_directed = summary.get("avg_path_length_directed") is not None
     scc_path_marker = " ‡" if (scc_has_directed and not summary.get("scc_path_on_full", True)) else ""
     if _include("Size"):
-        _row("Nodes", summary["n"], "Size")
+        _row("Channels", summary["n"], "Size")
         for type_name, count in summary.get("channel_type_counts", {}).items():
             _row(_CHANNEL_TYPE_LABELS.get(type_name, type_name), count, "Size")
         if summary.get("dead_leaves"):
             # Their own citations are never read: reciprocity, clustering, transitivity, out-degree CV and
             # assortativity describe the other channels (DEAD_LEAF_STATS_RULE).
             _row("Dead leaves (own citations not observed)", summary["dead_leaves"], "Size")
-        _row("Edges", summary["e"], "Size")
-        _row("Edges / Nodes", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size")
+        _row("Ties", summary["e"], "Size")
+        _row("Ties per channel", round(summary["e"] / summary["n"], 4) if summary["n"] else None, "Size")
         _row("Density (0–1)", summary["density"], "Size")
     if _include("Transitivity & paths"):
         _row("Reciprocity (0–1)", summary["reciprocity"], "Transitivity & paths", "reciprocity")
-        _row("Avg Clustering (0–1)", summary["avg_clustering"], "Transitivity & paths", "avg_clustering")
-        _row(f"Avg Path Length{path_marker}", summary["avg_path_length"], "Transitivity & paths")
+        _row("Mean clustering (0–1)", summary["avg_clustering"], "Transitivity & paths", "avg_clustering")
+        _row(f"Mean path length{path_marker}", summary["avg_path_length"], "Transitivity & paths")
         _row(f"Diameter{path_marker}", summary["diameter"], "Transitivity & paths")
         _row(
-            f"Directed Avg Path Length{scc_path_marker}",
+            f"Directed mean path length{scc_path_marker}",
             summary.get("avg_path_length_directed"),
             "Transitivity & paths",
         )
-        _row(f"Directed Diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths")
+        _row(f"Directed diameter{scc_path_marker}", summary.get("diameter_directed"), "Transitivity & paths")
     if _include("Cohesion"):
         _row("Transitivity (0–1)", summary.get("transitivity"), "Cohesion", "transitivity")
-        _row("Global Efficiency (0–1)", summary.get("global_efficiency"), "Cohesion")
-        _row(f"Algebraic Connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion")
+        _row("Global efficiency (0–1)", summary.get("global_efficiency"), "Cohesion")
+        _row(f"Algebraic connectivity{path_marker}", summary.get("algebraic_connectivity"), "Cohesion")
         _row("In-degree CV", summary.get("in_degree_cv"), "Cohesion", "in_degree_cv")
         _row("Out-degree CV", summary.get("out_degree_cv"), "Cohesion", "out_degree_cv")
     if _include("Component structure"):
-        _row("WCC count", summary["wcc_count"], "Component structure")
-        _row("Largest WCC fraction (0–1)", summary["wcc_fraction"], "Component structure", "wcc_fraction")
-        _row("SCC count", summary["scc_count"], "Component structure")
-        _row("Largest SCC fraction (0–1)", summary["scc_fraction"], "Component structure", "scc_fraction")
+        _row("Weakly connected components", summary["wcc_count"], "Component structure")
+        _row(
+            "Largest weakly connected component, share (0–1)",
+            summary["wcc_fraction"],
+            "Component structure",
+            "wcc_fraction",
+        )
+        _row("Strongly connected components", summary["scc_count"], "Component structure")
+        _row(
+            "Largest strongly connected component, share (0–1)",
+            summary["scc_fraction"],
+            "Component structure",
+            "scc_fraction",
+        )
     if _include("Degree correlation"):
         for assort_key, assort_label in [
             ("in_in", "Assortativity in→in (−1–1)"),
@@ -1532,20 +1551,20 @@ def network_summary_rows(summary: dict[str, Any]) -> list[SummaryRow]:
                 "Degree correlation",
                 f"assortativity.{assort_key}",
             )
-    if _include("Centralization"):
+    if _include("Centralisation"):
         if summary.get("mean_burt_constraint") is not None:
-            _row("Mean Burt's Constraint (~0–1)", summary["mean_burt_constraint"], "Centralization")
+            _row("Mean Burt's constraint (~0–1)", summary["mean_burt_constraint"], "Centralisation")
         for key, (c_val, c_label) in summary.get("centralizations", {}).items():
             # "approx." — the generic (n−1)·C_max normaliser is the exact Freeman bound only
             # for measures with a zero periphery floor (e.g. degree on a star); for measures
             # with a non-zero floor (e.g. PageRank's teleport term) it is a conservative lower
             # bound. See _freeman_centralization.
-            _row(f"{c_label} Centralization (approx., 0–1)", c_val, "Centralization", f"centralization.{key}")
+            _row(f"{c_label} centralisation (approx., 0–1)", c_val, "Centralisation", f"centralization.{key}")
     if _include("Content"):
         if summary.get("network_originality") is not None:
-            _row("Content Originality (0–1)", summary["network_originality"], "Content")
+            _row("Content originality (0–1)", summary["network_originality"], "Content")
         if summary.get("network_amplification") is not None:
-            _row("Amplification Ratio", summary["network_amplification"], "Content")
+            _row("Amplification ratio", summary["network_amplification"], "Content")
     if _include("Homophily"):
         # One block per partition label group, tested against label permutations (network.label_mixing).
         for group in summary.get("homophily") or []:

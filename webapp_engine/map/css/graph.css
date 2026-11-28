@@ -587,3 +587,101 @@ body[data-theme3d="print"] .node-label {
     color: rgba(var(--c-fg-raw), 1);
   }
 }
+
+/* ── Top bar on the maps ─────────────────────────────────────────────────────
+   The export's top bar (site.css) as a floating panel over the canvas, tinted by
+   the map theme's variables like the menu bar. Top left, clear of the channel
+   panel (top right) and of the menu (bottom centre, or left middle).          */
+@media screen {
+  .export-topnav--map {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 600;
+    max-width: calc(100vw - 20px - 230px);
+    background: var(--c-panel-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(var(--c-fg-raw), 0.08);
+    border-radius: 10px;
+    box-shadow: none;
+  }
+
+  .export-topnav--map .export-topnav-inner {
+    height: 40px;
+    max-width: none;
+    margin: 0;
+    padding: 0 .4rem 0 .6rem;
+    gap: .6rem;
+  }
+
+  .export-topnav--map .export-topnav-brand img {
+    height: 24px;
+    filter: var(--c-logo-filter, invert(1));
+  }
+
+  .export-topnav--map .export-crumbs,
+  .export-topnav--map .export-crumbs a {
+    color: rgba(var(--c-fg-raw), 0.65);
+  }
+
+  .export-topnav--map .export-crumbs li[aria-current] {
+    color: rgba(var(--c-fg-raw), 0.95);
+  }
+
+  .export-topnav--map .export-crumbs li+li::before {
+    color: rgba(var(--c-fg-raw), 0.3);
+  }
+
+  .export-topnav--map .export-contents-toggle {
+    border-color: rgba(var(--c-fg-raw), 0.2);
+    color: rgba(var(--c-fg-raw), 0.9);
+  }
+
+  .export-topnav--map .export-contents-toggle:hover,
+  .export-topnav--map .export-contents-toggle.show {
+    border-color: rgba(var(--c-fg-raw), 0.5);
+    color: rgba(var(--c-fg-raw), 1);
+  }
+}
+
+@media print {
+  .export-topnav--map {
+    display: none;
+  }
+}
+
+/* ── Opened from disk: the scripts that load the map's data are blocked ───── */
+.map-notice {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 2000;
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 1rem 1.25rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(var(--c-fg-raw, 255, 255, 255), 0.25);
+  border-radius: 10px;
+  background: var(--c-panel-bg, #1c1917);
+  color: rgba(var(--c-fg-raw, 255, 255, 255), 0.95);
+  font-size: .9rem;
+}
+
+.map-notice p {
+  margin: 0;
+}
+
+.map-notice code {
+  color: inherit;
+}
+
+/* On a phone the bar holds the logo and the Contents menu; the page name has no room. */
+@media screen and (max-width: 520px) {
+  .export-topnav--map {
+    max-width: calc(100vw - 20px);
+  }
+
+  .export-topnav--map .export-crumbs {
+    display: none;
+  }
+}

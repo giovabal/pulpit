@@ -30,10 +30,12 @@ from network import (
     link_layer,
     measures,
     mrqap,
+    pages,
     parameters,
     periods,
     publication,
     robustness,
+    site,
     tables,
     vacancy_analysis,
 )
@@ -42,7 +44,7 @@ from network.image_copies import IMAGE_COPY_DISTANCE_DEFAULT
 from network.near_copies import NEAR_COPY_MIN_TOKENS, NEAR_COPY_SHINGLE_SIZE, NEAR_COPY_THRESHOLD
 from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.tokens import split_tokens
-from network.utils import GraphData
+from network.utils import MESSAGE_SPAN_KEY, GraphData
 from runner.tmp_dir import LockHeldError, export_in_progress
 from webapp import scoring
 from webapp.models import Channel, Label, Message, Project
@@ -613,7 +615,7 @@ class Command(BaseCommand):
             dest="csv",
             action=argparse.BooleanOptionalAction,
             default=None,
-            help="Also write nodes.csv (one row per channel, same columns as channel_table.xlsx) and edges.csv (source_label, target_label, weight, weight_forwards, weight_mentions).",
+            help="Also write nodes.csv (one row per channel, the columns of channel_table.xlsx in snake_case) and edges.csv (one row per tie: the two channels' ids and names, the weight and the raw counts behind it).",
         )
         parser.add_argument(
             "--seo",
@@ -990,7 +992,7 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Generate a structural equivalence matrix page (structural_similarity.html) showing "
+                "Generate a structural equivalence matrix page (structural_equivalence.html) showing "
                 "pairwise cosine similarity of each channel's weighted in+out tie profile "
                 "(Lorrain & White 1971): high = cite, and are cited by, the same channels."
             ),
@@ -1339,7 +1341,7 @@ class Command(BaseCommand):
                 "Test each recorded event (Manage → Events) for a change in the network's weekly activity: "
                 "segmented regression of level and slope at the event's week (a comparative design, affected "
                 "labels against the rest, when the event is scoped to labels), Newey–West standard errors and an "
-                "in-time placebo p-value. Writes data/event_impact.json; events.html with --html, "
+                "in-time placebo p-value. Writes data/event_impact.json; event_impact.html with --html, "
                 "event_impact.xlsx with --xlsx, event_impact.csv with --csv. See docs/event-impact.md."
             ),
         )
@@ -1365,7 +1367,7 @@ class Command(BaseCommand):
                 "per-channel link measures (links per post, platform diversity, monetisation / mainstream / "
                 "alternative shares), a sites table, a label × category matrix and statistically validated "
                 "co-linking pairs. Writes data/links.json; links.html with --html, links.xlsx with --xlsx, "
-                "channel_sites.csv with --csv. See docs/outbound-links.md."
+                "links_channel_sites.csv with --csv. See docs/outbound-links.md."
             ),
         )
         parser.add_argument(
@@ -1390,7 +1392,7 @@ class Command(BaseCommand):
             help=(
                 "Compute per-message cross-community reach (Goel et al. 2016 adapted to "
                 "Telegram's depth-1 forwarding) and authority-weighted reach (Cha et al. 2010). "
-                "Writes data/interest_structural.json. Requires at least one community "
+                "Writes data/interesting_messages.json. Requires at least one community "
                 "strategy and ideally PAGERANK in --measures (falls back to HITSAUTH then "
                 "in-degree)."
             ),
@@ -2221,9 +2223,11 @@ class Command(BaseCommand):
         )
 
     def _apply_publication(self, root_target: str, seo: bool, public_url: str, project_title: str) -> None:
-        """Set every page's search-engine / crawler policy and write the server files (``network.publication``)."""
+        """Assemble the export as a site (``network.site``: landing page, navigation, methods and data pages),
+        then set its search-engine / crawler policy and write the server files (``network.publication``)."""
+        self.stdout.write("- overview, navigation, methods record and data dictionary")
         mode = "search-optimised" if seo else "private (no search engines, no AI crawlers)"
-        written = publication.publish(root_target, seo=seo, public_url=public_url, site_name=project_title)
+        written = site.finalise(root_target, project_title=project_title, seo=seo, public_url=public_url)
         self.stdout.write(f"- publication: {mode} — {', '.join(written)}")
         if seo and not public_url:
             self.stdout.write(
@@ -3179,31 +3183,9 @@ class Command(BaseCommand):
         self.stdout.write("done")
         strategies = opts.strategies_lower
 
-        # Copy the map template (js/, css/, static assets) whenever any HTML page is being
-        # generated, not just when a graph is requested — table pages and the structural
-        # similarity matrix all reference the same local CSS/JS files.
-        need_static_assets = (
-            opts.do_graph
-            or opts.do_3dgraph
-            or opts.do_html
-            or opts.do_consensus_matrix
-            or opts.do_structural_similarity
-            or opts.do_behavioural_equivalence
-            or opts.do_vacancy
-            or opts.do_robustness
-            or (opts.do_dominance and opts.do_html)
-            or (opts.do_links and opts.do_html)
-            or (audience_result is not None and opts.do_html)
-            # interest_structural.html imports ./js/utils.js and css/tables.css from
-            # the copied map assets, like the vacancy/robustness pages above.
-            or opts.do_interest_structural
-            # events.html draws its charts with the same copied JS/CSS.
-            or (opts.do_event_impact and opts.do_html)
-            # coordination.html / coordination3d.html reuse the map viewer JS/CSS.
-            or opts.do_coordination
-        )
-        if need_static_assets:
-            exporter.ensure_graph_root(root_target)
+        # The shared assets (css/, js/, logo, icon) are copied into every export: the landing page is always
+        # written and every page reads them. The map pages are copied only when their map is written.
+        exporter.ensure_graph_root(root_target)
 
         if opts.do_graph or opts.do_3dgraph or opts.do_coordination:
             self.stdout.write("\nGenerate map")
@@ -3213,6 +3195,7 @@ class Command(BaseCommand):
                     root_target,
                     opts.seo,
                     project_title=project_title,
+                    include_2d=opts.do_graph,
                     include_3d=opts.do_3dgraph,
                     vertical_layout=opts.vertical_layout,
                     extra_layouts=(["fa2"] if fa2_in_2d else []) + list(extra_positions.keys()),
@@ -3336,9 +3319,9 @@ class Command(BaseCommand):
             os.makedirs(root_target, exist_ok=True)
             sim_data = community_stats._compute_structural_equivalence(graph, graph_data, measures_labels)
             if sim_data is not None:
-                tables.write_structural_similarity_json(sim_data, root_target)
-            tables.write_structural_similarity_html(
-                output_filename=os.path.join(root_target, "structural_similarity.html"),
+                tables.write_structural_equivalence_json(sim_data, root_target)
+            tables.write_structural_equivalence_html(
+                output_filename=os.path.join(root_target, "structural_equivalence.html"),
                 seo=opts.seo,
                 project_title=project_title,
             )
@@ -3459,7 +3442,9 @@ class Command(BaseCommand):
             exporter.write_event_impact_json(ei_payload, root_target)
             if opts.do_html:
                 tables.write_event_impact_html(
-                    output_filename=os.path.join(root_target, "events.html"), seo=opts.seo, project_title=project_title
+                    output_filename=os.path.join(root_target, "event_impact.html"),
+                    seo=opts.seo,
+                    project_title=project_title,
                 )
             if opts.do_xlsx:
                 tables.write_event_impact_xlsx(
@@ -3499,13 +3484,13 @@ class Command(BaseCommand):
             )
             os.makedirs(root_target, exist_ok=True)
             exporter.write_interest_structural_json(int_payload, root_target)
-            self.stdout.write("- interest_structural.json")
-            tables.write_interest_structural_html(
-                output_filename=os.path.join(root_target, "interest_structural.html"),
+            self.stdout.write(f"- {exporter.INTERESTING_MESSAGES_JSON}")
+            tables.write_interesting_messages_html(
+                output_filename=os.path.join(root_target, "interesting_messages.html"),
                 seo=opts.seo,
                 project_title=project_title,
             )
-            self.stdout.write("- interest_structural.html")
+            self.stdout.write("- interesting_messages.html")
 
         global_rob_payload: dict | None = None
         if opts.do_robustness:
@@ -3732,9 +3717,9 @@ class Command(BaseCommand):
                         exporter.write_coordination_timeline_json(timeline_entries, root_target, **timeline_header)
 
         if opts.do_csv and community_table_data is not None and community_table_data.get("label_mixing"):
-            mixing_periods = [("All", community_table_data["label_mixing"])]
+            mixing_periods = [(pages.ALL_PERIODS, community_table_data["label_mixing"])]
             mixing_periods += [(e["key"], e["_label_mixing"]) for e in timeline_entries if e.get("_label_mixing")]
-            self.stdout.write("- label_flows.csv")
+            self.stdout.write(f"- {exporter.LABEL_FLOWS_CSV}")
             exporter.write_label_flows_csv(mixing_periods, root_target)
 
         if opts.do_dyadic_export:
@@ -3839,44 +3824,6 @@ class Command(BaseCommand):
                     year_data=audience_periods,
                 )
 
-        self.stdout.write("- index")
-        os.makedirs(root_target, exist_ok=True)
-        tables.write_index_html(
-            output_filename=os.path.join(root_target, "index.html"),
-            seo=opts.seo,
-            project_title=project_title,
-            include_graph=opts.do_graph,
-            include_3d_graph=opts.do_3dgraph,
-            include_channel_html=opts.do_html,
-            include_channel_xlsx=opts.do_xlsx,
-            include_network_html=opts.do_html,
-            include_network_xlsx=opts.do_xlsx,
-            include_community_html=opts.do_html,
-            include_community_xlsx=opts.do_xlsx,
-            include_compare_html=False,
-            compare_files=set(),
-            strategies=strategies,
-            include_consensus_matrix_html=opts.do_consensus_matrix,
-            include_structural_similarity=opts.do_structural_similarity,
-            include_behavioural_equivalence=opts.do_behavioural_equivalence,
-            timeline_entries=timeline_entries or None,
-            include_vacancy_analysis=opts.do_vacancy,
-            include_robustness_html=opts.do_robustness and opts.do_html,
-            include_robustness_xlsx=opts.do_robustness and opts.do_xlsx,
-            include_interest_structural=opts.do_interest_structural,
-            include_coordination_2d=coordination_written and opts.do_coordination_2d,
-            include_coordination_3d=coordination_written and opts.do_coordination_3d,
-            include_dominance_html=opts.do_dominance and opts.do_html,
-            include_dominance_xlsx=opts.do_dominance and opts.do_xlsx,
-            include_dyads=opts.do_dyadic_export,
-            include_event_impact_html=opts.do_event_impact and opts.do_html,
-            include_event_impact_xlsx=opts.do_event_impact and opts.do_xlsx,
-            include_links_html=opts.do_links and opts.do_html,
-            include_links_xlsx=opts.do_links and opts.do_xlsx,
-            include_audience_html=audience_result is not None and opts.do_html,
-            include_audience_xlsx=audience_result is not None and opts.do_xlsx,
-        )
-
         near_copy_count: int | None = None
         if opts.include_near_copies:
             near_copy_count = len(graph.graph.get("near_copies") or [])
@@ -3910,8 +3857,10 @@ class Command(BaseCommand):
             community_resolutions=community_resolutions,
             community_fits=community_fits,
             homophily=(community_table_data or {}).get("network_summary", {}).get("homophily"),
+            message_span=graph.graph.get(MESSAGE_SPAN_KEY),
         )
-        # Last, once every page and summary.json exist: one search-engine / crawler policy for the whole folder.
+        # Last, once every page and summary.json exist: the landing page, the navigation and the data dictionary
+        # are built from the files on disk, then one search-engine / crawler policy covers the whole folder.
         self._apply_publication(root_target, opts.seo, opts.public_url, project_title)
 
         _atomic_publish(root_target, _final_target)

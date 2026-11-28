@@ -6,12 +6,11 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from network import exporter, publication, tables
+from network import exporter, publication, site, tables
 from network.management.commands.compare_analysis import _recorded_public_url
 from webapp.models import Message
 from webapp.test_helpers import make_channel, make_label
@@ -71,7 +70,9 @@ class ApplyToPageTests(SimpleTestCase):
         self.assertIn(f'<link rel="canonical" href="{URL}network_table.html">', out)
         self.assertIn('<meta property="og:title" content="Demo | Network statistics">', out)
         self.assertNotIn("stale", out)
-        self.assertIn(publication.PAGE_DESCRIPTIONS["network_table.html"], out)
+        from network import pages
+
+        self.assertIn(pages.page_description("network_table.html"), out)
         # The breadcrumb names the page without the site name it starts with.
         self.assertIn('"name": "Network statistics"', out)
         self.assertNotIn("tdm-reservation", out)
@@ -100,29 +101,25 @@ class ApplyToPageTests(SimpleTestCase):
         self.assertNotIn("</script><b>", ld)
 
     def test_compared_copy_reuses_its_original_description(self) -> None:
-        self.assertTrue(publication.page_description("channel_table_2.html").endswith("in the compared analysis."))
-        self.assertEqual(publication.page_description("unknown.html"), "")
+        from network import pages
+
+        self.assertTrue(pages.page_description("channel_table_2.html").endswith("in the compared analysis."))
+        self.assertEqual(pages.page_description("unknown.html"), "")
 
 
 class PublishTests(TestCase):
     def setUp(self) -> None:
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root)
-        shutil.copytree(settings.BASE_DIR / "webapp_engine" / "map", self.root, dirs_exist_ok=True)
+        exporter.ensure_graph_root(self.root)
 
     def _build(self, seo: bool) -> None:
-        # 2D map requested, 3D not: graph3d.html is a template copy nothing links to.
+        # The 2D map is written, the 3D one is not; stray.html is a page the landing page does not link.
         exporter.apply_robots_to_graph_html(self.root, seo, project_title="Demo", node_count=3, edge_count=2)
+        with open(os.path.join(self.root, "stray.html"), "w") as f:
+            f.write("<!DOCTYPE html><html><head><title>Stray</title></head><body></body></html>")
         tables.write_table_html(
             {"nodes": [{}] * 3, "edges": []}, os.path.join(self.root, "channel_table.html"), seo=seo
-        )
-        tables.write_index_html(
-            os.path.join(self.root, "index.html"),
-            seo=seo,
-            project_title="Demo",
-            include_graph=True,
-            include_channel_html=True,
-            include_channel_xlsx=True,
         )
         for name in ("channel_table.xlsx", "nodes.csv", "network.gexf"):
             with open(os.path.join(self.root, name), "w") as f:
@@ -137,12 +134,14 @@ class PublishTests(TestCase):
                 },
                 f,
             )
+        # The landing page lists what is on disk, so it is written last.
+        site.write_index(site.inventory(self.root), project_title="Demo", seo=seo, public_url="")
 
     def test_private_export(self) -> None:
         self._build(seo=False)
         written = publication.publish(self.root, seo=False, public_url=URL, site_name="Demo")
         self.assertEqual(written, ["robots.txt", ".htaccess", "_headers"])
-        for page in ("index.html", "graph.html", "graph3d.html", "channel_table.html"):
+        for page in ("index.html", "graph.html", "stray.html", "channel_table.html"):
             with self.subTest(page=page):
                 head = _head(self.root, page)
                 self.assertIn(f'content="{publication.PRIVATE_ROBOTS}"', head)
@@ -178,12 +177,13 @@ class PublishTests(TestCase):
             {f"{URL}channel_table.xlsx", f"{URL}network.gexf", f"{URL}nodes.csv"},
         )
         self.assertIn("<title>Demo | Structural map</title>", _head(self.root, "graph.html"))
-        # The unrequested 3D template copy is not linked from the landing page: kept out of the index.
-        self.assertIn('<meta name="robots" content="noindex">', _head(self.root, "graph3d.html"))
+        # A page the landing page does not link stays out of the index; an unrequested map is not copied at all.
+        self.assertIn('<meta name="robots" content="noindex">', _head(self.root, "stray.html"))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "graph3d.html")))
         sitemap = _read(self.root, "sitemap.xml")
         self.assertIn(f"<loc>{URL}</loc>", sitemap)
         self.assertIn(f"<loc>{URL}graph.html</loc>", sitemap)
-        self.assertNotIn("graph3d.html", sitemap)
+        self.assertNotIn("stray.html", sitemap)
         self.assertIn(f"Sitemap: {URL}sitemap.xml", _read(self.root, "robots.txt"))
 
     def test_switching_policy_removes_the_other_policys_files(self) -> None:

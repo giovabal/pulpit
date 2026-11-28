@@ -15,6 +15,7 @@
 // panel beneath the diagram (assembled by _buildFigure; cards enriched from channels.json when given).
 
 import { showTip, moveTip, hideTip } from './_zoom_pan.js';
+import { communityName } from './utils.js';
 
 var NS = "http://www.w3.org/2000/svg";
 
@@ -210,7 +211,7 @@ function _scrollWrap(svg) {
 // part/whole as a rounded percent, with <1% / >99% guards so a non-empty flow never reads "0%" and a
 // partial one never reads "100%". "—" when the community is empty (shouldn't happen for a real ribbon).
 function _pct(part, whole) {
-    if (!whole) return "—";
+    if (!whole) return MISSING;
     if (part >= whole) return "100%";
     var p = part / whole * 100;
     if (p < 1) return "<1%";
@@ -275,7 +276,8 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
         role: "img",
         "aria-label": ariaLabel,
     });
-    svg.style.cssText = "display:block;background:#fff;border-radius:4px;";
+    var theme = pulpitTheme();
+    svg.style.cssText = "display:block;background:" + theme.surface + ";border-radius:4px;";
 
     // Ribbon selection: clicking a ribbon highlights it and reports its channels via onSelect; clicking
     // it again (or closing the panel, via the returned deselect) clears it. One ribbon selected at a time.
@@ -322,7 +324,7 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
             var key = bi + "\u0000" + r.src + "\u0000" + r.dst;
             _pathByKey[key] = path;
             _infoByKey[key] = info;
-            var tip = r.src + " [" + src.colLabel + "] → " + r.dst + " [" + dst.colLabel + "]: " +
+            var tip = communityName(r.src) + " [" + src.colLabel + "] → " + communityName(r.dst) + " [" + dst.colLabel + "]: " +
                 fmtInt(r.cnt) + " channel" + (r.cnt === 1 ? "" : "s") + " — click to list";
             path.setAttribute("aria-label", tip);
             path.addEventListener("mouseenter", function(e) {
@@ -354,7 +356,7 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
         var isFirst = (si === 0),
             isLast = (si === stages.length - 1);
         st.comms.forEach(function(c) {
-            var tip = c.label + " — " + fmtInt(c.count) + " channel" + (c.count === 1 ? "" : "s") + " [" + st.colLabel + "]";
+            var tip = communityName(c.label) + " — " + fmtInt(c.count) + " channel" + (c.count === 1 ? "" : "s") + " [" + st.colLabel + "]";
             var rect = _svgEl("rect", {
                 x: c.x,
                 y: c.y,
@@ -378,13 +380,13 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
                     "text-anchor": isFirst ? "end" : "start",
                     "dominant-baseline": "middle",
                     "font-size": "11",
-                    fill: "#1a1a1a",
+                    fill: theme.text,
                     "pointer-events": "none",
-                    stroke: "#ffffff",
+                    stroke: theme.surface,
                     "stroke-width": "3",
                     "paint-order": "stroke",
                 });
-                txt.textContent = _truncate(c.label, Math.max(4, Math.floor(space / LABEL_CHAR_W)));
+                txt.textContent = _truncate(communityName(c.label), Math.max(4, Math.floor(space / LABEL_CHAR_W)));
                 svg.appendChild(txt);
             }
         });
@@ -398,7 +400,7 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
             "text-anchor": "middle",
             "font-size": "12",
             "font-weight": "500",
-            fill: "#333",
+            fill: theme.text,
         });
         cl.textContent = st.colLabel;
         svg.appendChild(cl);
@@ -423,8 +425,8 @@ function _render_stages_svg(stages, availWidth, ariaLabel, onSelect) {
 // {pk,label,url} is the fallback, so a basic card still renders without channels.json.
 function _rgbCss(c) { return /^\s*\d+\s*,\s*\d+\s*,\s*\d+\s*$/.test(c || "") ? "rgb(" + c + ")" : (c || ""); }
 
-// "2022-04" → "04/22" (compact m/y, matching the /channels/ card date range).
-function _ymShort(s) { var m = /^(\d{4})-(\d{2})/.exec(String(s || "")); return m ? m[2] + "/" + m[1].slice(2) : ""; }
+// "2022-04-17" → "2022-04": year and month, the date form of every export page.
+function _ymShort(s) { var m = /^(\d{4})-(\d{2})/.exec(String(s || "")); return m ? m[1] + "-" + m[2] : ""; }
 
 function _usernameFromUrl(url) { var m = /t\.me\/(?:s\/)?\+?([^/?#]+)/i.exec(String(url || "")); return m ? m[1] : ""; }
 
@@ -542,12 +544,12 @@ function _renderChannelsPanel(panel, info, nodeById) {
         titleEl.appendChild(strong);
         titleEl.appendChild(colEl);
     }
-    commTag(info.srcLabel, info.srcCol, info.srcHex);
+    commTag(communityName(info.srcLabel), info.srcCol, info.srcHex);
     var arrow = document.createElement("span");
     arrow.className = "alluvial-channels-arrow";
     arrow.textContent = "→";
     titleEl.appendChild(arrow);
-    commTag(info.dstLabel, info.dstCol, info.dstHex);
+    commTag(communityName(info.dstLabel), info.dstCol, info.dstHex);
     var n = info.channels.length;
     var cnt = document.createElement("span");
     cnt.className = "text-muted";
@@ -561,8 +563,8 @@ function _renderChannelsPanel(panel, info, nodeById) {
         // different denominators (the two community sizes).
         share.textContent = "· " + n + "/" + info.srcTotal + " (" + info.srcPct + ") ↔ " +
             n + "/" + info.dstTotal + " (" + info.dstPct + ")";
-        share.title = "This flow is " + n + "/" + info.srcTotal + " of " + info.srcLabel + " [" + info.srcCol + "] (" +
-            info.srcPct + ") and " + n + "/" + info.dstTotal + " of " + info.dstLabel + " [" + info.dstCol + "] (" +
+        share.title = "This flow is " + n + "/" + info.srcTotal + " of " + communityName(info.srcLabel) + " [" + info.srcCol + "] (" +
+            info.srcPct + ") and " + n + "/" + info.dstTotal + " of " + communityName(info.dstLabel) + " [" + info.dstCol + "] (" +
             info.dstPct + ").";
         titleEl.appendChild(share);
     }
@@ -624,14 +626,16 @@ export function build_community_alluvial(strategyKey, yearComms, availWidth, nod
 
     var section = document.createElement("div");
     section.className = "community-alluvial mt-2 mb-4";
-    var title = document.createElement("p");
-    title.className = "small fw-semibold mb-1";
+    var title = document.createElement("h3");
     title.textContent = "Community flow across the timeline";
-    title.title = "Each column is a period's communities under this strategy; ribbons follow channels from " +
-        "one period's community into the next. Communities are re-detected (and re-labelled) every period, so " +
-        "read continuity from the ribbons: one thick ribbon = a cohort held together, many thin ribbons = it " +
-        "split. Click a ribbon to list the channels travelling along that flow.";
     section.appendChild(title);
+    var how = document.createElement("p");
+    how.className = "small text-muted mb-1";
+    how.textContent = "Each column is a period's communities under this method; ribbons follow channels from one " +
+        "period's community into the next. Communities are detected, and numbered, afresh in every period, so read " +
+        "continuity from the ribbons: one thick ribbon is a group held together, many thin ribbons a group that split. " +
+        "Click a ribbon to list the channels travelling along it.";
+    section.appendChild(how);
     if (overlapping) {
         var note = document.createElement("p");
         note.className = "small text-muted mb-1";

@@ -205,7 +205,7 @@ class NetworkNullsTests(TestCase):
         summary["significance"] = {"reciprocity": {"configuration": {"mean": 0.1, "z": 2.0, "p": 0.04}}}
         rows = {label: sig for label, _value, _group, sig in community_stats.network_summary_rows(summary)}
         self.assertEqual(rows["Reciprocity (0–1)"]["configuration"]["z"], 2.0)
-        self.assertIsNone(rows["Nodes"])
+        self.assertIsNone(rows["Channels"])
 
 
 class MrqapTests(TestCase):
@@ -364,7 +364,7 @@ class InferenceCommandTests(TestCase):
             mrqap_payload = json.loads((export_dir / "data" / "mrqap.json").read_text())
             summary = json.loads((export_dir / "summary.json").read_text())
             parameters_md = (export_dir / "PARAMETERS.md").read_text(encoding="utf-8")
-            self.assertTrue((export_dir / "label_flows.csv").is_file())
+            self.assertTrue((export_dir / "network_label_flows.csv").is_file())
             self.assertTrue((export_dir / "dyads" / "events.csv").is_file())
             self.assertTrue((export_dir / "dyads" / "dyads.csv").is_file())
             import openpyxl
@@ -379,7 +379,9 @@ class InferenceCommandTests(TestCase):
         self.assertEqual(metrics["mrqap"]["dyads"], 9 * 8)
         self.assertTrue(summary["options"]["mrqap"])
         self.assertIn("Nation", [h["group"] for h in summary["homophily"]])
-        self.assertTrue({"Homophily", "Label flows", "MRQAP"} <= set(sheets))
+        self.assertTrue(
+            {"Homophily", "Homophily by label", "Label flows", "MRQAP models", "MRQAP coefficients"} <= set(sheets)
+        )
         self.assertIn("Label permutations", parameters_md)
         self.assertIn("Network significance: random graphs per baseline", parameters_md)
         self.assertIn("MRQAP permutations", parameters_md)

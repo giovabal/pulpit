@@ -21,7 +21,6 @@ event per counted citation, so its per-pair counts equal the edge's ``weight_for
 / ``weight_copies`` / ``weight_image_copies``.
 """
 
-import csv
 import datetime
 import os
 from typing import Any
@@ -29,7 +28,7 @@ from typing import Any
 from network.graph_builder import forward_messages_qs, reference_rows_qs
 from network.mrqap import Design
 from network.parameters import FixedParameter
-from network.utils import GraphData, citation_count, dead_leaf_ids
+from network.utils import GraphData, citation_count, csv_writer, dead_leaf_ids
 
 import networkx as nx
 
@@ -79,7 +78,7 @@ def wave_of(period_key: str, graph: nx.DiGraph) -> Wave:
 
 def _write_csv(path: str, header: list[str], rows: list[list[Any]]) -> None:
     with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = csv_writer(handle)
         writer.writerow(header)
         writer.writerows(rows)
 
@@ -245,9 +244,13 @@ def _write_waves(directory: str, waves: list[Wave]) -> None:
 
 _README = """# Dyadic export
 
-The citation network of this export as data for network-modelling tools. Ids are Pulpit channel ids,
-the `id` column of `actors.csv` (and of `nodes.csv` / `edges.csv` when `--csv` is on). Ties point from
+The citation network of this export as data for network-modelling tools. Ids are Pulpit channel ids:
+the `id` column of `actors.csv`, the `channel_id` of `nodes.csv` and the `source_id` / `target_id` of `edges.csv`
+when `--csv` is on. Ties point from
 the citing channel to the cited one: a forward or mention of j by i is a tie i → j.
+
+Text that a spreadsheet would run as a formula (a title beginning with `=`, `+`, `-` or `@`) is written behind
+an apostrophe, as in every CSV of the export: strip it from `title` if you use the titles; join on ids.
 
 | File | Content |
 | :-- | :-- |

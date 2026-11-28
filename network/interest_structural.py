@@ -10,7 +10,7 @@ Gummadi, *Measuring user influence in Twitter*, ICWSM 2010, "weighted indegree"
 analogue) by walking the ``(forwarded_from, fwd_from_channel_post)`` join.
 
 Output is a JSON-serialisable dict written to
-``exports/<name>/data/interest_structural.json`` by
+``exports/<name>/data/interesting_messages.json`` by
 ``network.exporter.write_interest_structural_json``.
 """
 
@@ -52,7 +52,7 @@ FIXED_PARAMETERS: tuple[FixedParameter, ...] = (
         value=DEFAULT_TOP_PER_CHANNEL,
         scope="interest",
         affects="Length of each channel's two top lists (by interest score and by cross-community reach C) "
-        "in interest_structural.json.",
+        "in interesting_messages.json.",
         source=f"{_SOURCE}: DEFAULT_TOP_PER_CHANNEL",
     ),
     FixedParameter(

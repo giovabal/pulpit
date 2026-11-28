@@ -27,6 +27,7 @@ model; ``reverse_tie`` is endogenous and read as a control, not as a causal effe
 from dataclasses import dataclass, field
 from typing import Any
 
+from network.pages import PERIOD_HEADER
 from network.parameters import FixedParameter
 from network.utils import GraphData, citation_count, dead_leaf_ids
 
@@ -322,8 +323,25 @@ def _r(value: float, digits: int) -> float | None:
 
 # ── Flat row layouts shared by the XLSX sheet ──────────────────────────────────────────────────
 
-MODEL_COLUMNS: tuple[str, ...] = ("Year", "Dependent", "R²", "Mean", "Intercept", "Actors", "Dyads", "Permutations")
-COEFFICIENT_COLUMNS: tuple[str, ...] = ("Year", "Dependent", "Predictor", "Coefficient", "Standardised β", "t", "p")
+MODEL_COLUMNS: tuple[str, ...] = (
+    PERIOD_HEADER,
+    "Dependent",
+    "R²",
+    "Mean",
+    "Intercept",
+    "Actors",
+    "Dyads",
+    "Permutations",
+)
+COEFFICIENT_COLUMNS: tuple[str, ...] = (
+    PERIOD_HEADER,
+    "Dependent",
+    "Predictor",
+    "Coefficient",
+    "Standardised β",
+    "t",
+    "p",
+)
 
 
 def model_rows(payload: dict[str, Any], year: str) -> list[list[Any]]:

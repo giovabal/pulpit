@@ -14,6 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/site.css" type="text/css">
   <link rel="stylesheet" href="css/graph.css" type="text/css" media="screen">
   <link rel="stylesheet" href="css/a11y.css" type="text/css">
   <script type="importmap">
@@ -32,14 +33,17 @@
 <body>
 
   <a class="skip-link sr-only-focusable" href="#menu_container">Skip to map controls</a>
+  <nav class="export-topnav export-topnav--map" aria-label="Site navigation">
+    <div class="export-topnav-inner">
+      <a href="index.html" class="export-topnav-brand" title="Overview"><img src="pulpit_logo.svg" alt="Overview"></a>
+      <!-- pulpit:sitenav --><!-- /pulpit:sitenav -->
+    </div>
+  </nav>
   <main class="sigma-parent" id="sigma-main" aria-label="Network graph">
     <div class="sigma-expand" id="sigma-canvas" style="background-color: #123;"></div>
     <section class="sr-only" aria-label="Network summary">
-      <h2>Network summary</h2>
-      <p>Interactive map of <strong>__NODE_COUNT__</strong> Telegram channels and the <strong>__EDGE_COUNT__</strong> connections between them. Each channel's color shows the group it belongs to. Because the map itself can't be read by a screen reader, the same information is available in these tables:
-        <a href="channel_table.html">per-channel measures</a>,
-        <a href="community_table.html">community statistics</a>, and
-        <a href="network_table.html">whole-network statistics</a>.
+      <h1 id="map-title">Network map</h1>
+      <p>Interactive map of <strong>__NODE_COUNT__</strong> Telegram channels and the <strong>__EDGE_COUNT__</strong> ties between them. Each channel's colour shows the group it belongs to. Because the map itself can't be read by a screen reader, the same information is available <!-- pulpit:tablelinks -->from the <a href="index.html">overview page</a><!-- /pulpit:tablelinks -->.
       </p>
     </section>
   </main>
@@ -65,9 +69,6 @@
       <span class="d-none d-sm-block menu-button-label">Zoom</span>
     </div>
 
-    <button type="button" id="data_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#data_modal" aria-label="Open data exports">
-      <i class="bi bi-table" aria-hidden="true"></i><span class="d-none d-sm-block menu-button-label">Data</span>
-    </button>
 
     <button type="button" id="about_button" class="menu-button text-decoration-none text-center" data-bs-toggle="modal" data-bs-target="#about_modal" aria-label="About this map">
       <i class="bi bi-info-circle" aria-hidden="true"></i><span class="d-none d-sm-block menu-button-label">About</span>
@@ -79,20 +80,20 @@
 
     <div id="year-switcher" style="display:none" role="group" aria-label="Period filter"></div>
 
-    <a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer" class="ms-auto me-2 text-decoration-none text-muted small d-none d-md-inline" title="Analyzed with Pulpit">Pulpit</a>
+    <a href="https://github.com/giovabal/pulpit" target="_blank" rel="noopener noreferrer" class="ms-auto me-2 text-decoration-none text-muted small d-none d-md-inline" title="Analysed with Pulpit">Pulpit</a>
 
   </nav>
 
   <aside id="infobar" aria-label="Channel details">
     <button type="button" class="infobar-toggle btn btn-link p-0 text-reset infobar-close" aria-label="Close"><i class="bi bi-x-lg fs-3" aria-hidden="true"></i></button>
     <p id="node_picture"></p>
-    <h3 id="node_label"></h3>
+    <h2 id="node_label"></h2>
     <a id="node_url" href="" target="_blank" rel="noopener noreferrer"></a> <span id="node_location"></span>
     <hr class="infobar-sep">
     <div id="node_details">
       <div class="metric-grid">
         <div class="metric-chip">
-          <span class="metric-label">Users</span>
+          <span class="metric-label">Subscribers</span>
           <span class="metric-value" id="node_followers_count"></span>
         </div>
         <div class="metric-chip">
@@ -105,17 +106,17 @@
         </div>
       </div>
       <div id="node_measures" class="infobar-measures"></div>
-      <p><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> not active anymore.</span></p>
+      <p><span id="node_is_lost" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> no longer active.</span></p>
       <p id="node_group"></p>
     </div>
 
     <div class="accordion" id="accordion">
       <div class="accordion-item">
-	<h2 class="accordion-header" id="headingOne">
+	<h3 class="accordion-header" id="headingOne">
 	  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
-	    Two ways connections: <span id="node_mutual_count"></span>
+	    Mutual ties: <span id="node_mutual_count"></span>
 	  </button>
-	</h2>
+	</h3>
 	<div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#accordion">
 	  <div class="accordion-body">
 	    <ul id="node_mutual_list" class="list-unstyled"></ul>
@@ -123,11 +124,11 @@
 	</div>
       </div>
       <div class="accordion-item">
-	<h2 class="accordion-header" id="headingTwo">
+	<h3 class="accordion-header" id="headingTwo">
 	  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
-	    Inbound connections: <span id="node_in_count"></span>
+	    Cited by: <span id="node_in_count"></span>
 	  </button>
-	</h2>
+	</h3>
 	<div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordion">
 	  <div class="accordion-body">
 	    <ul id="node_in_list" class="list-unstyled"></ul>
@@ -135,11 +136,11 @@
 	</div>
       </div>
       <div class="accordion-item">
-	<h2 class="accordion-header" id="headingThree">
+	<h3 class="accordion-header" id="headingThree">
 	  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
-	    Outbound connections: <span id="node_out_count"></span>
+	    Cites: <span id="node_out_count"></span>
 	  </button>
-	</h2>
+	</h3>
 	<div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordion">
 	  <div class="accordion-body">
 	    <ul id="node_out_list" class="list-unstyled"></ul>
@@ -149,6 +150,13 @@
     </div>
   </aside>
 
+
+  <div id="file-protocol-notice" class="map-notice" role="alert" hidden>
+    <p><strong>This map cannot load from a folder.</strong> It reads its data through scripts that browsers block when a page is opened straight from disk. Serve the folder over HTTP — for instance run <code>python3 -m http.server</code> inside it and open <code>http://localhost:8000</code> — or publish it on a web server.</p>
+  </div>
+  <script>
+    if (location.protocol === "file:") document.getElementById("file-protocol-notice").hidden = false;
+  </script>
   <div class="modal fade" id="loading_modal" tabindex="-1" role="dialog" aria-label="Loading">
     <div class="modal-dialog" role="document" style="text-align: center; color: white;">
       <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status"></div><p id="loading_message"></p>
@@ -160,7 +168,7 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
 	<div class="modal-header">
-          <h4 class="modal-title" id="search_modalLabel">Search</h4>
+          <h2 class="modal-title h4" id="search_modalLabel">Search</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
@@ -187,7 +195,7 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
 	<div class="modal-header">
-          <h4 class="modal-title" id="about_modalLabel">About</h4>
+          <h2 class="modal-title h4" id="about_modalLabel">About</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
@@ -197,7 +205,7 @@
 	  <p id="about_graph_stats"></p>
 	  <p><a href="https://github.com/giovabal/pulpit/blob/main/docs/network-measures.md" target="_blank" rel="noopener noreferrer"><i class="bi bi-book me-1" aria-hidden="true"></i>Network measures and community strategies explained</a></p>
 	  <hr>
-	  <h5><i class="bi bi-share me-1" aria-hidden="true"></i>Share this map</h5>
+	  <h3 class="h5"><i class="bi bi-share me-1" aria-hidden="true"></i>Share this map</h3>
 	  <div class="input-group mt-2 mb-3">
 	    <input id="share_url" type="text" class="form-control form-control-sm" readonly aria-label="Page URL">
 	    <button class="btn btn-outline-secondary btn-sm" id="share_copy" type="button" aria-label="Copy to clipboard">
@@ -232,48 +240,12 @@
     </div>
   </div>
 
-  <div class="modal fade" id="data_modal" tabindex="-1" role="dialog" aria-labelledby="data_modalLabel">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-	<div class="modal-header">
-          <h4 class="modal-title" id="data_modalLabel">Data exports</h4>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-	</div>
-	<div class="modal-body">
-	  <a href="channel_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset mb-3">
-	    <i class="bi bi-table fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
-	    <div>
-	      <div class="fw-semibold">Channels</div>
-	      <div class="text-muted small">One row per channel — metrics, community assignments, and network measures.</div>
-	    </div>
-	  </a>
-	  <a href="community_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset mb-3">
-	    <i class="bi bi-diagram-3 fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
-	    <div>
-	      <div class="fw-semibold">Communities</div>
-	      <div class="text-muted small">Structural statistics per community — density, reciprocity, clustering, path length, and diameter.</div>
-	    </div>
-	  </a>
-	  <a href="network_table.html" target="_blank" rel="noopener noreferrer" class="d-flex align-items-start gap-3 text-decoration-none text-reset">
-	    <i class="bi bi-bar-chart fs-3 text-secondary flex-shrink-0" aria-hidden="true"></i>
-	    <div>
-	      <div class="fw-semibold">Network</div>
-	      <div class="text-muted small">Whole-network structural metrics — density, reciprocity, clustering, path length, WCC/SCC, assortativity, Freeman centralization, and modularity per strategy.</div>
-	    </div>
-	  </a>
-	</div>
-	<div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-	</div>
-      </div>
-    </div>
-  </div>
 
   <div class="modal fade" id="options_modal" tabindex="-1" role="dialog" aria-labelledby="options_modalLabel">
     <div class="modal-dialog" role="document">
       <div class="modal-content">
 	<div class="modal-header">
-          <h4 class="modal-title" id="options_modalLabel">Options</h4>
+          <h2 class="modal-title h4" id="options_modalLabel">Options</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 	</div>
 	<div class="modal-body">
@@ -293,11 +265,11 @@
 		  <select id="layout-select" class="form-select"></select>
 		</div>
 		<div class="mb-3" id="community-strategy-group" style="display:none">
-		  <label for="community-strategy-select" class="form-label">Community coloring</label>
+		  <label for="community-strategy-select" class="form-label">Colour by</label>
 		  <select id="community-strategy-select" class="form-select"></select>
 		</div>
 		<div class="mb-3">
-		  <label for="size-select" class="form-label">Nodes dimension</label>
+		  <label for="size-select" class="form-label">Channel size</label>
 		  <select id="size-select" class="form-select"></select>
 		</div>
 		<div class="mb-3">
@@ -306,8 +278,8 @@
 		</div>
 	      </form>
 	      <hr>
-	      <h5>Legend</h5>
-	      <ul id="legend" class="list-unstyled" aria-label="Community color legend"></ul>
+	      <h3 class="h5">Legend</h3>
+	      <ul id="legend" class="list-unstyled" aria-label="Community colour legend"></ul>
 	    </div>
 	    <div class="tab-pane fade" id="opts-styles-pane" role="tabpanel" aria-labelledby="opts-styles-tab">
 	      <form>
@@ -330,18 +302,18 @@
 		</div>
 		<div class="mb-3 form-check form-switch">
 		  <input class="form-check-input" type="checkbox" id="colored-edges-toggle" checked>
-		  <label class="form-check-label" for="colored-edges-toggle">Colored edges</label>
+		  <label class="form-check-label" for="colored-edges-toggle">Coloured ties</label>
 		</div>
 		<div class="mb-3 form-check form-switch">
 		  <input class="form-check-input" type="checkbox" id="edge-weight-toggle">
-		  <label class="form-check-label" for="edge-weight-toggle">Show edge weight</label>
+		  <label class="form-check-label" for="edge-weight-toggle">Show tie weight</label>
 		</div>
 		<div class="mb-3 form-check form-switch">
 		  <input class="form-check-input" type="checkbox" id="edge-arrows-toggle">
 		  <label class="form-check-label" for="edge-arrows-toggle">Show arrows</label>
 		</div>
 		<div class="mb-3">
-		  <label for="edge-opacity-slider" class="form-label">Edge opacity</label>
+		  <label for="edge-opacity-slider" class="form-label">Tie opacity</label>
 		  <input type="range" class="form-range" id="edge-opacity-slider" min="0" max="1" step="0.01" value="0.25">
 		</div>
 	      </form>

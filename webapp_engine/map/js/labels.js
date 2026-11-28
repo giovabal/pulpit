@@ -66,9 +66,9 @@ export function strategy_label(key) {
     var base = canonical_strategy_key(k);
     var label = STRATEGY_LABELS[base] ||
         (base.charAt(0).toUpperCase() + base.slice(1).replace(/_/g, ' '));
-    // Label-group partitions read as a manual "[custom label]" wherever they appear as a strategy
+    // Label-group partitions read as a manual "(label group)" wherever they appear as a strategy
     // option outside their own picker (mirrors CUSTOM_LABEL_SUFFIX in network/community.py).
-    if (/^labelgroup\d+$/.test(base)) label += ' [custom label]';
+    if (/^labelgroup\d+$/.test(base)) label += ' (label group)';
     if (k === base) return label;
     var rest = k.slice(base.length + 1); // e.g. "mode_nested_weights_poisson"
     var params = STRATEGY_PARAMS[base] || [];
@@ -90,6 +90,13 @@ export function strategy_label(key) {
         parts.push(params[i] + '=' + (STRATEGY_PARAM_KINDS[params[i]] === 'float' ? raw.replace(/_/g, '.') : raw));
     }
     return parts.length ? label + ' (' + parts.join(', ') + ')' : label;
+}
+
+// The display label of a channel measure: the one the export wrote, but for the subscriber count, which exports
+// made before the label was renamed call "Users".
+export function measure_label(key, label) {
+    if (key === 'fans') return 'Subscribers';
+    return label || key;
 }
 
 // Short labels shown in info-bar chips — kept terse so chips stay compact.
