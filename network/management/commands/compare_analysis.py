@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import re
 from pathlib import Path
@@ -7,7 +8,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from network import tables
+from network import publication, tables
 from webapp.models import Project
 from webapp_engine.command_logging import styled_warning_logs
 
@@ -31,8 +32,19 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=False,
             help=(
-                "Optimise the output mini-site for search engine discovery: sets indexable robots tags. "
-                "Without this flag the output actively discourages indexing."
+                "Optimise the export for search engines once it is published; without it the export keeps "
+                "search engines and AI crawlers out. Applied to every page of the target export, the "
+                "compared copies included. See docs/export-formats.md#publishing-an-export."
+            ),
+        )
+        parser.add_argument(
+            "--public-url",
+            dest="public_url",
+            default=None,
+            metavar="URL",
+            help=(
+                "The address the target export will be published at (canonical links and sitemap.xml with "
+                "--seo). Defaults to the one its structural_analysis run recorded in summary.json."
             ),
         )
         parser.add_argument(
@@ -67,6 +79,13 @@ class Command(BaseCommand):
         os.makedirs(root_target, exist_ok=True)
         project_title: str = Project.load().title
         seo = options["seo"]
+        raw_public_url = options.get("public_url")
+        if raw_public_url is None:
+            raw_public_url = _recorded_public_url(root_target)
+        try:
+            public_url = publication.normalise_public_url(raw_public_url)
+        except ValueError as exc:
+            raise CommandError(f"--public-url: {exc}") from exc
 
         def exists(name: str) -> bool:
             return os.path.isfile(os.path.join(root_target, name))
@@ -116,5 +135,19 @@ class Command(BaseCommand):
             include_compare_html=True,
             compare_files=compare_files,
         )
+        written = publication.publish(root_target, seo=seo, public_url=public_url, site_name=project_title)
+        self.stdout.write(f"- publication: {'search-optimised' if seo else 'private'} — {', '.join(written)}")
 
         self.stdout.write(self.style.SUCCESS("\nDone."))
+
+
+def _recorded_public_url(root_target: str) -> str:
+    """The ``--public-url`` the target export's own run recorded in its summary.json, ``""`` without one."""
+    try:
+        with open(os.path.join(root_target, "summary.json"), encoding="utf-8") as f:
+            summary = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    options = summary.get("options") if isinstance(summary, dict) else None
+    value = options.get("public_url") if isinstance(options, dict) else None
+    return value if isinstance(value, str) else ""

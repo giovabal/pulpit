@@ -17,7 +17,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
   <meta name="robots" content="{{ robots_meta }}">
-  <meta name="generator" content="Pulpit">
+{% if description %}  <meta name="description" content="{{ description }}">
+{% endif %}  <meta name="generator" content="Pulpit">
   <link rel="icon" href="favicon.ico" type="image/x-icon">
   <script>window.STRATEGY_LABELS = {{ strategy_labels_json|default:"{}"|safe }};</script>
   {% block head_extra %}{% endblock %}

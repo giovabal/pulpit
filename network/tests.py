@@ -2313,20 +2313,23 @@ class PatchHtmlTitleTests(TestCase):
             with self.subTest(title=title), tempfile.TemporaryDirectory() as tmpdir:
                 self._copy_map_pages(tmpdir)
                 apply_robots_to_graph_html(tmpdir, seo=False, project_title=title, include_3d=True)
-                for page in ("graph.html", "graph3d.html"):
+                for page, name in (("graph.html", "Structural map"), ("graph3d.html", "Structural map (3D)")):
                     with open(os.path.join(tmpdir, page)) as f:
                         content = f.read()
-                    self.assertIn(f"<title>{html.escape(title)}</title>", content)
+                    self.assertIn(f"<title>{html.escape(title)} | {name}</title>", content)
                     self.assertIn(f'<h4 class="modal-title" id="about_modalLabel">{html.escape(title)}</h4>', content)
 
     def test_backslashes_in_the_title_land_literally_in_the_coordination_pages(self) -> None:
         for title in self.TITLES:
             with self.subTest(title=title), tempfile.TemporaryDirectory() as tmpdir:
                 write_coordination_pages(tmpdir, seo=False, project_title=title, node_count=2, tie_count=1)
-                for page in ("coordination.html", "coordination3d.html"):
+                for page, name in (
+                    ("coordination.html", "Coordination map"),
+                    ("coordination3d.html", "Coordination map (3D)"),
+                ):
                     with open(os.path.join(tmpdir, page)) as f:
                         content = f.read()
-                    self.assertIn(f"<title>{title} — Coordination</title>", content)
+                    self.assertIn(f"<title>{title} | {name}</title>", content)
                     self.assertIn(f'id="about_modalLabel">{title} — Coordination</h4>', content)
 
 
@@ -2951,7 +2954,7 @@ class ExportNetworkCommandTests(TestCase):
         _b = _EXPORT_CMD
         for target in [
             f"{_b}.exporter.write_meta_json",
-            f"{_b}.exporter.write_robots_txt",
+            f"{_b}.publication.publish",
             f"{_b}.exporter.write_summary_json",
             f"{_b}.parameters.write_parameters_md",
             f"{_b}.tables.write_index_html",
@@ -4871,9 +4874,13 @@ class WriteCoordinationOutputsTests(TestCase):
                 self.assertNotIn("__EDGE_COUNT__", content)
                 self.assertIn("mutual co-forwarding ties", content)
                 self.assertNotIn("directed edges", content)
-                # Titled after the project, still noindex without --seo.
-                self.assertIn("<title>Test Project — Coordination</title>", content)
-                self.assertIn('content="noindex"', content)
+                # Titled after the project and the page, still noindex without --seo, and described as
+                # the coordination map rather than the structural one it is copied from.
+                self.assertIn("<title>Test Project | Coordination map", content)
+                self.assertIn('id="about_modalLabel">Test Project — Coordination</h4>', content)
+                self.assertIn('content="noindex', content)
+                self.assertIn("co-forwarding coordination", content)
+                self.assertNotIn("showing how they connect", content)
 
     def test_include_flags_gate_the_pages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

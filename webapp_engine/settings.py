@@ -469,6 +469,7 @@ SA_OUTPUT_GEXF = _structural.outputs.gexf
 SA_OUTPUT_GRAPHML = _structural.outputs.graphml
 SA_OUTPUT_CSV = _structural.outputs.csv
 SA_SEO = _structural.outputs.seo
+SA_PUBLIC_URL = _structural.outputs.public_url
 SA_VERTICAL_LAYOUT = _structural.outputs.vertical_layout
 SA_FA2_ITERATIONS = _structural.computation.fa2_iterations
 SA_LAYOUTS_2D = ",".join(_structural.layouts.layouts_2d)

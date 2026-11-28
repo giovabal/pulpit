@@ -51,6 +51,9 @@ exports/
     edges.csv               ← CSV edge list (optional)
     PARAMETERS.md           ← every parameter behind the numbers (always)
     summary.json            ← name, counts and CLI options, machine-readable (always)
+    robots.txt              ← crawler rules (always; see Publishing an export)
+    .htaccess, _headers     ← no-index HTTP headers for Apache / Netlify / Cloudflare Pages (without --seo)
+    sitemap.xml             ← the indexable pages (with --seo --public-url)
     data/near_copies.csv    ← near-copy audit list (only with --near-copy-edges)
     data/image_copies.csv   ← image-copy audit list (only with --image-copy-edges)
     data/
@@ -122,6 +125,39 @@ python -m http.server 8001
 Open [http://localhost:8001](http://localhost:8001) in your browser. This works on macOS, Linux, and Windows — run it from any terminal with Python on the PATH.
 
 If the Pulpit web interface is already running (`python manage.py runserver`), the export is also accessible at `http://localhost:8000/exports/<name>/graph.html` without starting a separate server.
+
+---
+
+## Publishing an export
+
+An export is a static web site: upload the folder to any web server and it works there. Before you upload it, choose whether search engines should find it. **Presentation → SEO-optimised** (`--seo`) decides this for every page and file in the export, and it is **off by default**.
+
+### Private (default): kept out of search engines and AI crawlers
+
+Without `--seo`, the export asks every crawler to stay away, and asks AI crawlers explicitly:
+
+- **Every page** asks not to be indexed, followed, cached, quoted in snippets, translated or used for AI (`<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate, noai, noimageai">`). It also carries `<meta name="tdm-reservation" content="1">`, the [TDMRep](https://www.w3.org/community/reports/tdmrep/CG-FINAL-tdmrep-20240510/) machine-readable reservation of text and data mining under Article 4 of EU Directive 2019/790. Pages send no referrer, so clicking a link out of the export does not tell the other site where the export lives.
+- **`robots.txt`** refuses every crawler (`User-agent: *` / `Disallow: /`) and repeats the refusal for each AI crawler by name: OpenAI's, Anthropic's, Perplexity's, Common Crawl's, ByteDance's, Meta's, Google's and Apple's AI-training tokens, and more (the list is `AI_USER_AGENTS` / `AI_ROBOTS_TOKENS` in `network/publication.py`).
+- **`.htaccess`** (Apache) and **`_headers`** (Netlify, Cloudflare Pages) send the same refusal as an `X-Robots-Tag` HTTP header on every file, including the JSON data, CSV, spreadsheets and channel pictures, which a meta tag cannot cover. On Apache, `.htaccess` also answers the AI crawlers with *403 Forbidden*, since several ignore `robots.txt`.
+
+These are requests that reputable search engines and AI companies honour, not access control. Anyone who has the address can still open the export, and so can a crawler that ignores the rules. For material that must stay confidential, put the folder behind a password (HTTP authentication on the server) or do not upload it.
+
+### Search-optimised (`--seo`): made to be found
+
+With `--seo`, the export is built to rank and to show well when shared:
+
+- Every page the landing page links to is indexable and has its own `<title>`, a `<meta name="description">`, and Open Graph and Twitter tags for link previews. A page nothing links to stays `noindex`: the map template is always copied into the export, even when the map was not requested, and such an unused copy stays out of the index.
+- The landing page describes the export as a schema.org [`Dataset`](https://developers.google.com/search/docs/appearance/structured-data/dataset), which Google Dataset Search reads. The description has the number of channels and ties and the date range, and its downloads are the export's CSV, XLSX, GEXF and GraphML files. The other pages have a breadcrumb back to the landing page.
+- `robots.txt` lets every crawler in.
+
+Set **Public URL** (`--public-url https://example.org/report/`) to the address the export will have once uploaded. Pages then get a canonical link and `og:url`, and `sitemap.xml` lists the indexable pages, with `robots.txt` pointing to it. Both need full addresses, so without a public URL neither is written, and the run warns you. The address is recorded in `summary.json`, and **Compare Analysis** reuses it.
+
+### Where the files take effect
+
+- `robots.txt` counts only at the root of a site (`https://example.org/robots.txt`). If the export goes into a subfolder, copy its rules into the site's own `robots.txt`, adding the folder to each path. With `--seo`, submit `sitemap.xml` in Google Search Console or Bing Webmaster Tools. The page tags work wherever the folder sits.
+- `.htaccess` is read by Apache wherever `AllowOverride` permits it. If the server answers *500 Internal Server Error* after you upload the folder, the host does not allow these settings: delete `.htaccess`. `_headers` is read only at the root of a Netlify or Cloudflare Pages site. GitHub Pages reads neither file, and some upload tools skip files whose names start with a dot.
+- When you replace an online export with one made under the other setting, delete the old folder first, so a stale `.htaccess` or `sitemap.xml` does not stay behind.
+- Disallowing a page in `robots.txt` keeps crawlers from reading it. Search engines can still list its bare address, with no title or snippet, if another site links to it. The `noindex` tags and headers cover crawlers that do fetch the page.
 
 ---
 

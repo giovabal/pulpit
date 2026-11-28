@@ -23,6 +23,7 @@ gexf = false
 graphml = false
 csv = false
 seo = false
+public_url = ""
 vertical_layout = false
 structural_similarity = false
 consensus_matrix = false

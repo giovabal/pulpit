@@ -195,7 +195,8 @@ Edge direction is fixed: a forward of Y's content by X produces an X→Y edge (c
 | `outputs.gexf` | Write `network.gexf` (Gephi-compatible) | `false` |
 | `outputs.graphml` | Write `network.graphml` (igraph / Cytoscape) | `false` |
 | `outputs.csv` | Write `nodes.csv` and `edges.csv` | `false` |
-| `outputs.seo` | Set indexable robots meta tags on the export HTML | `false` |
+| `outputs.seo` | Make the export findable once published: indexable pages with descriptions, link-preview tags, a schema.org Dataset description and a `robots.txt` that lets crawlers in. Off, the export keeps search engines and AI crawlers out (no-index tags, a refusing `robots.txt`, `.htaccess` / `_headers` headers). See [Publishing an export](export-formats.md#publishing-an-export) | `false` |
+| `outputs.public_url` | The address the export will be published at (`https://example.org/report/`): with `seo`, canonical links and `sitemap.xml` | `""` |
 | `outputs.vertical_layout` | Orient the graph viewport vertically | `false` |
 | `outputs.structural_similarity` | Generate the pairwise structural equivalence matrix (Lorrain & White 1971: cosine of weighted in+out tie profiles over third channels) | `false` |
 | `outputs.behavioural_equivalence` | Generate the pairwise behavioural equivalence matrix (Gower similarity of behavioural-measure profiles) | `false` |

@@ -16,6 +16,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from network import (
     community as net_community,
     measures as net_measures,
+    publication as net_publication,
     robustness as net_robustness,
     vacancy_analysis,
 )
@@ -135,6 +136,7 @@ class OperationsView(View):
             "SA_OUTPUT_GRAPHML": settings.SA_OUTPUT_GRAPHML,
             "SA_OUTPUT_CSV": settings.SA_OUTPUT_CSV,
             "SA_SEO": settings.SA_SEO,
+            "SA_PUBLIC_URL": settings.SA_PUBLIC_URL,
             "SA_VERTICAL_LAYOUT": settings.SA_VERTICAL_LAYOUT,
             "SA_DRAW_DEAD_LEAVES": settings.SA_DRAW_DEAD_LEAVES,
             "SA_DEAD_LEAVES_COLOR": settings.DEAD_LEAVES_COLOR,
@@ -711,6 +713,7 @@ TASK_ARG_SPECS: dict[str, list[tuple]] = {
         ("bool_explicit", "graphml", "--graphml", "--no-graphml"),
         ("bool_explicit", "csv", "--csv", "--no-csv"),
         ("bool_explicit", "seo", "--seo", "--no-seo"),
+        ("value", "public_url", "--public-url"),
         ("bool_explicit", "vertical_layout", "--vertical-layout", "--no-vertical-layout"),
         ("csv_unique", "layouts_2d", "--layouts-2d"),
         ("csv_unique", "layouts_3d", "--layouts-3d"),
@@ -870,6 +873,7 @@ TASK_DEFAULT_SPECS: dict[str, list[tuple]] = {
         ("graphml", "outputs.graphml", "bool"),
         ("csv", "outputs.csv", "bool"),
         ("seo", "outputs.seo", "bool"),
+        ("public_url", "outputs.public_url", "value"),
         ("vertical_layout", "outputs.vertical_layout", "bool"),
         ("structural_similarity", "outputs.structural_similarity", "bool"),
         ("behavioural_equivalence", "outputs.behavioural_equivalence", "bool"),
@@ -966,6 +970,7 @@ def _validate_post_constraints(task: str, post: Any, *, launching: bool = False)
         - A MODULEROLE basis, when set, must be among the selected
           community_strategies.
         - consensus_matrix requires ≥2 non-metadata (non-LABELGROUP) strategies.
+        - public_url, when set, must be an absolute http(s) address.
 
     * ``compare_analysis``: ``project_dir`` and ``compare_target`` are both
       required (the management command would otherwise reject them with a
@@ -985,6 +990,10 @@ def _validate_post_constraints(task: str, post: Any, *, launching: bool = False)
         return
 
     if task == "structural_analysis":
+        try:
+            net_publication.normalise_public_url(post.get("public_url", ""))
+        except ValueError as exc:
+            raise ValueError(f"Public URL: {exc}") from exc
         measure_tokens = post.getlist("measures") or []
         # The manual label-group partitions (their own fieldset) and the algorithmic strategies are
         # one combined --community-strategies value, so validate them together — a MODULEROLE basis

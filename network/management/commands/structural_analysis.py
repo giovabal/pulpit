@@ -32,6 +32,7 @@ from network import (
     mrqap,
     parameters,
     periods,
+    publication,
     robustness,
     tables,
     vacancy_analysis,
@@ -351,6 +352,8 @@ class ResolvedOptions:
 
     # Layout / presentation
     seo: bool
+    # Address the export will be published at (normalised, ending "/"; "" = unknown): canonical links + sitemap.xml.
+    public_url: str
     vertical_layout: bool
     target_layout: str
     # Raw value: either an int (e.g. 5000) or a string with optional "x" suffix
@@ -494,6 +497,7 @@ class ResolvedOptions:
             "structural_similarity": self.do_structural_similarity,
             "behavioural_equivalence": self.do_behavioural_equivalence,
             "seo": self.seo,
+            "public_url": self.public_url,
             "vertical_layout": self.vertical_layout,
             "fa2_iterations": self.fa2_iterations,
             "draw_dead_leaves": self.draw_dead_leaves,
@@ -616,8 +620,21 @@ class Command(BaseCommand):
             action=argparse.BooleanOptionalAction,
             default=None,
             help=(
-                "Optimise the output mini-site for search engine discovery: sets indexable robots tags "
-                "and adds meta descriptions. Without this flag the output actively discourages indexing."
+                "Optimise the export for search engines once it is published: indexable pages with descriptions, "
+                "Open Graph tags and a schema.org Dataset description, and a robots.txt that lets crawlers in. "
+                "Without it (the default) the export keeps search engines and AI crawlers out: robots meta and "
+                "TDM-reservation tags on every page, a robots.txt refusing every crawler, and .htaccess / _headers "
+                "files sending the same refusal as HTTP headers. See docs/export-formats.md#publishing-an-export."
+            ),
+        )
+        parser.add_argument(
+            "--public-url",
+            dest="public_url",
+            default=None,
+            metavar="URL",
+            help=(
+                "The address the export will be published at, e.g. https://example.org/report/. With --seo it "
+                "adds canonical links and writes sitemap.xml, which need absolute addresses."
             ),
         )
         parser.add_argument(
@@ -2203,6 +2220,19 @@ class Command(BaseCommand):
             rng=rng,
         )
 
+    def _apply_publication(self, root_target: str, seo: bool, public_url: str, project_title: str) -> None:
+        """Set every page's search-engine / crawler policy and write the server files (``network.publication``)."""
+        mode = "search-optimised" if seo else "private (no search engines, no AI crawlers)"
+        written = publication.publish(root_target, seo=seo, public_url=public_url, site_name=project_title)
+        self.stdout.write(f"- publication: {mode} — {', '.join(written)}")
+        if seo and not public_url:
+            self.stdout.write(
+                self.style.WARNING(
+                    "  no --public-url: pages carry no canonical link and no sitemap.xml is written "
+                    "(both need the address the export will be published at)"
+                )
+            )
+
     def _run_period_export(
         self,
         period: "periods.Period",
@@ -2780,6 +2810,11 @@ class Command(BaseCommand):
         if not export_name:
             export_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
+        try:
+            public_url = publication.normalise_public_url(options.get("public_url"))
+        except ValueError as exc:
+            raise CommandError(f"--public-url: {exc}") from exc
+
         # An explicit --community-palette wins; otherwise fall back to the config-derived
         # palette (and its reversed flag). A bare CLI run with no config would otherwise
         # resolve to "" and reach community.detect() as "palette '' not found".
@@ -2832,6 +2867,7 @@ class Command(BaseCommand):
                 event_impact.MIN_WEEKS_PER_SIDE,
             ),
             seo=_o("seo", False),
+            public_url=public_url,
             vertical_layout=vertical,
             target_layout=layout.LAYOUT_VERTICAL if vertical else layout.LAYOUT_HORIZONTAL,
             fa2_iterations=_o("fa2_iterations", ""),
@@ -3186,7 +3222,6 @@ class Command(BaseCommand):
                     # Real names for the manual LABELGROUP<id> colour-by options in the viewer.
                     strategy_labels=community.labelgroup_display_labels(),
                 )
-            exporter.write_robots_txt(root_target, opts.seo)
 
         self.stdout.write("- data files")
         exporter.write_graph_files(
@@ -3876,6 +3911,8 @@ class Command(BaseCommand):
             community_fits=community_fits,
             homophily=(community_table_data or {}).get("network_summary", {}).get("homophily"),
         )
+        # Last, once every page and summary.json exist: one search-engine / crawler policy for the whole folder.
+        self._apply_publication(root_target, opts.seo, opts.public_url, project_title)
 
         _atomic_publish(root_target, _final_target)
         self.stdout.write(self.style.SUCCESS("\nDone."))

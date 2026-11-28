@@ -93,6 +93,8 @@ STRUCTURAL_DEFAULTS: dict = {
         "graphml": False,
         "csv": False,
         "seo": False,
+        # The address the export will be published at: canonical links and sitemap.xml under --seo.
+        "public_url": "",
         "vertical_layout": False,
         "structural_similarity": False,
         "behavioural_equivalence": False,

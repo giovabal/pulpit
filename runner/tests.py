@@ -588,6 +588,15 @@ class RunTaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Environment level", resp.json()["error"])
 
+    def test_run_rejects_structural_public_url_without_scheme(self):
+        with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
+            resp = self.client.post(
+                reverse("operations-run", args=["structural_analysis"]),
+                {"graph": "on", "seo": "on", "public_url": "example.org/report"},
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Public URL", resp.json()["error"])
+
     def test_run_rejects_structural_near_copy_threshold_above_one(self):
         with patch("runner.views.tasks.get_status", return_value={"status": "idle"}):
             resp = self.client.post(
@@ -1220,6 +1229,11 @@ class BuildArgsExportNetworkTests(TestCase):
         self.assertIn("--dyadic-export", args_on)
         self.assertEqual(args_on[args_on.index("--mrqap-permutations") + 1], "500")
         self.assertEqual(args_on[args_on.index("--network-stat-groups") + 1], "HOMOPHILY,SIGNIFICANCE")
+
+    def test_public_url_value_flag(self):
+        self.assertNotIn("--public-url", _build_args("structural_analysis", FakePost()))
+        args = _build_args("structural_analysis", FakePost({"public_url": " https://example.org/report/ "}))
+        self.assertEqual(args[args.index("--public-url") + 1], "https://example.org/report/")
 
     def test_environment_depth_value_flag(self):
         self.assertNotIn("--environment-depth", _build_args("structural_analysis", FakePost()))

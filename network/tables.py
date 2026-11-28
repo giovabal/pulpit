@@ -12,6 +12,7 @@ from network.community import labelgroup_display_labels, strategy_display_label
 from network.community_stats import PARTITION_COMPARISON_METRICS, SIGNIFICANCE_COLUMNS, network_summary_rows
 from network.exporter import sbm_confidence_columns
 from network.measures._registry import role_companions
+from network.publication import robots_content
 from network.utils import CommunityTableData, GraphData
 
 import openpyxl
@@ -72,7 +73,8 @@ def _write_page(
     title = f"{project_title} | {label}" if project_title else label
     context = {
         "title": title,
-        "robots_meta": "index, follow" if seo else "noindex, nofollow",
+        # Provisional: publication.publish() sets every page's policy tags once the export is complete.
+        "robots_meta": robots_content(seo),
         "description": description,
         **_pulpit_ctx(),
     }
@@ -1176,16 +1178,9 @@ def write_index_html(
     include_audience_html: bool = False,
     include_audience_xlsx: bool = False,
 ) -> None:
-    if seo:
-        title = project_title or "Network Analysis"
-        robots_meta = "index, follow"
-    else:
-        title = project_title or "Network Analysis"
-        robots_meta = "noindex, nofollow"
-
     context = {
-        "title": title,
-        "robots_meta": robots_meta,
+        "title": project_title or "Network Analysis",
+        "robots_meta": robots_content(seo),
         "project_title": project_title,
         "include_graph": include_graph,
         "include_3d_graph": include_3d_graph,

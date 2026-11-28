@@ -822,7 +822,7 @@
               <div class="ops-flags">
                 <label class="ops-flag"><input type="checkbox" name="seo" {% if ad.SA_SEO %}checked{% endif %}>SEO-optimised
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                     title="Add meta tags and structured data to the graph HTML for better search engine indexing. Use when publishing the graph publicly."></i>
+                     title="On: once published, the export is made to be found — indexable pages with descriptions, link previews, a Dataset description for Google Dataset Search, and with a public URL a sitemap. Off (default): it keeps search engines and AI crawlers out — no-index tags on every page, a robots.txt refusing every crawler, and .htaccess / _headers files sending the refusal on every file."></i>
                 </label>
                 <label class="ops-flag"><input type="checkbox" name="vertical_layout" {% if ad.SA_VERTICAL_LAYOUT %}checked{% endif %}>Vertical layout
                   <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -834,6 +834,14 @@
                 </label>
               </div>
               <div class="ops-params">
+                <div class="ops-param ops-param--full">
+                  <label for="public_url">Public URL
+                    <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                       title="Optional. The address the export will be published at, e.g. https://example.org/report/. With SEO-optimised on, pages get canonical links and a sitemap.xml is written; both need the full address."></i>
+                  </label>
+                  <input type="url" name="public_url" id="public_url" value="{{ ad.SA_PUBLIC_URL }}"
+                         placeholder="https://example.org/report/" autocomplete="off" spellcheck="false" data-width="lg">
+                </div>
                 <div class="ops-param ops-param--full">
                   <label for="community_palette">Community palette
                     <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -1258,7 +1266,7 @@
             <div class="ops-flags">
               <label class="ops-flag"><input type="checkbox" name="seo">SEO-optimised
                 <i class="bi bi-info-circle ops-tip" data-bs-toggle="tooltip" data-bs-placement="top"
-                   title="Add meta tags to the generated HTML for better search engine indexing."></i>
+                   title="On: the target export, compared pages included, is made to be found by search engines once published. Off: it keeps search engines and AI crawlers out. Canonical links and the sitemap reuse the public URL the target export was made with."></i>
               </label>
             </div>
           </fieldset>
@@ -2254,6 +2262,7 @@ function showToast(msg, type) {
         setCheck('graphml',          opts.graphml);
         setCheck('csv',              opts.csv);
         setCheck('seo',              opts.seo);
+        setVal('public_url',         opts.public_url || '');
         setCheck('vertical_layout',  opts.vertical_layout);
         setCheck('consensus_matrix', opts.consensus_matrix);
         setCheck('structural_similarity', opts.structural_similarity);

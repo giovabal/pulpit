@@ -21,6 +21,7 @@ from network.community import (
     strategy_display_label,
 )
 from network.measures._registry import role_companions
+from network.publication import PAGE_DESCRIPTIONS, set_robots_meta
 from network.utils import GraphData
 from webapp.models import Channel
 from webapp.utils.colors import parse_color, rgb_avg
@@ -139,22 +140,29 @@ def _patch_html_file(
     edge_count: int = 0,
     strategy_labels: "dict[str, str] | None" = None,
     data_dir: "str | None" = None,
+    page_name: str = "",
+    about_title: "str | None" = None,
 ) -> None:
-    """Patch the robots meta tag, title, and layout flags in a static HTML file in-place."""
+    """Patch the robots meta tag, title, and layout flags in a static HTML file in-place.
+
+    The ``<title>`` reads ``"<project_title> | <page_name>"`` (either alone when the other is empty), so
+    no two pages of an export share one; the About dialog shows *about_title*, by default *project_title*.
+    """
     if not os.path.exists(path):
         return
     with open(path) as f:
         content = f.read()
-    if seo:
-        content = content.replace(
-            '  <meta name="robots" content="noindex">',
-            '  <meta name="robots" content="index, follow">',
-        )
-    if project_title:
-        escaped = _html.escape(project_title)
+    # The provisional policy tag: publication.publish() sets every page's head once the export is complete.
+    content = set_robots_meta(content, seo)
+    page_title = " | ".join(part for part in (project_title, page_name) if part)
+    if page_title:
+        escaped_title = _html.escape(page_title)
         # Function replacements, never a replacement *string*: re.sub would read backslash escapes in the
         # user-supplied title ("\B" raises, "\1" is a group reference, "\n" silently becomes a newline).
-        content = re.sub(r"<title>[^<]*</title>", lambda _m: f"<title>{escaped}</title>", content)
+        content = re.sub(r"<title>[^<]*</title>", lambda _m: f"<title>{escaped_title}</title>", content)
+    about_title = project_title if about_title is None else about_title
+    if about_title:
+        escaped = _html.escape(about_title)
         content = re.sub(
             r'(<h4 class="modal-title" id="about_modalLabel">)[^<]*(</h4>)',
             lambda m: f"{m.group(1)}{escaped}{m.group(2)}",
@@ -208,6 +216,15 @@ def _patch_html_file(
         f.write(content)
 
 
+# The page part of each map page's <title> ("<project> | <page name>"), so that no two pages share a title.
+MAP_PAGE_NAMES: dict[str, str] = {
+    "graph.html": "Structural map",
+    "graph3d.html": "Structural map (3D)",
+    "coordination.html": "Coordination map",
+    "coordination3d.html": "Coordination map (3D)",
+}
+
+
 def apply_robots_to_graph_html(
     root_target: str,
     seo: bool,
@@ -231,6 +248,7 @@ def apply_robots_to_graph_html(
         node_count=node_count,
         edge_count=edge_count,
         strategy_labels=strategy_labels,
+        page_name=MAP_PAGE_NAMES["graph.html"],
     )
     if include_3d:
         _patch_html_file(
@@ -243,6 +261,7 @@ def apply_robots_to_graph_html(
             node_count=node_count,
             edge_count=edge_count,
             strategy_labels=strategy_labels,
+            page_name=MAP_PAGE_NAMES["graph3d.html"],
         )
 
 
@@ -561,16 +580,6 @@ def write_image_copies_csv(graph: nx.DiGraph, graph_data: GraphData, data_dir: s
     return path
 
 
-def write_robots_txt(root_target: str, seo: bool) -> None:
-    """Write a robots.txt that either allows or disallows all crawlers."""
-    if seo:
-        content = "User-agent: *\nAllow: /\n"
-    else:
-        content = "User-agent: *\nDisallow: /\n"
-    with open(os.path.join(root_target, "robots.txt"), "w") as f:
-        f.write(content)
-
-
 # Key of the environment-depth colouring in communities.json ("colorings", not "strategies" — it
 # is not a community partition and never enters the community tables or the comparison matrices);
 # the viewers merge it into their colour-by selector. Mirrors ENV_DEPTH_KEY in map/js/utils.js.
@@ -811,6 +820,7 @@ def write_summary_json(
         "graphml",
         "csv",
         "seo",
+        "public_url",
         "vertical_layout",
         "consensus_matrix",
         "structural_similarity",
@@ -1210,11 +1220,7 @@ def write_coordination_timeline_json(
         f.write(json.dumps(payload))
 
 
-_COORD_DESC_2D = (
-    "An interactive map of temporal co-forwarding coordination: Telegram channels linked when they "
-    "repeatedly forwarded the same origin message within a short time window."
-)
-_COORD_DESC_3D = "An interactive 3D map of temporal co-forwarding coordination between Telegram channels."
+_DESCRIPTION_META_RE = re.compile(r'(<meta name="description" content=")[^"]*(")')
 
 
 def write_coordination_pages(
@@ -1234,7 +1240,7 @@ def write_coordination_pages(
     ``include_2d`` / ``include_3d`` mirror the ``--coordination-2d`` /
     ``--coordination-3d`` output toggles. Each page is the pristine map
     template re-pointed at ``data_coordination/`` via ``window.DATA_DIR``, with
-    titles and descriptions reworded for the coordination layer. ``tie_count``
+    title, About heading and description reworded for the coordination layer. ``tie_count``
     is the number of *unordered* pairs — the figure quoted in the
     screen-reader summary ("mutual co-forwarding ties"). No extra layouts are
     advertised (FA2 only), so the layout switcher stays hidden; the year
@@ -1247,23 +1253,16 @@ def write_coordination_pages(
             include_2d,
             "graph.html",
             "coordination.html",
-            "An interactive force-directed network map of Telegram channels, "
-            "showing connections through forwards and references.",
-            _COORD_DESC_2D,
-            "A map for Telegram channels",
-            "Co-forwarding coordination map",
+            PAGE_DESCRIPTIONS["coordination.html"],
         ),
         (
             include_3d,
             "graph3d.html",
             "coordination3d.html",
-            "An interactive 3D force-directed network map of Telegram channels.",
-            _COORD_DESC_3D,
-            "Pulpit project — 3D map",
-            "Co-forwarding coordination — 3D map",
+            PAGE_DESCRIPTIONS["coordination3d.html"],
         ),
     )
-    for included, src_name, dst_name, desc_old, desc_new, title_old, title_new in page_specs:
+    for included, src_name, dst_name, desc_new in page_specs:
         if not included:
             continue
         src_path = os.path.join(map_src, src_name)
@@ -1274,8 +1273,9 @@ def write_coordination_pages(
         except OSError as e:
             logger.warning("Could not read map template %s: %s", src_path, e)
             continue
-        content = content.replace(desc_old, desc_new)
-        content = content.replace(title_old, title_new)
+        # The structural map's description, whatever its wording, becomes the coordination map's.
+        description = _html.escape(desc_new)
+        content = _DESCRIPTION_META_RE.sub(lambda m, d=description: f"{m.group(1)}{d}{m.group(2)}", content)
         content = content.replace(
             "</strong> connections between them", "</strong> mutual co-forwarding ties between them"
         )
@@ -1284,7 +1284,7 @@ def write_coordination_pages(
         _patch_html_file(
             dst_path,
             seo,
-            coord_title,
+            project_title,
             vertical_layout=vertical_layout,
             extra_layouts=[],
             extra_layouts_3d=[],
@@ -1292,6 +1292,8 @@ def write_coordination_pages(
             edge_count=tie_count,
             strategy_labels=strategy_labels,
             data_dir=f"{_COORDINATION_DATA_DIR}/",
+            page_name=MAP_PAGE_NAMES[dst_name],
+            about_title=coord_title,
         )
 
 
