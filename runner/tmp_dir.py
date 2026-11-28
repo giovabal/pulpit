@@ -191,12 +191,23 @@ def crawl_download_dir() -> Iterator[str]:
 def export_in_progress(name: str) -> Iterator[None]:
     """Mark ``exports/<name>.tmp/`` and ``<name>.old/`` as this run's for the block (``exports/<name>.lock``).
 
-    ``LockHeldError`` when another run of the same name holds it.
+    ``LockHeldError`` when another run of the same name holds it. The staging folder goes when the
+    block ends: a published run has renamed it already, and any other way out (an error, Ctrl-C)
+    leaves nothing worth keeping. Killed by the Operations panel's Abort, which unwinds nothing,
+    the run leaves it to the panel's wrapper (``removed_if_killed``). ``<name>.old/`` is never
+    deleted here: it may be the only published copy (the command's crash recovery).
     """
+    from runner.control import removed_if_killed
+
     root = exports_root()
     root.mkdir(parents=True, exist_ok=True)
-    with held_lock(root / f"{name}{LOCK_SUFFIX}"):
-        yield
+    lock = root / f"{name}{LOCK_SUFFIX}"
+    staging = root / f"{name}{STAGING_SUFFIX}"
+    with held_lock(lock), removed_if_killed(lock, [staging]):
+        try:
+            yield
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 # ── Scan and clear ───────────────────────────────────────────────────────────

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
+from unittest import skipIf
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -284,6 +286,19 @@ class LaunchGuardsTests(_TmpMixin, TestCase):
         self.assertEqual(mock_popen.call_args.kwargs["env"]["DJANGO_COLORS"], "dark")
         meta = json.loads((self.tmp_dir / "runner_search_channels.meta.json").read_text())
         self.assertNotIn("--force-color", meta["args"])
+
+    def test_launch_points_the_command_to_a_fresh_cleanup_note(self):
+        from runner.control import CLEANUP_ENV
+        from runner.tasks import launch
+
+        note = self.tmp_dir / "runner_structural_analysis.cleanup.json"
+        note.write_text("{}")  # left by a run whose wrapper died too
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        with patch("runner.tasks.subprocess.Popen", return_value=mock_proc) as mock_popen:
+            launch("structural_analysis", [])
+        self.assertEqual(mock_popen.call_args.kwargs["env"][CLEANUP_ENV], str(note))
+        self.assertFalse(note.exists())
 
 
 class AbortGuardsTests(_TmpMixin, TestCase):
@@ -2607,3 +2622,107 @@ class TmpDirTests(_TmpMixin, TestCase):
         lock.write_bytes(b"")
         self.assertTrue(_remove_lock(lock))
         self.assertFalse(lock.exists())
+
+    def test_export_staging_goes_however_the_run_ends(self):
+        from runner.tmp_dir import export_in_progress
+
+        staging = self.exports_dir / "run.tmp"
+        backup = self._export_dir("run.old")  # possibly the only published copy: never deleted here
+        with export_in_progress("run"):
+            staging.mkdir()
+        self.assertFalse(staging.exists())
+        with self.assertRaises(KeyboardInterrupt), export_in_progress("run"):
+            staging.mkdir()
+            raise KeyboardInterrupt
+        self.assertFalse(staging.exists())
+        self.assertTrue(backup.exists())
+        self.assertEqual(sorted(p.name for p in self.exports_dir.iterdir()), ["run.old"])
+
+    def test_the_cleanup_note_names_the_staging_while_the_run_lives(self):
+        import os
+
+        from runner.control import CLEANUP_ENV
+        from runner.tmp_dir import export_in_progress
+
+        note = self.tmp_dir / "runner_structural_analysis.cleanup.json"
+        with patch.dict(os.environ, {CLEANUP_ENV: str(note)}), export_in_progress("run"):
+            self.assertEqual(
+                json.loads(note.read_text()),
+                {"lock": str(self.exports_dir / "run.lock"), "remove": [str(self.exports_dir / "run.tmp")]},
+            )
+        self.assertFalse(note.exists())
+
+
+# A stand-in for structural_analysis under the panel: holds its export's lock, stages, leaves the
+# cleanup note through runner.control.removed_if_killed, then waits to be aborted.
+_KILLED_CHILD = """
+import fcntl, sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from runner.control import removed_if_killed
+exports = Path(sys.argv[2])
+lock, staging = exports / "run.lock", exports / "run.tmp"
+if sys.argv[3] == "hold":
+    handle = open(lock, "a+b")
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+staging.mkdir()
+(staging / "half.json").write_text("{}")
+with removed_if_killed(lock, [staging]):
+    time.sleep(30)
+"""
+
+
+@skipIf(sys.platform == "win32", "the panel's abort is a POSIX signal")
+class AbortCleanupTests(_TmpMixin, TestCase):
+    """The panel's wrapper deletes what an aborted command named in its cleanup note."""
+
+    def setUp(self):
+        super().setUp()
+        self.exports = self.tmp_dir / "exports"
+        self.exports.mkdir()
+        self.note = self.tmp_dir / "runner_structural_analysis.cleanup.json"
+
+    def _abort(self, child_holds_lock: bool = True) -> tuple[dict, str]:
+        import os
+        import signal
+        import subprocess
+        import time
+
+        from django.conf import settings
+
+        from runner.control import CLEANUP_ENV
+        from runner.tasks import _WRAPPER_SCRIPT
+
+        meta = self.tmp_dir / "runner_structural_analysis.meta.json"
+        meta.write_text(json.dumps({"pid": None, "exit_code": None}))
+        child = [sys.executable, "-c", _KILLED_CHILD, str(settings.BASE_DIR), str(self.exports)]
+        child.append("hold" if child_holds_lock else "free")
+        wrapper = subprocess.Popen(
+            [sys.executable, "-c", _WRAPPER_SCRIPT, str(meta), *child],
+            env={**os.environ, CLEANUP_ENV: str(self.note)},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        deadline = time.monotonic() + 20
+        while not self.note.exists():  # the child is staging
+            self.assertLess(time.monotonic(), deadline, "the child never wrote its cleanup note")
+            time.sleep(0.02)
+        wrapper.send_signal(signal.SIGTERM)  # what runner.tasks.abort sends
+        out, _ = wrapper.communicate(timeout=20)
+        return json.loads(meta.read_text()), out.decode()
+
+    def test_abort_deletes_the_staging_and_the_dead_lock(self):
+        meta, log = self._abort()
+        self.assertEqual(meta["exit_code"], -15)  # killed outright, as before: no unwinding
+        self.assertEqual(list(self.exports.iterdir()), [])
+        self.assertFalse(self.note.exists())
+        self.assertIn("Removing exports/run.tmp/", log)
+
+    def test_a_run_that_took_the_lock_over_keeps_the_folders(self):
+        from runner.tmp_dir import held_lock
+
+        with held_lock(self.exports / "run.lock"):
+            _meta, log = self._abort(child_holds_lock=False)
+            self.assertTrue((self.exports / "run.tmp" / "half.json").exists())
+        self.assertFalse(self.note.exists())
+        self.assertNotIn("Removing", log)

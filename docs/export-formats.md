@@ -84,7 +84,7 @@ exports/
 
 ### Atomic writes
 
-All output first goes to a `<name>.tmp` staging directory. Only after every file — including `PARAMETERS.md` and `summary.json` — has been successfully written is the staging directory renamed to `<name>`. Aborting an in-progress export (via the Abort button or Ctrl-C) leaves any previous export with the same name untouched. A stale `<name>.tmp` directory from a crashed run is removed automatically at the start of the next export with the same name, and **Manage → Maintenance → Temporary files** removes the others ([Web interface § Maintenance](web-interface.md#maintenance--managemaintenance)). An analysis holds `exports/<name>.lock` for as long as it runs, so Maintenance leaves its folders alone, and a second analysis of the same name stops at once instead of overwriting them.
+All output first goes to a `<name>.tmp` staging directory. Only after every file — including `PARAMETERS.md` and `summary.json` — has been successfully written is the staging directory renamed to `<name>`. Aborting an in-progress export (via the Abort button or Ctrl-C) leaves any previous export with the same name untouched, and deletes the unfinished `<name>.tmp`; so does a run that fails. A stale `<name>.tmp` directory left by a run that was killed otherwise (from a terminal, or by the system) is removed automatically at the start of the next export with the same name, and **Manage → Maintenance → Temporary files** removes the others ([Web interface § Maintenance](web-interface.md#maintenance--managemaintenance)). An analysis holds `exports/<name>.lock` for as long as it runs, so Maintenance leaves its folders alone, and a second analysis of the same name stops at once instead of overwriting them.
 
 ---
 

@@ -156,7 +156,7 @@ The operations panel presents the four pipeline tasks as numbered cards:
 For each task:
 
 - **Run** — starts the task as a subprocess; the log streams in real time in the panel
-- **Abort** — stops the running process (SIGTERM). The command unwinds before exiting: its temporary download folder is removed, the Telegram connection closes, a write in progress rolls back, and a message walk cut short keeps the days it finished. A second *Abort* kills it outright
+- **Abort** — stops the running process (SIGTERM). A crawl or a search unwinds before exiting: its temporary download folder is removed, the Telegram connection closes, a write in progress rolls back, and a message walk cut short keeps the days it finished. A second *Abort* kills it outright. A structural analysis stops at once, even in the middle of a long computation, and its unfinished export (`exports/<name>.tmp/`) is then deleted; the card reads *running* until that is done
 - **Request pause** — Crawl Channels and Search Channels only: pause the run and release the database (see [Pausing a run](#pausing-a-run))
 - **Options** — expand to set task-specific parameters (see [Workflow](workflow.md) for a full reference)
 - **Status indicator** — idle / running / paused / done / failed
@@ -263,7 +263,7 @@ The same catalog and the current database size are available programmatically th
 
 **Temporary files** shows what the `tmp/` folder and the stopped analyses' leftovers in `exports/` hold and how much space they take, then **Delete temporary files** removes them. They are:
 - each crawl's download folder. A crawl that was killed, or aborted before this release, leaves its folder behind full of half-downloaded media, and these leftovers can reach hundreds of gigabytes;
-- the unfinished exports. A structural analysis writes its export into `exports/<name>.tmp/` and renames it only once every file is written ([Export formats § Atomic writes](export-formats.md#atomic-writes)), so an analysis that is aborted, killed or fails leaves that folder behind. It never shows in the list of exports and takes as much room as a finished export. In the rare case an analysis stopped in the middle of replacing an export, the previous export is put back rather than deleted;
+- the unfinished exports. A structural analysis writes its export into `exports/<name>.tmp/` and renames it only once every file is written ([Export formats § Atomic writes](export-formats.md#atomic-writes)), so an analysis killed from a terminal, or stopped before this release, left that folder behind (one aborted from the Operations panel, failing, or stopped with Ctrl-C now deletes it). It never shows in the list of exports and takes as much room as a finished export. In the rare case an analysis stopped in the middle of replacing an export, the previous export is put back rather than deleted;
 - the Operations panel's logs of the last runs. They go too, and the task cards return to *idle*;
 - the page cache. It is emptied rather than deleted, and pages rebuild it on their next visit.
 

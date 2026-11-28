@@ -13,7 +13,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from runner.control import PAUSE_REQUEST_ENV, PAUSED_ENV
+from runner.control import CLEANUP_ENV, PAUSE_REQUEST_ENV, PAUSED_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,11 @@ def _pause_request_path(task: str) -> Path:
 def _paused_path(task: str) -> Path:
     """Exists while the command is paused; written and removed by the command itself."""
     return _tmp(task, ".paused")
+
+
+def _cleanup_note_path(task: str) -> Path:
+    """What the command asks the wrapper to delete should it be killed (``runner.control.removed_if_killed``)."""
+    return _tmp(task, ".cleanup.json")
 
 
 def _clear_pause_files(task: str) -> None:
@@ -262,12 +267,50 @@ def get_log_lines(task: str, offset: int = 0, since: str | None = None) -> tuple
 
 
 _WRAPPER_SCRIPT = """\
-import json, signal, subprocess, sys
+import json, os, shutil, signal, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 meta_path = Path(sys.argv[1])
 cmd = sys.argv[2:]
+cleanup_note = os.environ.get("PULPIT_CLEANUP_FILE")
+
+
+def _clean_up_after_kill():
+    # The command leaves a cleanup note only if it died without unwinding (runner.control.removed_if_killed):
+    # aborted (SIGTERM, which it does not catch so that it stops at once) or killed.
+    if not cleanup_note:
+        return
+    note = Path(cleanup_note)
+    try:
+        spec = json.loads(note.read_text())
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        print(f"\\x1b[31;1mrunner wrapper: unreadable cleanup note: {e}\\x1b[0m", file=sys.stderr)
+        note.unlink(missing_ok=True)
+        return
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+    lock = Path(spec["lock"])
+    handle = open(lock, "a+b")
+    try:
+        if fcntl is not None:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return  # a run that started since holds it: the folders are its own now
+        for path in map(Path, spec["remove"]):
+            if path.exists():
+                print(f"Removing {path.parent.name}/{path.name}/, which the stopped run left unfinished ...", flush=True)
+                shutil.rmtree(path, ignore_errors=True)
+        lock.unlink(missing_ok=True)  # while still locked: see runner.tmp_dir.held_lock
+    finally:
+        handle.close()
+        note.unlink(missing_ok=True)
+
 
 # Install SIGTERM handler before Popen: if a signal arrives in the gap
 # between Popen returning and the handler being installed, the default
@@ -287,6 +330,12 @@ _proc = subprocess.Popen(cmd)
 if _pending_sigterm:
     _proc.send_signal(signal.SIGTERM)
 exit_code = _proc.wait()
+# Before the exit code is recorded: until then the task reads as running, so neither a new launch
+# nor Maintenance -> Temporary files acts on the folders being deleted.
+try:
+    _clean_up_after_kill()
+except Exception as e:
+    print(f"\\x1b[31;1mrunner wrapper: cleanup failed: {e}\\x1b[0m", file=sys.stderr)
 try:
     m = json.loads(meta_path.read_text())
     m["exit_code"] = exit_code
@@ -330,6 +379,9 @@ def launch(task: str, args: list[str]) -> None:
         meta_path = _meta_path(task)
         # A request sent as the previous run ended would pause this one at its first checkpoint.
         _clear_pause_files(task)
+        # A note left by a run whose wrapper died too (a reboot): Maintenance → Temporary files
+        # deletes what it named.
+        _cleanup_note_path(task).unlink(missing_ok=True)
 
         meta: dict = {
             "start_time": datetime.now(timezone.utc).isoformat(),
@@ -355,6 +407,7 @@ def launch(task: str, args: list[str]) -> None:
         if task in PAUSABLE_TASKS:
             env[PAUSE_REQUEST_ENV] = str(_pause_request_path(task))
             env[PAUSED_ENV] = str(_paused_path(task))
+        env[CLEANUP_ENV] = str(_cleanup_note_path(task))
         # --force-color: stdout is a pipe, so Django would otherwise emit the
         # self.style.* markup as plain text and get_log_lines() could not
         # classify line severity from the ANSI codes.

@@ -16,6 +16,12 @@ shell has neither, and every checkpoint is a no-op.
 blocks and context managers run: the crawl's temporary download directory is removed, the
 Telegram client disconnects, an open transaction rolls back and an interrupted message walk
 records the days it finished. A second SIGTERM kills outright.
+
+A command that must stop the moment it is aborted (``structural_analysis``, whose long C-level
+computations would hold a Python handler back) keeps the default SIGTERM and, with
+``removed_if_killed``, leaves a *cleanup note* naming what to delete should it die without
+unwinding; the panel's wrapper process, waiting on it, deletes those once it is gone
+(``runner.tasks._WRAPPER_SCRIPT``). A command started from a shell has no note to leave.
 """
 
 from __future__ import annotations
@@ -39,6 +45,8 @@ logger = logging.getLogger(__name__)
 
 PAUSE_REQUEST_ENV = "PULPIT_PAUSE_REQUEST_FILE"
 PAUSED_ENV = "PULPIT_PAUSED_FILE"
+# The cleanup note: JSON {"lock": path, "remove": [paths]}, read by the panel's wrapper.
+CLEANUP_ENV = "PULPIT_CLEANUP_FILE"
 # How often a paused command looks for the request file to be gone.
 PAUSE_POLL_SECONDS = 1.0
 
@@ -190,3 +198,24 @@ def sigterm_exits() -> Iterator[None]:
         yield
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+@contextlib.contextmanager
+def removed_if_killed(lock: Path, paths: list[Path]) -> Iterator[None]:
+    """Within the block, ask the panel's wrapper to delete ``paths`` if this process is killed.
+
+    Call it while holding ``lock`` (``runner.tmp_dir.held_lock``): the wrapper takes the lock
+    before deleting, so a run that took it over since keeps its folders. The note goes when the
+    block ends, however it ends: only a process that never unwound leaves it. A no-op outside the
+    Operations panel.
+    """
+    target = os.environ.get(CLEANUP_ENV)
+    if not target:
+        yield
+        return
+    note = Path(target)
+    note.write_text(json.dumps({"lock": str(lock), "remove": [str(p) for p in paths]}))
+    try:
+        yield
+    finally:
+        note.unlink(missing_ok=True)
