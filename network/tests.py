@@ -1313,7 +1313,7 @@ class CommunityFixedParametersTests(TestCase):
             self.skipTest("graph-tool not installed")
         from network import community as c
 
-        import graph_tool.all as gt
+        gt = c._import_graph_tool()
 
         self.assertEqual(
             inspect.signature(gt.BlockState.__init__).parameters["deg_corr"].default, c.SBM_DEGREE_CORRECTED
@@ -1410,7 +1410,7 @@ class CommunityFixedParametersTests(TestCase):
             self.skipTest("graph-tool not installed")
         from network import community as c
 
-        import graph_tool.all as gt
+        gt = c._import_graph_tool()
 
         greedy_sweeps: list[dict[str, Any]] = []
         original_sweep = gt.PPBlockState.multiflip_mcmc_sweep

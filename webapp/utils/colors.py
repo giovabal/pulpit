@@ -1,10 +1,15 @@
 import csv
 import functools
+import warnings
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, TypeAlias
 
-import pypalettes
+# pypalettes 0.2 runs warnings.simplefilter("always") when imported (pypalettes/deprecated.py): every
+# warning of every library would then print, each time it fires, in every Pulpit process, overriding
+# Python's defaults and the PYTHONWARNINGS the Operations panel sets. catch_warnings puts the filters back.
+with warnings.catch_warnings():
+    import pypalettes
 
 ColorTuple: TypeAlias = tuple[int, int, int]
 

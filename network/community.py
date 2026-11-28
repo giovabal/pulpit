@@ -1,5 +1,6 @@
 import math
 import re
+import warnings
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
@@ -1652,6 +1653,21 @@ def detect_consensus(
     return _finalize_partition(graph, _assign_from_membership(membership, node_ids), palette_name, reverse=reverse)
 
 
+# PyGObject 3.56 registers GLib.unix_signal_add_full as deprecated twice, and on the second pass reads
+# it through its own deprecation shim: loading GLib warns about itself. graph-tool loads GLib for its
+# GTK drawing on import (graph_tool.inference imports graph_tool.draw too), so the first SBM fit of a
+# run printed it in the middle of its progress line. Nothing calls that function.
+_GI_SELF_DEPRECATION = r"GLib\.unix_signal_add_full is deprecated"
+
+
+def _import_graph_tool() -> Any:
+    """``graph_tool.all``, without PyGObject's warning about its own shim; raises ``ImportError`` when absent."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=_GI_SELF_DEPRECATION)
+        import graph_tool.all as gt
+    return gt
+
+
 @contextmanager
 def _seeded_graph_tool(gt: Any) -> Iterator[None]:
     """Seed one SBM-family fit: graph-tool's generator and numpy's global one (``SBM_SEED``).
@@ -1827,7 +1843,7 @@ def detect_sbm(
             raise ValueError(f"Unknown SBM weights model: {weights!r}. Choose POISSON or EXPONENTIAL.")
 
     try:
-        import graph_tool.all as gt
+        gt = _import_graph_tool()
     except ImportError as exc:  # pragma: no cover - optional heavy dependency
         raise ValueError(
             "The SBM community strategy requires the 'graph-tool' package, which is not installed. "
@@ -1932,7 +1948,7 @@ def detect_sbm_assortative(
     """
     refine = (refine or "").upper()
     try:
-        import graph_tool.all as gt
+        gt = _import_graph_tool()
     except ImportError as exc:  # pragma: no cover - optional heavy dependency
         raise ValueError(
             "The SBM_ASSORTATIVE community strategy requires the 'graph-tool' package, which is not "
