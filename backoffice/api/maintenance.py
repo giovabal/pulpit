@@ -271,7 +271,7 @@ def purge_run(request: Any) -> Response:
 
 @api_view(["GET"])
 def tmp_info(request: Any) -> Response:
-    """What ``tmp/`` holds, group by group, and what keeps it from being emptied (``runner.tmp_dir``)."""
+    """What ``tmp/`` and the analyses' leftovers in ``exports/`` hold, group by group, and what blocks (``runner.tmp_dir``)."""
     from runner.tmp_dir import scan
 
     return Response(scan())
@@ -279,7 +279,7 @@ def tmp_info(request: Any) -> Response:
 
 @api_view(["POST"])
 def tmp_clear(request: Any) -> Response:
-    """Empty ``tmp/``; 409 while an Operations task runs or a crawl is downloading into it."""
+    """Empty ``tmp/`` and remove the leftovers in ``exports/``; 409 while an Operations task runs or a crawl downloads."""
     from runner.tmp_dir import TmpInUseError, clear
 
     overall_t = time.perf_counter()
@@ -292,7 +292,8 @@ def tmp_clear(request: Any) -> Response:
             "removed_entries": report.removed_entries,
             "freed_bytes": report.freed_bytes,
             "cache_cleared": report.cache_cleared,
-            # Crawl folders that turned out to be in use at the last moment (a crawl just started).
+            "restored": report.restored,
+            # Folders kept because a run uses them: an analysis writing its export, or a crawl that just started.
             "skipped": report.skipped,
             "errors": report.errors,
             "total_duration_seconds": time.perf_counter() - overall_t,

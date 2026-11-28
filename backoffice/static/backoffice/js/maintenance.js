@@ -321,11 +321,12 @@
     // Preview is opt-in (the scan walks the whole media tree and can take many
     // seconds on a large install); user clicks "Preview" to start it.
 
-    // ── Temporary files (tmp/) ───────────────────────────────────────────────
+    // ── Temporary files (tmp/ + the analyses' leftovers in exports/) ──────────
     // runner/tmp_dir.py: the button is enabled only while nothing writes in tmp/
     // (no Operations task running, no crawl downloading into it); the server checks
     // again on the click. While blocked, the scan is repeated so the button turns on
-    // once the run ends.
+    // once the run ends. An analysis writing its export does not block: its folders
+    // are kept.
     var TMP_INFO = "/manage/api/maintenance/tmp/";
     var TMP_CLEAR = "/manage/api/maintenance/tmp/clear/";
     var TMP_RECHECK_MS = 10000;
@@ -339,9 +340,20 @@
     var $tmpResultSum = document.getElementById("bo-tmp-result-summary");
     var tmpRecheck = null;
     var tmpClearing = false;
+    var tmpLast = null;
+
+    function tmpEntries(key) {
+        var group = tmpLast && tmpLast.groups.find(function(g) { return g.key === key; });
+        return group ? group.entries : 0;
+    }
+
+    function plural(n, one, many) {
+        return fmtCount(n) + " " + (n === 1 ? one : many);
+    }
 
     function renderTmp(data) {
-        $tmpTotal.textContent = data.exists ? fmtBytes(data.total_bytes) : "no tmp/ folder";
+        tmpLast = data;
+        $tmpTotal.textContent = fmtBytes(data.total_bytes);
         $tmpGroups.replaceChildren();
         data.groups.forEach(function(g) {
             if (!g.entries) return;
@@ -350,9 +362,7 @@
             label.className = "bo-maint-status-label";
             label.textContent = g.label + ":";
             row.appendChild(label);
-            row.appendChild(document.createTextNode(
-                " " + fmtCount(g.entries) + (g.entries === 1 ? " item" : " items") + " (" + fmtBytes(g.bytes) + ")"
-            ));
+            row.appendChild(document.createTextNode(" " + plural(g.entries, "item", "items") + " (" + fmtBytes(g.bytes) + ")"));
             $tmpGroups.appendChild(row);
         });
         $tmpClearBtn.disabled = tmpClearing || !data.clearable;
@@ -380,9 +390,14 @@
     }
 
     function clearTmp() {
-        var size = $tmpTotal.textContent;
-        var msg = "Delete the contents of tmp/ (" + size + ")?\n\n" +
-            "This also removes the Operations panel's logs of the last runs. This cannot be undone.";
+        var msg = "Delete the temporary files (" + $tmpTotal.textContent + ")?\n\n" +
+            "This empties tmp/, the Operations panel's logs of the last runs included";
+        if (tmpEntries("exports")) msg += ", and removes the unfinished exports in exports/";
+        msg += ". This cannot be undone.";
+        if (tmpEntries("exports_restore")) {
+            msg += "\n\n" + plural(tmpEntries("exports_restore"), "export", "exports") +
+                " an analysis stopped while replacing will be put back.";
+        }
         if (!confirm(msg)) return;
 
         var originalHtml = $tmpClearBtn.innerHTML;
@@ -396,21 +411,25 @@
                 $tmpResult.classList.remove("d-none");
                 var parts = [
                     "Freed " + fmtBytes(data.freed_bytes),
-                    "removed " + fmtCount(data.removed_entries) + (data.removed_entries === 1 ? " item" : " items"),
+                    "removed " + plural(data.removed_entries, "item", "items"),
                     "in " + fmtDuration(data.total_duration_seconds),
                 ];
                 if (data.cache_cleared) parts.push("page cache emptied");
+                if (data.restored.length) {
+                    parts.push(plural(data.restored.length, "export", "exports") + " put back (" +
+                        data.restored.join(", ") + ")");
+                }
                 if (data.skipped.length) {
-                    parts.push(fmtCount(data.skipped.length) + " kept: a crawl started using them meanwhile");
+                    parts.push(fmtCount(data.skipped.length) + " kept: a running crawl or analysis uses them");
                 }
                 if (data.errors.length) {
                     parts.push(fmtCount(data.errors.length) + " could not be removed (" + data.errors.join("; ") + ")");
                 }
                 $tmpResultSum.textContent = parts.join(" · ");
-                showToast(data.errors.length ? "tmp/ emptied with errors." : "tmp/ emptied.",
+                showToast(data.errors.length ? "Temporary files deleted, with errors." : "Temporary files deleted.",
                     data.errors.length ? "error" : "success");
             })
-            .catch(function(e) { showToast("Could not empty tmp/: " + e.message, "error"); })
+            .catch(function(e) { showToast("Could not delete the temporary files: " + e.message, "error"); })
             .finally(function() {
                 tmpClearing = false;
                 $tmpClearBtn.innerHTML = originalHtml;
@@ -421,7 +440,7 @@
 
     $tmpRefreshBtn.addEventListener("click", loadTmp);
     $tmpClearBtn.addEventListener("click", clearTmp);
-    loadTmp(); // a listing of one folder: cheap enough to run on load
+    loadTmp(); // a listing of two folders: cheap enough to run on load
 
     // ── New-version banner ───────────────────────────────────────────────────
     // window.pulpitVersion is published by webapp/static/webapp/js/version_check.js

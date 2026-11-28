@@ -261,12 +261,13 @@ Staff-only database maintenance. The page reports the active engine, the databas
 
 The same catalog and the current database size are available programmatically through `GET /manage/api/maintenance/`; running an optimization is `POST /manage/api/maintenance/optimize/`. Strategies are run in the order listed; the run stops at the first failure and returns the partial timing report.
 
-**Temporary files** shows what the `tmp/` folder holds and how much space it takes, then **Delete tmp contents** empties it. The folder holds:
+**Temporary files** shows what the `tmp/` folder and the stopped analyses' leftovers in `exports/` hold and how much space they take, then **Delete temporary files** removes them. They are:
 - each crawl's download folder. A crawl that was killed, or aborted before this release, leaves its folder behind full of half-downloaded media, and these leftovers can reach hundreds of gigabytes;
+- the unfinished exports. A structural analysis writes its export into `exports/<name>.tmp/` and renames it only once every file is written ([Export formats § Atomic writes](export-formats.md#atomic-writes)), so an analysis that is aborted, killed or fails leaves that folder behind. It never shows in the list of exports and takes as much room as a finished export. In the rare case an analysis stopped in the middle of replacing an export, the previous export is put back rather than deleted;
 - the Operations panel's logs of the last runs. They go too, and the task cards return to *idle*;
 - the page cache. It is emptied rather than deleted, and pages rebuild it on their next visit.
 
-The button is enabled only while nothing writes there. A task running in the Operations panel blocks it, and so does a crawl started from a terminal: each crawl holds a lock on its download folder for as long as it runs, and the lock dies with the process. The hint names what is blocking, and the page checks again every few seconds, so the button turns on once the run ends. The server checks again on the click, and while it empties the folder no Operations task can be launched. API: `GET /manage/api/maintenance/tmp/` and `POST /manage/api/maintenance/tmp/clear/` (409 while in use).
+The button is enabled only while nothing writes in `tmp/`. A task running in the Operations panel blocks it, and so does a crawl started from a terminal: each crawl holds a lock on its download folder for as long as it runs, and the lock dies with the process. The hint names what is blocking, and the page checks again every few seconds, so the button turns on once the run ends. An analysis started from a terminal does not block it: it holds `exports/<name>.lock` for as long as it runs, so its folders are kept and the rest goes. The server checks again on the click, and while it empties the folder no Operations task can be launched. API: `GET /manage/api/maintenance/tmp/` and `POST /manage/api/maintenance/tmp/clear/` (409 while in use).
 
 ---
 

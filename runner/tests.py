@@ -2322,6 +2322,20 @@ class SigtermExitsTests(TestCase):
 
 
 class TmpDirTests(_TmpMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        # exports/ under a throwaway BASE_DIR: never the real one.
+        self._base = tempfile.TemporaryDirectory()
+        self.exports_dir = Path(self._base.name) / "exports"
+        self.exports_dir.mkdir()
+        self._base_dir = override_settings(BASE_DIR=Path(self._base.name))
+        self._base_dir.enable()
+
+    def tearDown(self):
+        self._base_dir.disable()
+        self._base.cleanup()
+        super().tearDown()
+
     def _old(self, path: Path) -> Path:
         """Backdate an entry past the fresh-crawl grace period."""
         import os
@@ -2341,6 +2355,12 @@ class TmpDirTests(_TmpMixin, TestCase):
 
     def _groups(self, data: dict) -> dict:
         return {g["key"]: (g["entries"], g["bytes"]) for g in data["groups"]}
+
+    def _export_dir(self, name: str, size: int = 10) -> Path:
+        folder = self.exports_dir / name
+        folder.mkdir()
+        (folder / "summary.json").write_bytes(b"s" * size)
+        return self._old(folder)
 
     def test_lock_is_seen_while_held_and_removed_after(self):
         from runner.tmp_dir import held_lock, is_locked
@@ -2473,3 +2493,117 @@ class TmpDirTests(_TmpMixin, TestCase):
         with tasks.launches_held():
             self.assertTrue(all(lock.locked() for lock in tasks._LAUNCH_LOCKS.values()))
         self.assertFalse(any(lock.locked() for lock in tasks._LAUNCH_LOCKS.values()))
+
+    def test_lock_held_elsewhere_is_waited_for_then_refused(self):
+        import threading
+        import time
+
+        from runner.tmp_dir import LockHeldError, held_lock, is_locked
+
+        lock = self.tmp_dir / "x.lock"
+        with held_lock(lock), self.assertRaises(LockHeldError):
+            with held_lock(lock, wait=0):
+                pass
+        # A holder letting go within the wait (Maintenance probing it) is waited for, and the
+        # waiter ends up holding the file that is there, not the one its holder removed.
+        released = threading.Event()
+
+        def hold_briefly():
+            with held_lock(lock):
+                released.wait(0.2)
+
+        holder = threading.Thread(target=hold_briefly)
+        holder.start()
+        time.sleep(0.05)
+        with held_lock(lock, wait=2):
+            self.assertTrue(is_locked(lock))
+        holder.join()
+        self.assertFalse(lock.exists())
+
+    def test_scan_lists_what_stopped_analyses_left_in_exports(self):
+        from runner.tmp_dir import scan
+
+        self._export_dir("published", size=7)  # an export: never listed
+        self._export_dir("published.old", size=5)  # its backup, left by a run killed while publishing
+        self._export_dir("killed.tmp", size=3)
+        (self.exports_dir / "killed.lock").write_bytes(b"")
+        self._old(self.exports_dir / "killed.lock")
+        self._export_dir("halfway.old", size=2)  # its export is missing: put back, not deleted
+        (self.exports_dir / "notes.txt").write_text("not ours")
+        data = scan()
+        groups = self._groups(data)
+        self.assertEqual(groups["exports"], (3, 8))  # published.old, killed.tmp, killed.lock
+        self.assertEqual(groups["exports_restore"], (1, 2))
+        self.assertEqual(groups["exports_active"], (0, 0))
+        self.assertEqual(data["total_bytes"], 10)
+        self.assertTrue(data["clearable"])
+
+    def test_running_analysis_keeps_its_folders_without_blocking(self):
+        from runner.tmp_dir import clear, export_in_progress, scan
+
+        self._export_dir("stale.tmp")
+        with export_in_progress("live"):
+            self._export_dir("live.tmp")
+            data = scan()
+            self.assertEqual(self._groups(data)["exports_active"][0], 2)  # its staging and its lock
+            self.assertEqual(data["blockers"], [])
+            self.assertTrue(data["clearable"])
+            report = clear()
+            self.assertTrue((self.exports_dir / "live.tmp" / "summary.json").exists())
+            self.assertFalse((self.exports_dir / "stale.tmp").exists())
+            self.assertEqual(sorted(report.skipped), ["exports/live.lock", "exports/live.tmp"])
+        self.assertFalse((self.exports_dir / "live.lock").exists())
+
+    def test_only_a_running_analysis_is_nothing_to_delete(self):
+        from runner.tmp_dir import export_in_progress, scan
+
+        with export_in_progress("live"):
+            self._export_dir("live.tmp")
+            self.assertFalse(scan()["clearable"])
+
+    def test_a_just_created_staging_folder_counts_as_in_use(self):
+        from runner.tmp_dir import scan
+
+        (self.exports_dir / "new.tmp").mkdir()
+        self.assertEqual(self._groups(scan())["exports_active"][0], 1)
+
+    def test_clear_removes_the_leftovers_and_puts_a_half_replaced_export_back(self):
+        from runner.tmp_dir import clear
+
+        self._export_dir("published")
+        self._export_dir("published.old")
+        self._export_dir("killed.tmp")
+        (self.exports_dir / "killed.lock").write_bytes(b"")
+        self._old(self.exports_dir / "killed.lock")
+        self._export_dir("halfway.old")
+        self._export_dir("halfway.tmp")  # the new export it was publishing: dropped, as the next run would
+        (self.exports_dir / "notes.txt").write_text("not ours")
+        report = clear()
+        self.assertEqual(sorted(p.name for p in self.exports_dir.iterdir()), ["halfway", "notes.txt", "published"])
+        self.assertTrue((self.exports_dir / "halfway" / "summary.json").exists())
+        self.assertEqual(report.restored, ["halfway"])
+        self.assertEqual(report.removed_entries, 4)
+        self.assertEqual(report.freed_bytes, 30)
+        self.assertEqual((report.skipped, report.errors), ([], []))
+
+    def test_clear_refusal_keeps_the_exports_leftovers(self):
+        import os
+
+        from runner.tmp_dir import TmpInUseError, clear
+
+        self._export_dir("killed.tmp")
+        _write_meta(self.tmp_dir, "structural_analysis", pid=os.getpid())
+        with self.assertRaises(TmpInUseError):
+            clear()
+        self.assertTrue((self.exports_dir / "killed.tmp").exists())
+
+    def test_a_lock_taken_meanwhile_is_kept(self):
+        from runner.tmp_dir import _remove_lock, held_lock
+
+        lock = self.exports_dir / "live.lock"
+        with held_lock(lock):
+            self.assertFalse(_remove_lock(lock))
+            self.assertTrue(lock.exists())
+        lock.write_bytes(b"")
+        self.assertTrue(_remove_lock(lock))
+        self.assertFalse(lock.exists())

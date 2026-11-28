@@ -3029,6 +3029,28 @@ class ExportNetworkCommandTests(TestCase):
         with self.assertRaises(CommandError):
             call_command("structural_analysis", filter_labels=str(label.pk), stdout=io.StringIO(), stderr=io.StringIO())
 
+    def test_a_second_run_of_the_same_name_stops_before_touching_its_folders(self) -> None:
+        # The running analysis holds exports/<name>.lock: the second one must not wipe its staging.
+        from pathlib import Path
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        from runner import tmp_dir
+
+        with (
+            tempfile.TemporaryDirectory() as base,
+            override_settings(BASE_DIR=Path(base)),
+            patch.object(tmp_dir, "LOCK_WAIT_SECONDS", 0),
+            tmp_dir.export_in_progress("same"),
+        ):
+            staging = Path(base) / "exports" / "same.tmp"
+            staging.mkdir()
+            (staging / "half.json").write_text("{}")
+            with self.assertRaisesRegex(CommandError, "Another analysis is writing exports/same/"):
+                call_command("structural_analysis", graph=True, name="same", stdout=io.StringIO(), stderr=io.StringIO())
+            self.assertTrue((staging / "half.json").exists())
+
     @patch(f"{_EXPORT_CMD}.exporter.copy_channel_media")
     @patch(f"{_EXPORT_CMD}.tables.write_table_xlsx")
     @patch(f"{_EXPORT_CMD}.tables.write_table_html")

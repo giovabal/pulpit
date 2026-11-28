@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import datetime
 import os
 import re
@@ -41,6 +42,7 @@ from network.near_copies import NEAR_COPY_MIN_TOKENS, NEAR_COPY_SHINGLE_SIZE, NE
 from network.robustness.disparity_filter import disparity_filter, has_uniform_weights
 from network.tokens import split_tokens
 from network.utils import GraphData
+from runner.tmp_dir import LockHeldError, export_in_progress
 from webapp import scoring
 from webapp.models import Channel, Label, Message, Project
 from webapp.utils.channel_types import VALID_CHANNEL_TYPES
@@ -2375,7 +2377,9 @@ class Command(BaseCommand):
         communities_data = community.build_communities_payload(communities_strategy, strategy_results)
         community_table_data = None
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        # Inside the staging folder, not the system temp: a run killed here leaves nothing that
+        # Maintenance → Temporary files does not delete with the rest of exports/<name>.tmp/.
+        with tempfile.TemporaryDirectory(prefix=".period-", dir=root_target) as tmp_dir:
             exporter.write_graph_files(
                 graph_data,
                 communities_data,
@@ -2890,7 +2894,8 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         # Route logger.warning/error lines (exporter, interest_structural, …)
         # through self.style so they carry severity colour in the Operations panel.
-        with styled_warning_logs(self.style):
+        with styled_warning_logs(self.style), contextlib.ExitStack() as held:
+            self._held = held  # _handle enters the export's lock here once it knows the name
             self._handle(*args, **options)
 
     def _handle(self, *args: Any, **options: Any) -> None:
@@ -2932,6 +2937,15 @@ class Command(BaseCommand):
                 "vacancy measures, or robustness were requested. Pass at least one flag."
             )
             return
+
+        # exports/<name>.tmp/ and .old/ belong to this run until it ends: Maintenance → Temporary
+        # files keeps them, and a second run of the same name stops here instead of trampling them.
+        try:
+            self._held.enter_context(export_in_progress(opts.export_name))
+        except LockHeldError as e:
+            raise CommandError(
+                f"Another analysis is writing exports/{opts.export_name}/: wait for it to end or choose another name."
+            ) from e
 
         self.stdout.write("Create graph … ", ending="")
         self.stdout.flush()

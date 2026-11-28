@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -91,7 +92,14 @@ class QuarterTimelineCommandTests(TestCase):
     def _run(self, *extra: str, **kwargs) -> tuple[Path, str]:
         out = io.StringIO()
         tmpdir = tempfile.mkdtemp()
-        with override_settings(BASE_DIR=Path(tmpdir)):
+        self.temp_dirs = []
+        real = tempfile.TemporaryDirectory
+
+        def recorded(*args, **temp_kwargs):
+            self.temp_dirs.append(temp_kwargs.get("dir"))
+            return real(*args, **temp_kwargs)
+
+        with override_settings(BASE_DIR=Path(tmpdir)), patch.object(tempfile, "TemporaryDirectory", recorded):
             call_command("structural_analysis", *extra, name="periods-e2e", stdout=out, stderr=io.StringIO(), **kwargs)
         return Path(tmpdir) / "exports" / "periods-e2e", out.getvalue()
 
@@ -115,6 +123,12 @@ class QuarterTimelineCommandTests(TestCase):
             self.assertTrue((export / f"data_{key}" / "channels.json").is_file(), key)
         parameters = (export / "PARAMETERS.md").read_text(encoding="utf-8")
         self.assertIn("| Timeline step | `quarter` |", parameters)
+        # Each period is staged inside the export's own staging folder (a killed run leaves it
+        # there for Maintenance → Temporary files, not in the system temp), and nothing is left.
+        self.assertEqual(len(self.temp_dirs), 3)
+        self.assertTrue(all(d == str(export) + ".tmp" for d in self.temp_dirs), self.temp_dirs)
+        self.assertEqual([p.name for p in export.parent.iterdir()], ["periods-e2e"])  # no .tmp, no .lock
+        self.assertFalse([p for p in export.iterdir() if p.name.startswith(".period-")])
 
     def test_sliding_window_refuses_temporal_leiden(self) -> None:
         with self.assertRaisesRegex(CommandError, "disjoint periods"):
