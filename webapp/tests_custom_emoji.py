@@ -185,6 +185,16 @@ class EmojiPackViewsTests(_EmojiFixture):
         self.assertEqual(response.context["emoji_rows"][0]["own_uses"], 1)
         self.assertEqual([row["channel"] for row in response.context["rows"]], [self.channel])
 
+    def test_csv_text_is_never_a_formula(self) -> None:
+        self.channel.title = '=HYPERLINK("https://example.org")'
+        self.channel.save(update_fields=["title"])
+        self.pack.title = "+plus pack"
+        self.pack.save(update_fields=["title"])
+        rows = list(csv.DictReader(io.StringIO(self.client.get(reverse("emoji-pack-usage-csv")).content.decode())))
+        self.assertEqual(rows[0]["channel_title"], '\'=HYPERLINK("https://example.org")')
+        self.assertEqual(rows[0]["pack_title"], "'+plus pack")
+        self.assertEqual(rows[0]["own_uses"], "2")  # numbers are left as they are
+
     def test_csv_has_one_row_per_channel_and_pack(self) -> None:
         response = self.client.get(reverse("emoji-pack-usage-csv"))
         self.assertEqual(response.status_code, 200)

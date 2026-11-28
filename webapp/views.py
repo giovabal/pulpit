@@ -1,4 +1,3 @@
-import csv
 import datetime
 import math
 import re
@@ -37,7 +36,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.static import serve as _static_serve
 
 from network.near_copies import forward_header_q
-from network.utils import channel_cutoff_q, channel_period_date_q
+from network.utils import channel_cutoff_q, channel_period_date_q, csv_writer
 from network.vacancy_analysis import (
     EXTRAS_KEY,
     _scores_abc,
@@ -799,9 +798,12 @@ CUSTOM_EMOJI_CSV_COLUMNS = (
 
 
 def _csv_response(filename: str, columns: tuple[str, ...], rows: list[list[Any]]) -> HttpResponse:
+    """A CSV download. Written through the exports' own writer (``network.utils.csv_writer``), so a channel
+    title or pack name beginning with ``=``, ``+``, ``-`` or ``@`` reaches a spreadsheet as text, behind an
+    apostrophe, and is never run as a formula."""
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    writer = csv.writer(response)
+    writer = csv_writer(response)
     writer.writerow(columns)
     writer.writerows(rows)
     return response

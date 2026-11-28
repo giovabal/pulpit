@@ -2,6 +2,8 @@
 
 ``channel_id`` is the row's own key (callers write it first); :func:`channel_csv_cells` gives the rest.
 The label is the channel's *current* one (:attr:`Channel.current_label`), as the pages show it.
+The downloads are written through ``network.utils.csv_writer`` (``webapp.views._csv_response``), like the
+exports' CSVs: a title a spreadsheet would run as a formula is written behind an apostrophe.
 """
 
 from __future__ import annotations

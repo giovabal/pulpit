@@ -2,7 +2,7 @@
 
 *Who reads these channels? Telegram shows a channel's subscribers only to its admins, so a crawler sees one number per channel and no people. The part of the audience that can be followed person by person is the **commenters**: the accounts replying in a channel's discussion group. The Audience page measures them — how concentrated the commenting is, how far commenters spread across channels and labels, which channels share them, and whether they come back.*
 
-Open it from **Audience** in the top menu (`/audience/`). It needs comments in the database: run the crawl with **Fetch replies** (`crawl_channels --fetch-replies`) on channels that have a discussion group. The page reads the database directly, and every section has a **CSV** of its main table. Every `structural_analysis` export carries the same sections too — see [In an export](#in-an-export).
+Open it from **Audience** in the top menu (`/audience/`). It needs comments in the database: run the crawl with **Fetch replies** (`crawl_channels --fetch-replies`) on channels that have a discussion group. The page reads the database directly, and every section has a **CSV** of its main table (as in every CSV Pulpit writes, a channel title that a spreadsheet would run as a formula comes behind an apostrophe). Every `structural_analysis` export carries the same sections too — see [In an export](#in-an-export).
 
 ---
 
