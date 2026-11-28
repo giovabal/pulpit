@@ -24,6 +24,7 @@
 
 ### Fixes
 - **Channels with several handles are recognised.** Telegram gives a channel holding several handles no single username, so Pulpit matched none of them: each crawl looked it up again for every `t.me/` link or `@handle` naming it, spending Telegram's strictest rate limit, and `backfill_mentions` queued it on every run. The same happened to a channel Telegram returns without any handle, as it does for one this account may not open. All of a channel's handles now count, and a channel found through a lookup keeps them, or the handle it was found by.
+- **The logo shows on the web app's dark theme**, where it was drawn black on black. The *About* box marks the acronym's initials by colour rather than bold, its button at the foot of each page is easier to see, and every export page now has it too, in its footer.
 
 ## [0.29] - 2026-11-09
 *Methodology review of the measures and community detection, with homophily and significance. Bots detection. Emoji packs. Finer timelines and event tests. Image copies and outbound links.*

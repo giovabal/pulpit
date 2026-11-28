@@ -329,6 +329,12 @@ body {
   color: var(--text);
 }
 
+/* The logo is drawn in black: on the dark theme it is inverted to stay visible. */
+[data-theme="dark"] .topnav-brand img,
+[data-theme="dark"] .about-modal-logo {
+  filter: invert(1);
+}
+
 .topnav-links {
   gap: .125rem;
 }
@@ -2642,15 +2648,23 @@ body {
   border: none;
   padding: .25rem .5rem;
   color: var(--text-muted);
-  font-size: 1rem;
-  opacity: .4;
+  font-size: 1.1rem;
+  opacity: .7;
   cursor: pointer;
   transition: opacity .15s;
   line-height: 1;
 }
 
-.app-footer-btn:hover {
-  opacity: .85;
+.app-footer-btn:hover,
+.app-footer-btn:focus-visible {
+  opacity: 1;
+}
+
+/* The acronym's initials stand out by colour, not by mass: a bold capital reads
+   as a larger letter than the rest of its word. */
+.about-acronym b {
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .about-modal-close {

@@ -68,8 +68,29 @@
       </a>
       {% if app_version %}<span class="export-footer-version">v{{ app_version }}</span>{% endif %}
       · <a href="index.html#cite">How to cite</a>
+      <button type="button" class="export-footer-about" data-bs-toggle="modal" data-bs-target="#about-modal" title="About Pulpit" aria-label="About Pulpit">
+        <i class="bi bi-info-square" aria-hidden="true"></i>
+      </button>
     </span>
   </footer>
+  <div class="modal fade" id="about-modal" tabindex="-1" aria-labelledby="about-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <div class="modal-body text-center py-4">
+          <button type="button" class="about-modal-close" data-bs-dismiss="modal" aria-label="Close">
+            <i class="bi bi-x" aria-hidden="true"></i>
+          </button>
+          <img src="pulpit_logo.svg" alt="Pulpit" height="56" class="about-modal-logo mb-3">
+          <h2 class="h5 mb-3" id="about-modal-label">{{ project_title|default:"Pulpit" }}</h2>
+          <p class="about-acronym text-muted small border-top pt-3 mb-1"><b>P</b>olitical <b>U</b>ndercurrents: <b>L</b>inkage, <b>P</b>ropagation, <b>I</b>nfluence on <b>T</b>elegram</p>
+          {% if app_version %}<p class="text-muted small mb-3">Version {{ app_version }}</p>{% endif %}
+          {% if repository_url %}<a href="{{ repository_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-github me-1" aria-hidden="true"></i>Repository
+          </a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
   {% include "network/_a11y_live.html" %}
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
   <script>
